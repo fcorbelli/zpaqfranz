@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.13n"
-#define ZPAQ_DATE "(2026-10-20)"
+#define ZPAQ_VERSION "65.14n"
+#define ZPAQ_DATE "(2026-10-23)"
 
 
 /*
@@ -87826,6 +87826,9 @@ std::string g_replaceme;
 std::string g_copy;
 std::string g_freeze;
 uint64_t	g_freezesize   = 0;		/// 65.11q: -freezesize, the size for -freeze (it was -maxsize: the filter on the files to add, too)
+std::string g_writeini;				/// 65.14a: -writeini X, the switches of the line go to X (ini_scrivi, from loadparameters)
+std::vector<std::string> g_ini_mostra; /// 65.14a: what the -ini files gave, shown with -verbose after the banner
+std::vector<std::string> g_ini_caricati; /// 65.14e: one line for each -ini file, always shown (in cyan)
 bool		g_freeze_fatto = false; /// -freeze: once for each run (backup goes through add)
 int			g_fastadddiversi= 0; /// 65.12f: -fastaddtest, the stored state is not the one read
 int			g_freeze_avviso= 0;		/// -freeze: 1 = not done (the archive is where it was), 2 = done, but something is left to delete by hand
@@ -88499,6 +88502,8 @@ bool flagnontfs; /// 65.9l: -ntfs starts by itself (whole NTFS partitions, an ad
 bool flagac= false; /// 65.9n: the ac command: a c: -image and the rest of the disk of Windows (see ac_prepara)
 bool flagxc= false; /// 65.9p: the xc command: the restore of what ac saved (see Jidac::xc)
 bool flagacfake= false; /// 65.9p (hidden, for the tests of xc): ac takes the drive given as the one of Windows
+bool flagwinpefake= false; /// 65.14j (hidden, for the tests): ac as from a Windows PE
+bool g_acpe= false; /// 65.14j: ac from a Windows PE: the Windows saved is not running (no VSS, the registry is not its own)
 bool flaggui= false; /// 65.9v: ac, xc: what to take (and where to restore) is chosen on a screen; 65.11o: f too (what to do, and where)
 class franzntfs2;
 struct franzntfs2_conti;
@@ -88522,14 +88527,13 @@ int						 g_ioBUFSIZE= 1048576;
 int						 g_thechosenhash;
 std::string				 g_thechosenhash_str;
 
-typedef std::string (*voidhelpfunction)(bool i_usage, bool i_example);
 struct HelpInfo
 {
-	std::string		 category;
-	voidhelpfunction function;
-	int				 sortposition;
-	HelpInfo(const std::string &cat, voidhelpfunction func, int i_pos)
-		: category(cat), function(func), sortposition(i_pos)
+	std::string category;
+	std::string help; /// 65.14b: its lines in g_helprighe (it was a help_x function), see help_stampa
+	int			sortposition;
+	HelpInfo(const std::string &cat, const std::string &i_help, int i_pos)
+		: category(cat), help(i_help), sortposition(i_pos)
 	{
 	}
 };
@@ -88540,7 +88544,6 @@ struct HelpInfo
 
 
 typedef std::map<std::string, HelpInfo> MAPPAHELP;
-/// typedef std::map<std::string, voidhelpfunction> MAPPAHELP;
 typedef std::map<int, std::string>		   MAPPACOMMENTI;
 typedef std::map<std::string, std::string> MAPPAFILEHASH;
 typedef std::map<std::string, std::string> MAPPASTRINGASTRINGA;
@@ -111955,6 +111958,24 @@ void printbar(char i_carattere, bool i_printbarraenne= true)
 	if (i_printbarraenne)
 		myprintf("\n");
 }
+/// 65.14l: the characters of a UTF-8 text, its width on a console (the bytes that do not continue a character)
+size_t caratteri_utf8(const char *i_testo)
+{
+	size_t n= 0;
+	for (const unsigned char *p= (const unsigned char *)i_testo; *p; p++)
+		if ((*p & 0xC0) != 0x80)
+			n++;
+	return n;
+}
+/// i_quanti characters on from i_testo: where they end
+static const char *salta_utf8(const char *i_testo, size_t i_quanti)
+{
+	const unsigned char *p= (const unsigned char *)i_testo;
+	for (; (*p) && (i_quanti > 0); i_quanti--)
+		for (p++; (*p & 0xC0) == 0x80; p++)
+			;
+	return (const char *)p;
+}
 void moreprint(const char *i_stringa, bool i_nocr= false, int i_spaces= 0)
 {
 	if (!i_stringa)
@@ -112009,20 +112030,23 @@ void moreprint(const char *i_stringa, bool i_nocr= false, int i_spaces= 0)
 			}
 			return;
 		}
-	int lunghezzastringa= strlen(i_stringa);
+	/// 65.14l: in characters, not bytes: a line in Russian (2 bytes a letter) went to a new line at half the width,
+	/// a letter cut in two there
+	int lunghezzastringa= (int)caratteri_utf8(i_stringa);
 	if (!larghezzaconsole)
 		return;
-	int righe  = (lunghezzastringa / larghezzaconsole) + 1;
-	int massimo= lunghezzastringa - (larghezzaconsole * (righe - 1));
+	int			righe  = (lunghezzastringa / larghezzaconsole) + 1;
+	int			massimo= lunghezzastringa - (larghezzaconsole * (righe - 1));
+	const char *pezzo  = i_stringa;
 	for (int riga= 1; riga <= righe; riga++)
 	{
 		int currentmax= larghezzaconsole;
 		if (riga == righe)
 			currentmax= massimo;
-		int startcarattere= (riga - 1) * larghezzaconsole;
+		const char *fine= salta_utf8(pezzo, currentmax);
 		printf("%s", spaces.c_str());
-		for (int i= startcarattere; i < startcarattere + currentmax; i++)
-			printf("%c", i_stringa[i]);
+		printf("%.*s", (int)(fine - pezzo), pezzo);
+		pezzo= fine;
 		if (!i_nocr)
 		{
 			printf("\n");
@@ -112079,14 +112103,16 @@ bool getcaptcha(const string &i_captcha, const string &i_reason)
 	return true;
 }
 
+const char *help_t(const char *i_inglese);
 void scrivi(unsigned int i_spazio, const string& i_header, const string& i_desc)
 {
 	if (i_spazio <= 10)
 		i_spazio= 10;
 
-	string header_padded= i_header;
-
-	while (header_padded.length() < i_spazio)
+	/// 65.14l: the column in characters (a translated title of an example: accents, Russian)
+	string		 header_padded= i_header;
+	const size_t larghezza	  = caratteri_utf8(i_header.c_str());
+	for (size_t i= larghezza; i < i_spazio; i++)
 		header_padded+= " ";
 
 	// Check if the header starts exactly with "CMD "
@@ -112099,7 +112125,7 @@ void scrivi(unsigned int i_spazio, const string& i_header, const string& i_desc)
 	/// "-test -force -paran": who reads the help types a switch that does not exist), one as long
 	/// as the column was glued to the description. Now whole, alone on its line, the
 	/// description below in its column
-	if (i_header.length() >= i_spazio)
+	if (larghezza >= i_spazio)
 	{
 		moreprint(i_header.c_str());
 		header_padded= string(i_spazio, ' ');
@@ -112118,7 +112144,7 @@ void scrivi(unsigned int i_spazio, const string& i_header, const string& i_desc)
 void scrivi_examples()
 {
 	color_yellow();
-	moreprint("Examples:");
+	moreprint(help_t("Examples:"));
 	color_restore();
 }
 void scrivi_riga(const string& i_header, const string& i_desc)
@@ -112204,8 +112230,7 @@ class franz_flags
 				snprintf(buffer, sizeof(buffer), "%-20s", p->first.c_str());
 				moreprint(buffer, true);
 				color_restore();
-				snprintf(buffer, sizeof(buffer), " %s", a->second.c_str());
-				moreprint(buffer);
+				moreprint((string(" ") + help_t(a->second.c_str())).c_str()); /// 65.14l: in the language of the help
 			}
 		}
 	}
@@ -127005,6 +127030,527 @@ bool stessofile(const string &i_uno, const string &i_due)
 bool stessoarchivio(const string &i_uno, const string &i_due)
 {
 	return stessofile(i_uno, i_due) || stessofile(franzenname(i_uno), franzenname(i_due)) || stessofile(i_uno, franzenname(i_due)) || stessofile(franzenname(i_uno), i_due);
+}
+
+/*
+	65.14a: franzini, the small text files of -ini and -writeini.
+	load: the tokens of the file, in order. Comment lines: #, :: and rem (rem alone or followed by a
+	blank: remove is not a comment), after the leading blanks; blank lines anywhere. A # at the start
+	of a token comments out the rest of the line (-m3 # fast; -not *#* is a pattern). Tokens split on
+	blanks; between double quotes the blanks stay, and "" is one double quote (alone: an empty token).
+	A quote not closed on its line is an error, with the line number. UTF-8 BOM skipped, \n and \r\n.
+	save: all the tokens on one line, quoted when needed, so that load(save(x)) == x.
+	Never exits: false, and lasterror() says why
+*/
+static bool franzini_bianco(char i_c)
+{
+	return (i_c == ' ') || (i_c == '\t') || (i_c == '\r');
+}
+/// rem (any case) alone or followed by a blank, at i_pos of the first i_len chars: a comment, the .bat way
+static bool franzini_rem(const string &i_line, size_t i_pos, size_t i_len)
+{
+	if (i_pos + 3 > i_len)
+		return false;
+	if ((tolower((unsigned char)i_line[i_pos]) != 'r') || (tolower((unsigned char)i_line[i_pos + 1]) != 'e') || (tolower((unsigned char)i_line[i_pos + 2]) != 'm'))
+		return false;
+	return (i_pos + 3 == i_len) || franzini_bianco(i_line[i_pos + 3]);
+}
+static string franzini_riga(int i_number, const string &i_text)
+{
+	char numero[40];
+	snprintf(numero, sizeof(numero), "line %d: ", i_number);
+	return numero + i_text;
+}
+class franzini
+{
+public:
+	bool				  load(const string &i_filename);
+	bool				  save(const string &i_filename, const vector<string> &i_args);
+	const vector<string> &tokens() const { return m_tokens; }
+	const vector<int>	 &lines() const { return m_lines; } /// the line of each token (1 = the first)
+	string				  lasterror() const { return m_error; }
+	static string		  quote(const string &i_token, bool i_first);
+
+private:
+	vector<string> m_tokens;
+	vector<int>	   m_lines;
+	string		   m_error;
+	bool		   leggiriga(const string &i_line, int i_number);
+	static FILE	  *apri(const string &i_filename, const char *i_mode);
+};
+/// UTF-8 names on Windows too (utow and _wfopen, as everywhere here), fopen elsewhere
+FILE *franzini::apri(const string &i_filename, const char *i_mode)
+{
+#ifdef _WIN32
+	return _wfopen(utow(i_filename.c_str()).c_str(), utow(i_mode).c_str());
+#else
+	return fopen(i_filename.c_str(), i_mode);
+#endif
+}
+bool franzini::load(const string &i_filename)
+{
+	m_tokens.clear();
+	m_lines.clear();
+	m_error= "";
+	FILE *f= apri(i_filename, "rb");
+	if (f == NULL)
+	{
+		m_error= "cannot open the file (not there? no rights?)";
+		return false;
+	}
+	string testo;
+	char   buffer[65536];
+	size_t letti;
+	while ((letti= fread(buffer, 1, sizeof(buffer), f)) > 0)
+		testo.append(buffer, letti);
+	const bool rotto= (ferror(f) != 0);
+	fclose(f);
+	if (rotto)
+	{
+		m_error= "cannot read the file";
+		return false;
+	}
+	/// a NUL: not text (a token cannot hold it)
+	const size_t nul= testo.find('\0');
+	if (nul != string::npos)
+	{
+		int numero= 1;
+		for (size_t i= 0; i < nul; i++)
+			if (testo[i] == '\n')
+				numero++;
+		m_error= franzini_riga(numero, "a NUL byte: this is not a text file");
+		return false;
+	}
+	size_t inizio= 0;
+	if ((testo.size() >= 3) && ((unsigned char)testo[0] == 0xEF) && ((unsigned char)testo[1] == 0xBB) && ((unsigned char)testo[2] == 0xBF))
+		inizio= 3; /// UTF-8 BOM
+	int numero= 0;
+	while (inizio < testo.size())
+	{
+		size_t fine= testo.find('\n', inizio);
+		if (fine == string::npos)
+			fine= testo.size();
+		if (!leggiriga(testo.substr(inizio, fine - inizio), ++numero))
+		{
+			m_tokens.clear();
+			m_lines.clear();
+			return false;
+		}
+		inizio= fine + 1;
+	}
+	return true;
+}
+bool franzini::leggiriga(const string &i_line, int i_number)
+{
+	size_t n= i_line.size();
+	if ((n > 0) && (i_line[n - 1] == '\r')) /// \r\n
+		n--;
+	size_t i= 0;
+	while ((i < n) && franzini_bianco(i_line[i]))
+		i++;
+	if ((i < n) && (i_line[i] == '#'))
+		return true;
+	if ((i + 1 < n) && (i_line[i] == ':') && (i_line[i + 1] == ':'))
+		return true;
+	if (franzini_rem(i_line, i, n))
+		return true;
+	while (true)
+	{
+		while ((i < n) && franzini_bianco(i_line[i]))
+			i++;
+		if ((i >= n) || (i_line[i] == '#')) /// the end, or a comment up to the end of the line
+			return true;
+		string token;
+		bool   virgolette= false;
+		for (; i < n; i++)
+		{
+			const char c= i_line[i];
+			if (virgolette)
+			{
+				if (c != '"')
+					token+= c;
+				else if ((i + 1 < n) && (i_line[i + 1] == '"')) /// "" between the quotes: one "
+				{
+					token+= '"';
+					i++;
+				}
+				else
+					virgolette= false;
+			}
+			else if (franzini_bianco(c))
+				break;
+			else if (c == '"')
+				virgolette= true;
+			else
+				token+= c;
+		}
+		if (virgolette)
+		{
+			m_error= franzini_riga(i_number, "a double quote is not closed");
+			return false;
+		}
+		m_tokens.push_back(token);
+		m_lines.push_back(i_number);
+	}
+}
+/// a token as save writes it: between double quotes ("" for a ") when load would not give it back as
+/// it is: empty, with blanks or quotes, starting with # (a comment); the first one, starting with :: or rem
+string franzini::quote(const string &i_token, bool i_first)
+{
+	bool serve= i_token.empty() || (i_token[0] == '#') || (i_token.find_first_of(" \t\r\"") != string::npos);
+	if (i_first && ((i_token.compare(0, 2, "::") == 0) || franzini_rem(i_token, 0, i_token.size())))
+		serve= true;
+	if (!serve)
+		return i_token;
+	string risultato= "\"";
+	for (size_t i= 0; i < i_token.size(); i++)
+		if (i_token[i] == '"')
+			risultato+= "\"\"";
+		else
+			risultato+= i_token[i];
+	return risultato + "\"";
+}
+bool franzini::save(const string &i_filename, const vector<string> &i_args)
+{
+	m_error= "";
+	string riga;
+	for (size_t i= 0; i < i_args.size(); i++)
+	{
+		if (i_args[i].find_first_of(string("\r\n\0", 3)) != string::npos)
+		{
+			m_error= "<<" + i_args[i] + ">> holds a line break (or a NUL): it cannot be written on a line";
+			return false;
+		}
+		if (i > 0)
+			riga+= ' ';
+		riga+= quote(i_args[i], i == 0);
+	}
+	riga+= '\n';
+	FILE *f= apri(i_filename, "wb");
+	if (f == NULL)
+	{
+		m_error= "cannot create the file (the folder is not there? no rights?)";
+		return false;
+	}
+	const bool scritto= (fwrite(riga.data(), 1, riga.size(), f) == riga.size());
+	const bool chiuso = (fclose(f) == 0);
+	if (!(scritto && chiuso))
+	{
+		m_error= "cannot write the file (media full?)";
+		return false;
+	}
+	return true;
+}
+
+/*
+	65.14a: -ini X and -writeini X. An ini holds switches only: a token that starts with - is a switch
+	(and /od /on /os), what follows it up to the next switch are its arguments.
+	-ini (ini_espandi, before anything reads the line): the switches of the ini go in after the command,
+	the archive and the files, before the first switch typed (the parser takes files up to the first
+	switch: a -not of the ini never swallows them). The command line wins, then the last one: a switch
+	of an ini that comes again later (typed, or in a later line or ini, under any of its names: see
+	ini_chiave) is left out with its arguments. The parser keeps the first -franzen and stops on a
+	second one, adds up two -to, stops on two hashers: so the doubles never get to it. -not -only
+	-always are lists: they add up.
+	-writeini (ini_scrivi, from loadparameters): the parser itself says what each token is, a switch
+	with what it took or a command with its archive and files. Only the switches are written
+*/
+struct ini_pezzo
+{
+	size_t		   file;  /// which -ini (0 = the first one)
+	int			   riga;  /// its line
+	vector<string> token; /// the switch and its arguments
+};
+static bool ini_eswitch(const string &i_token)
+{
+	return ((i_token.size() > 1) && (i_token[0] == '-')) || (i_token == "/od") || (i_token == "/on") || (i_token == "/os");
+}
+static bool ini_lista(const string &i_switch)
+{
+	return (i_switch == "-not") || (i_switch == "-only") || (i_switch == "-always") || (i_switch == "-sfxnot") || (i_switch == "-sfxonly");
+}
+/// a password in clear text (i_quanti: the switch with its arguments). -key alone (asked) is not
+static bool ini_segreto(const string &i_switch, size_t i_quanti)
+{
+	static const char *segreti[]= {"-key", "-key2", "-franzen", "-franzen2", "-password", "-mailpassword", "-p"};
+	for (size_t i= 0; i < sizeof(segreti) / sizeof(segreti[0]); i++)
+		if (i_switch == segreti[i])
+			return i_quanti > 1;
+	if (i_switch == "-repack") /// -repack new.zpaq password
+		return i_quanti > 2;
+	return (i_switch.size() > 2) && (i_switch[1] == 'p') && isdigit((unsigned char)i_switch[2]); /// -p1234, the short one
+}
+/// the same switch under any of its names: the aliases of the parser, the short forms, the on/off
+/// couples, the hashers (one only; with i_hasher false each one is its own: the help, 65.14b)
+static string ini_chiave(const string &i_switch, bool i_hasher= true)
+{
+	static const char *hasher[]= {"-nochecksum", "-crc32", "-xxhash", "-xxhashb", "-sha1", "-sha1b", "-sha256", "-sha256b", "-xxh3", "-xxh3b",
+								  "-md5", "-md5b", "-blake3", "-blake3b", "-sha3", "-sha3b", "-whirlpool", "-highway64", "-highway128",
+								  "-highway256", "-crc32c", "-wyhash", "-nilsimsa", "-entropy", "-quick", "-zeta", "-zetaenc", "-windate"};
+	for (size_t i= 0; i_hasher && (i < sizeof(hasher) / sizeof(hasher[0])); i++)
+		if (i_switch == hasher[i])
+			return "#hasher";
+	static const char *uguali[][2]= {{"-out", "-output"}, {"-error", "-errorlog"}, {"-search", "-find"}, {"-searchhash", "-findhash"},
+									 {"-exec_err", "-exec_error"}, {"-ifexists", "-ifexist"}, {"-limit", "-n"}, {"-ram", "-ramsize"},
+									 {"-filelist", "-fast"}, {"-nofilelist", "-fast"}, {"-nofast", "-fast"}, {"-noturbo", "-turbo"},
+									 {"-nodashboard", "-dashboard"}, {"-nosparse", "-sparse"}, {"-zip", "-deflate"}};
+	for (size_t i= 0; i < sizeof(uguali) / sizeof(uguali[0]); i++)
+		if (i_switch == uguali[i][0])
+			return uguali[i][1];
+	/// as cli_getstring and cli_getint read them: -m3 -mx6.0 = -method, -t8 = -threads, -P3306...
+	if ((i_switch.size() > 2) && (i_switch[0] == '-'))
+	{
+		const bool cifra= isdigit((unsigned char)i_switch[2]) != 0;
+		if ((i_switch[1] == 'm') && (cifra || (((i_switch[2] == 'x') || (i_switch[2] == 's')) && (i_switch.size() > 3) && isdigit((unsigned char)i_switch[3]))))
+			return "-method";
+		if ((i_switch[1] == 't') && cifra)
+			return "-threads";
+		if (cifra && ((i_switch[1] == 'P') || (i_switch[1] == 'h') || (i_switch[1] == 'u') || (i_switch[1] == 'p')))
+			return i_switch.substr(0, 2);
+	}
+	return i_switch;
+}
+/// a switch with its arguments, to be shown: the passwords hidden
+static string ini_mostra(const vector<string> &i_token)
+{
+	const string &testa= i_token[0];
+	if (ini_segreto(testa, i_token.size()))
+	{
+		if (testa == "-repack")
+			return testa + " " + franzini::quote(i_token[1], false) + " (hidden)";
+		return testa.substr(0, isdigit((unsigned char)testa[2]) ? 2 : testa.size()) + " (hidden)";
+	}
+	string risultato;
+	for (size_t i= 0; i < i_token.size(); i++)
+		risultato+= (i > 0 ? " " : "") + franzini::quote(i_token[i], false);
+	return risultato;
+}
+/// -ini and -writeini taken away from the line, the switches of the ini put in. 0 = go on (o_riga
+/// empty: the line as it is), 2 = an error (said)
+int ini_espandi(int i_argc, const char **i_argv, vector<string> &o_riga)
+{
+	o_riga.clear();
+	g_writeini= "";
+	g_ini_mostra.clear();
+	g_ini_caricati.clear();
+	bool trovato= false;
+	for (int i= 1; i < i_argc; i++)
+		if ((!strcmp(i_argv[i], "-ini")) || (!strcmp(i_argv[i], "-writeini")))
+			trovato= true;
+	if (!trovato)
+		return 0;
+	for (int i= 1; i < i_argc; i++) /// the colors of the errors below come before loadparameters (as scegli_riga)
+		if (!strcmp(i_argv[i], "-nocolor"))
+			flagnocolor= true;
+#ifdef _WIN32
+	color_save();
+#endif
+	vector<string> esplicito; /// the line, without -ini X and -writeini X
+	vector<string> nomi;	  /// the -ini files, in order
+	for (int i= 0; i < i_argc; i++)
+	{
+		const string t= i_argv[i];
+		if ((i == 0) || ((t != "-ini") && (t != "-writeini")))
+		{
+			esplicito.push_back(t);
+			continue;
+		}
+		if ((i + 1 >= i_argc) || (i_argv[i + 1][0] == '-') || (i_argv[i + 1][0] == 0))
+		{
+			myprintf("03616! %s wants the name of a file (ex. %s my.ini)\n", t.c_str(), t.c_str());
+			return 2;
+		}
+		const string nome= i_argv[++i];
+		if (t == "-ini")
+			nomi.push_back(nome);
+		else if (g_writeini != "")
+		{
+			myprintf("03617! -writeini twice: one file only\n");
+			return 2;
+		}
+		else
+			g_writeini= nome;
+	}
+	if ((g_writeini != "") && (!nomi.empty()))
+	{
+		myprintf("03618! -ini and -writeini together: refused (the ini is written from a line without -ini)\n");
+		return 2;
+	}
+	if (nomi.empty()) /// -writeini only: away from the line, ini_scrivi writes it
+	{
+		o_riga= esplicito;
+		return 0;
+	}
+	/// the switches typed, by key
+	std::set<string> scritti;
+	for (size_t i= 1; i < esplicito.size(); i++)
+		if (ini_eswitch(esplicito[i]))
+			scritti.insert(ini_chiave(esplicito[i]));
+	/// the switches of the ini files, in order, each one with its arguments
+	vector<ini_pezzo> pezzi;
+	for (size_t n= 0; n < nomi.size(); n++)
+	{
+		franzini ini;
+		if (!ini.load(nomi[n]))
+		{
+			myprintf("03619! -ini <<%Z>>: %s\n", nomi[n].c_str(), ini.lasterror().c_str());
+			return 2;
+		}
+		const vector<string> &t= ini.tokens();
+		const vector<int>	 &r= ini.lines();
+		for (size_t j= 0; j < t.size(); j++)
+			if ((t[j] == "-ini") || (t[j] == "-writeini"))
+			{
+				myprintf("03620! -ini <<%Z>> line %d: %s inside an ini is not allowed\n", nomi[n].c_str(), r[j], t[j].c_str());
+				return 2;
+			}
+		if ((!t.empty()) && (!ini_eswitch(t[0])))
+		{
+			myprintf("03621! -ini <<%Z>> line %d: <<%Z>> is not a switch (an ini holds switches only: no command, archive, files)\n", nomi[n].c_str(), r[0], t[0].c_str());
+			return 2;
+		}
+		for (size_t j= 0; j < t.size();)
+		{
+			ini_pezzo pezzo;
+			pezzo.file= n;
+			pezzo.riga= r[j];
+			do
+			{
+				string token= t[j++];
+#ifdef _WIN32
+				myreplaceall(token, "\\", "/"); /// as main() makes argv (wtou)
+#endif
+				pezzo.token.push_back(token);
+			} while ((j < t.size()) && (!ini_eswitch(t[j])));
+			pezzi.push_back(pezzo);
+		}
+	}
+	/// who wins: the command line, then the last one. Shown with -verbose (see loadparameters)
+	vector<string> dallini;
+	vector<string> usati(nomi.size());
+	vector<string> lasciati;
+	vector<int>	   presi(nomi.size(), 0);
+	vector<int>	   fuori(nomi.size(), 0);
+	for (size_t p= 0; p < pezzi.size(); p++)
+	{
+		const string chiave= ini_chiave(pezzi[p].token[0]);
+		string		 perche = "";
+		if (!ini_lista(pezzi[p].token[0]))
+		{
+			if (scritti.count(chiave))
+				perche= "the command line has it";
+			else
+				for (size_t q= p + 1; (q < pezzi.size()) && (perche == ""); q++)
+					if (ini_chiave(pezzi[q].token[0]) == chiave)
+					{
+						char numero[40];
+						snprintf(numero, sizeof(numero), "line %d", pezzi[q].riga);
+						perche= numero + string(" of ") + nomi[pezzi[q].file] + " has it again";
+					}
+		}
+		if (perche != "")
+		{
+			char numero[40];
+			snprintf(numero, sizeof(numero), " line %d: ", pezzi[p].riga);
+			lasciati.push_back("-ini " + nomi[pezzi[p].file] + numero + ini_mostra(pezzi[p].token) + " left out, " + perche);
+			fuori[pezzi[p].file]++;
+			continue;
+		}
+		dallini.insert(dallini.end(), pezzi[p].token.begin(), pezzi[p].token.end());
+		usati[pezzi[p].file]+= " " + ini_mostra(pezzi[p].token);
+		presi[pezzi[p].file]++;
+	}
+	for (size_t n= 0; n < nomi.size(); n++)
+	{
+		g_ini_mostra.push_back("-ini " + nomi[n] + ":" + (usati[n] == "" ? " nothing" : usati[n]));
+		char numero[100];
+		if (fuori[n] > 0)
+			snprintf(numero, sizeof(numero), ": %d switch(es) loaded, %d left out (the command line, or a later one, wins)", presi[n], fuori[n]);
+		else
+			snprintf(numero, sizeof(numero), ": %d switch(es) loaded", presi[n]);
+		g_ini_caricati.push_back("Switches from <<" + nomi[n] + ">>" + numero);
+	}
+	g_ini_mostra.insert(g_ini_mostra.end(), lasciati.begin(), lasciati.end());
+	/// in before the first switch typed (or at the end)
+	size_t k= 1;
+	while ((k < esplicito.size()) && (esplicito[k].c_str()[0] != '-'))
+		k++;
+	o_riga.assign(esplicito.begin(), esplicito.begin() + k);
+	o_riga.insert(o_riga.end(), dallini.begin(), dallini.end());
+	o_riga.insert(o_riga.end(), esplicito.begin() + k, esplicito.end());
+	return 0;
+}
+/// -writeini: i_riga is the line as typed (hashers with their names), i_inizi where each piece the
+/// parser took begins. Out: commands with their archive and files, and what an elevated relaunch
+/// added at the end (-elevated, -elevatedpid N, its -pause: cloud, -vss, g, mount). 0 = written
+int ini_scrivi(const vector<string> &i_riga, const vector<int> &i_inizi, const string &i_archivio)
+{
+	vector<int> inizio;
+	vector<int> fine;
+	for (size_t k= 0; k < i_inizi.size(); k++)
+	{
+		const int a= i_inizi[k];
+		const int b= (k + 1 < i_inizi.size()) ? i_inizi[k + 1] : (int)i_riga.size();
+		if ((a < 1) || (b <= a) || (b > (int)i_riga.size()))
+			continue;
+		if (ini_eswitch(i_riga[a]) || g_programflags.exists(i_riga[a]))
+		{
+			inizio.push_back(a);
+			fine.push_back(b);
+		}
+	}
+	const size_t	  quanti= inizio.size();
+	std::vector<bool> via(quanti, false);
+	for (size_t k= 0; k < quanti; k++)
+	{
+		const string &testa= i_riga[inizio[k]];
+		if ((testa != "-elevated") && (testa != "-elevatedpid"))
+			continue;
+		via[k]= true;
+		if ((k + 2 == quanti) && (i_riga[inizio[k + 1]] == "-pause")) /// cloud, mount: ... -elevated [-elevatedpid N] -pause
+			via[k + 1]= true;
+		if ((testa == "-elevated") && (k + 1 == quanti) && (k > 0) && (i_riga[inizio[k - 1]] == "-pause")) /// runhigh: ... -pause -elevated
+			via[k - 1]= true;
+	}
+	if ((i_archivio != "") && ((g_writeini == i_archivio) || stessoarchivio(g_writeini, i_archivio)))
+	{
+		myprintf("03622! -writeini <<%Z>> is the archive itself: refused (nothing done)\n", g_writeini.c_str());
+		return 2;
+	}
+	vector<string> uscita;
+	int			   scritti= 0;
+	bool		   segreti= false;
+	for (size_t k= 0; k < quanti; k++)
+		if (!via[k])
+		{
+			for (int j= inizio[k]; j < fine[k]; j++)
+				uscita.push_back(i_riga[j]);
+			if (ini_segreto(i_riga[inizio[k]], (size_t)(fine[k] - inizio[k])))
+				segreti= true;
+			scritti++;
+		}
+	franzini ini;
+	if (!ini.save(g_writeini, uscita))
+	{
+		myprintf("03623! -writeini <<%Z>>: %s (nothing done)\n", g_writeini.c_str(), ini.lasterror().c_str());
+		return 2;
+	}
+	if ((!flagpakka) && (!flagstdout) && (!flagterse))
+		myprintf("03624: -writeini <<%Z>>: %d switch(es) written\n", g_writeini.c_str(), scritti);
+	if (segreti && (!flagstdout))
+	{
+		myprintf("03625$ <<%Z>> holds a password in clear text (-key -franzen...): whoever reads the file reads it\n", g_writeini.c_str());
+#ifdef _WIN32
+		const char *utente	= getenv("USERNAME");
+		string		percorso= g_writeini; /// with \ again (wtou turned them into /)
+		myreplaceall(percorso, "/", "\\");
+		myprintf("03626$ Protect it: icacls \"%s\" /inheritance:r /grant:r \"%s\":F\n", percorso.c_str(), utente ? utente : "%USERNAME%");
+#else
+		myprintf("03626$ Protect it: chmod 600 \"%s\"\n", g_writeini.c_str());
+#endif
+		myprintf("03627$ Or leave the password out: -key alone asks for it, FRANZKEY / FRANZFRANZEN hold it\n");
+	}
+	return 0;
 }
 #ifdef _WIN32
 bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
@@ -144186,6 +144732,18 @@ enum class ImageType { NTFS, RAW };
 class HTIndex;
 struct WriterPair;
 struct fl_blockjob;
+struct twfile; /// 65.14i: w -test -verify, a file in RAM against the one on disk
+/// 65.14f: t with a path and -ssd, what a thread found comparing one file (see Jidac::testverify_ssd)
+struct tconfronto
+{
+	bool	 fatto;	 /// compared by a thread (else the loop of testverify does it, as ever)
+	bool	 uguale; /// what equal() said
+	uint32_t crc32;	 /// of the file on disk
+	string	 hash;	 /// of the file on disk (-verify -checksum -paranoid)
+	tconfronto() : fatto(false), uguale(false), crc32(0)
+	{
+	}
+};
 // Do everything.
 // Very weird approach, this is about plain-old C, almost zero ++
 class Jidac
@@ -144610,7 +145168,11 @@ class Jidac
 	int64_t franzparallelscandir(bool i_flaghash, bool i_recursive, bool i_forcedir);
 	int64_t franzparallelhashfiles(string i_hashtype, int64_t i_totalsize, vector<string> i_thefiles, bool i_silent, vector<std::pair<string, string> > &o_hashname);
 
-	bool   equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc32, string i_myhashtype, string i_myhash, string &o_hash); // compare file contents with p
+	bool   equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc32, string i_myhashtype, string i_myhash, string &o_hash, int64_t *o_fatti= NULL); // compare file contents with p (o_fatti: bytes read, from a thread)
+	friend void *tverifica_thread(void *i_arg); /// 65.14f: t -ssd, a thread calls equal()
+	void   testverify_ssd(vector<DTMap::iterator> &i_filelist, vector<tconfronto> &o_esiti); /// 65.14f
+	bool   equalpezzo(DTMap::const_iterator p, const char *filename, unsigned i_primo, unsigned i_ultimo, int64_t i_inizio, int64_t i_lunghezza, uint32_t &o_crc32, int64_t *o_fatti); /// 65.14g: a piece of a big file
+	int	   testverify_grosso(DTMap::const_iterator p, const string &i_file); /// 65.14g: can a big file go in pieces
 	void   write715attr(libzpaq::StringBuffer &i_sb, uint64_t i_data, unsigned int i_quanti);
 	void   writefranzattr(DTMap::iterator i_dtmap, libzpaq::StringBuffer &i_sb, uint64_t i_data, unsigned int i_quanti, string i_filename, uint32_t i_crc32fromfragments, uint32_t i_crc32, string i_thehash, int64_t i_creationdate, int64_t i_accessdate, const struct franz_tar *i_posix, bool i_isadded);
 	int	   enumeratecomments();
@@ -144627,7 +145189,7 @@ class Jidac
 #endif /// NOSFTPEND
 	int ads();
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	int		 extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset= -1, int64_t i_windowsize= 0);
+	int		 extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset= -1, int64_t i_windowsize= 0, twfile *i_grande= NULL); /// 65.14i: i_grande, a file in windows (-checksum, -test -verify)
 	int		 multiverify(vector<s_fileandsize> &i_arrayfilename);
 	bool	 removetempdirifempty(string i_folder, bool i_deleteifsizezero);
 	void	 handleflaglongpath();
@@ -152862,1186 +153424,1932 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
 	Section: help
 */
 
-void help_range()
-{
-	scrivi_riga("-range X:Y", "Range versions [X-Y]");
-	scrivi_riga("-range X:", "Range versions [X-THE LAST]");
-	scrivi_riga("-range :X", "Range versions [1-X]");
-	scrivi_riga("-range X", "Range is single version X");
-	scrivi_riga("-range ::X", "Last X versions");
-	scrivi_riga("-utf", "Remove non-utf8 chars");
-	scrivi_riga("-utf", "Remove non-utf8 chars");
-}
+/*
+	Section: help
 
-void help_date()
-{
-	scrivi_riga("-datefrom X", "datetime>=X The length must be even, beware of leading zeros");
-	scrivi_riga("-dateto   Y", "datetime<=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405");
-	scrivi_riga("", "Y is the end of its period: -dateto 2022 => up to 2022-12-31 23:59:59");
-	scrivi_riga("", "Local time, as the dates shown (with -utc: UTC)");
-}
-void help_size()
-{
-	scrivi_riga("-maxsize X", "Filter on filesize. Use K, M, G, T and KB,MB,GB,TB");
-	scrivi_riga("-minsize Y", "ex. 3000000, 3.000.000, 3000K, 3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T");
-}
-void help_orderby()
-{
-	scrivi_riga("-orderby x", "Sort files by (one or more of) ext;name;full;fullname;hash;size;");
-	scrivi_riga("", "attr;date;creation;access;");
-	scrivi_riga("-desc", "Descending sort (if -orderby)");
-}
-void help_printhash(bool i_flagadd)
-{
-	char linea[200];
-	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
-		if (p->second.flagiszpaq)
-		{
-			snprintf(linea, sizeof(linea), "%s", p->second.hashdescription.c_str());
-			scrivi_riga(p->second.switchname.c_str(), linea);
-		}
-	if (!i_flagadd)
-	{
-		for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
-			if (!p->second.flagiszpaq)
-			{
-				snprintf(linea, sizeof(linea), "%s", p->second.hashdescription.c_str());
-				scrivi_riga(p->second.switchname.c_str(), linea);
-			}
-	}
-}
+	65.14b: the help is data. g_helprighe holds every line of every help, in the order they are shown: a
+	help is the lines with its name in "comando" ("a", "x"...). The standard switches are the helps "*main",
+	"*normal", "*common", "*franz", "*voodoo" (h main, h common...); "@date", "@size"... are pieces that more
+	helps show (help_date() and the others, once). g_helpcomandi: what can be typed (a, cc, tree...), the help
+	it shows and its place in the list of h. In a text, | is a new line and || is a | (the left column and the
+	command line of an example are as they are). help_stampa prints a help as the help_x functions did,
+	help_cerca answers zpaqfranz h -n -key (what a switch does, command by command), help_controlla is the
+	hidden -helpcheck (the help against what the parser takes).
 
-string help_b(bool i_usage, bool i_example)
+	65.14l: the translations. A line with a text to translate has an id (its first parameter, never renumbered,
+	never used again: a new line takes the next free one, -helpcheck says which). 0 = nothing to translate (an
+	empty line, a command line). Right below it its translations, one for each language: HIT (Italian, with the
+	' and no accented letters), HRU (Russian, UTF-8). What is translated: the text, the title of an example (not
+	its command line, not the left column). A translation carries the fingerprint (help_impronta, FNV-1a) of the
+	English it was made from: the English changed, the fingerprint does not match and the English is shown, and
+	-helpcheck lists it with the new fingerprint. No translation: the English. "@frasi": the texts written by
+	code (usage, h, h h...), "@flag": the descriptions of the flags of h common, "@hash": the ones of the
+	hashes, all found by their English (help_t). The language: lingua_scegli (-eng -it -ru, ZPAQFRANZ_LANG,
+	the system). -helpid shows the ids. A translation longer than the English can take more lines (|).
+	65.14m: from here on the lines are written by hand: a new one takes the next free id (-helpcheck), its
+	HIT/HRU the fingerprint -helpcheck gives (tortura/lingua/impronta.pl too); never renumber
+*/
+struct franz_helpriga
 {
-	if (i_usage)
-	{
-		scrivi_riga("CMD b", "Bbenchmark and CPU stresser");
-		scrivi_riga(" ", "Rough benchmarking of hash-checksum");
-		scrivi_riga(" ", "franzomips (fake index) showed if no switch selected");
-		scrivi_riga(" ", "By default test ALL for 5 seconds with 400.000 bytes");
-		scrivi_riga(" ", "NOTE: This reflects maximum theoretical performance,");
-		scrivi_riga(" ", "not real-world speeds");
-		scrivi_riga("-debug", "Do internal check (for non-Intel CPU)");
-		scrivi_riga("-verbose", "Verbose output");
-		scrivi_riga("-n X", "Set time limit to X s (<1000)");
-		scrivi_riga("-minsize Y", "Run on chunks of Y bytes (<2000000000)");
-		help_printhash(false);
-		scrivi_riga("-all", "Multithread run (CPU cooker)");
-		scrivi_riga("-tX", "With -all limit to X threads");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Benchmark all", "b");
-		scrivi_esempio("Benchmark all on 1.86GB", "b -minsize 2000000000");
-		scrivi_esempio("Benchmark all on 1MB", "b -minsize 1048576");
-		scrivi_esempio("Benchmark SHA256 and BLAKE3", "b -sha256 -blake 3 -minsize 1048576");
-		scrivi_esempio("Benchmark for 10 second each", "b -n 10 -sha256 -blake3 -minsize 1048576");
-		scrivi_esempio("CPU stress test (heats the CPU)", "b -all -n 10000");
-		scrivi_esempio("Cook the CPU (all cores)", "b -all -n 20 -blake3");
-		scrivi_esempio("Cook the CPU (8 cores)", "b -all -t8 -n 20 -blake3");
-	}
-	return "CPU benchmark, speed in franzomips (!)";
-}
-
-string help_autotest(bool i_usage, bool i_example)
+	const char	*comando;  /// the help it belongs to ("": a translation)
+	char		 quando;   /// 'u' with the usage, 'e' with the examples ('E': only with no g_optional, or that one),
+						   /// 'b' with both, 'o' with one of them, 'a' always. 'T': the language (LINGUA_IT...)
+	char		 tipo;	   /// 'r' a line of the usage (a switch...), 'e' an example, 't' a plain line, 'x' the title
+						   /// "Examples:", 'i' the lines of another help, 'g' made by code, 'b' the one-line description,
+						   /// 'T' the translation of the line with its id
+	char		 colore;   /// 't': 'c'yan 'y'ellow 'g'reen 'r'ed, 0 = as it is. 'i': what of the other help, 'u' 'e' 'b'.
+						   /// 'g': 'h' the hashes, 'H' the hashes of a, 'f' the flags (h common), 's' -sparse, 'd' -until
+	const char	*testata;  /// 'r' 'g': the left column; 'e': the title
+	const char	*testo;	   /// 'r' 't' 'g': the text (| a new line). NULL ('r'): the standard meaning, the line of h main,
+						   /// h normal, h franz or h voodoo with the same left column. 'e': the command line. 'i': the help.
+						   /// 'T': the translated text (of the title, for an example)
+	int			 id;	   /// 65.14l: the number of the line, for its translations (0: nothing to translate)
+	uint32_t	 impronta; /// 'T': the fingerprint of the English it was made from
+};
+#define LINGUA_EN 0
+#define LINGUA_IT 1
+#define LINGUA_RU 2
+#define HU(n, c, t, x)				{c, 'u', 'r', 0, t, x, n, 0}
+#define HS(c, t)					{c, 'u', 'r', 0, t, NULL, 0, 0}
+#define HRIGA(n, c, q, t, x)		{c, q, 'r', 0, t, x, n, 0}
+#define HSTD(c, q, t)				{c, q, 'r', 0, t, NULL, 0, 0}
+#define HE(n, c, t, x)				{c, 'e', 'e', 0, t, x, n, 0}
+#define HESEMPIO(n, c, q, t, x)		{c, q, 'e', 0, t, x, n, 0}
+#define HTESTO(n, c, q, k, x)		{c, q, 't', k, "", x, n, 0}
+#define HESEMPI(c, q)				{c, q, 'x', 0, "", "", 0, 0}
+#define HINCLUDI(c, q, h, p)		{c, q, 'i', p, "", h, 0, 0}
+#define HGENERA(n, c, q, g, t, x)	{c, q, 'g', g, t, x, n, 0}
+#define HBREVE(n, c, x)				{c, 'a', 'b', 0, "", x, n, 0}
+#define HIT(n, k, x)				{"", LINGUA_IT, 'T', 0, "", x, n, k}
+#define HRU(n, k, x)				{"", LINGUA_RU, 'T', 0, "", x, n, k}
+static const franz_helpriga g_helprighe[]=
 {
-	if (i_usage)
-	{
-		scrivi_riga("CMD autotest", "Operational self-test on this system");
-		scrivi_riga("-all", "Heavy test (all hashes)");
-		scrivi_riga("-n X", "On heavy test (-all) use X size (min: 200.000,default 1.000.000)");
-		scrivi_riga("-n X", "On light test (not -all) use X ASCII chars");
-		scrivi_riga("-verbose", "Verbose output");
-		scrivi_riga("-to d0", "Create (into folder d0) a dotest.sh/bat script)");
-		scrivi_riga("-checktxt X", "Test outYY.txt files inside X folder");
-		scrivi_riga("-all -quick", "The QUICK suite (with -to): ONLY extract sha256.zpaq, compress it with");
-		scrivi_riga(" ", "-m1, then with -m8, then t of both archives (script quicktest.sh/bat)");
-		scrivi_riga(" ", "(-quick keeps its general meaning outside autotest -all)");
-		scrivi_riga("-m1 ... -m5", "With -all -to: the level of the tests (no -m: -m4, the suite as before)");
-		scrivi_riga(" ", "-m1 quick (a few MB): default values, x, -fast history, VFILE-info, -comment,");
-		scrivi_riga(" ", "    -fastadd, dump, difficult names");
-		scrivi_riga(" ", "-m2 + 31.080 small files: hashes, -key, multipart, -chunk, backup -chunk, healing,");
-		scrivi_riga(" ", "    -m6, -turbo, -tar (*nix)");
-		scrivi_riga(" ", "-m3 + 1.75 GB of folders: the hashes, encrypted -chunk, -frugal, -m8, -fastadd");
-		scrivi_riga(" ", "-m4 + 6 GB of big files: Franzen, mount, -turbo, backup -chunk (28 GB free)");
-		scrivi_riga(" ", "-m5 everything (hours): every method (t, p), -all, -715, damaged archives,");
-		scrivi_riga(" ", "    the quadratura: in clear, -key, -franzen, both; one piece == multipart");
-		scrivi_riga(" ", "    == -chunk == backup to the byte, and one byte changed must be seen");
-		scrivi_riga(" ", "    (33 GB free; there, a -m5 with 16 threads takes ~6 GB of RAM)");
-		scrivi_riga(" ", "-checktxt checks the level the folder was made with");
-		scrivi_riga("-debug4", "With -all -to: bigone01.big of 4 MB, not 400 (-m5 much faster)");
-		scrivi_riga("-franzen pippo", "Turn on the franzen test");
-		scrivi_riga(" ", "-to also tests the hash healing (attribute-only change, -touch)");
-		scrivi_riga(" ", "and, if mount works here (tried for real), the mount (mount -test)");
-		scrivi_riga(" ", "and -turbo (the archive must be the same, to the byte, of an a -noturbo)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Hashing internal test 'ABCD'", "autotest");
-		scrivi_esempio("Hashing internal test 'ABCDEFGHIJ'", "autotest -n 10");
-		scrivi_esempio("Hashing internal test", "autotest -all");
+	/// @range
+	HRIGA(1, "@range", 'a', "-range X:Y", "Range versions [X-Y]"),
+	HIT(1, 0x2AAFBDB3, "Intervallo di versioni [X-Y]"),
+	HRU(1, 0x2AAFBDB3, "Диапазон версий [X-Y]"),
+	HRIGA(2, "@range", 'a', "-range X:", "Range versions [X-THE LAST]"),
+	HIT(2, 0x8E3AFB53, "Intervallo di versioni [X-L'ULTIMA]"),
+	HRU(2, 0x8E3AFB53, "Диапазон версий [X-ПОСЛЕДНЯЯ]"),
+	HRIGA(3, "@range", 'a', "-range :X", "Range versions [1-X]"),
+	HIT(3, 0x7742467F, "Intervallo di versioni [1-X]"),
+	HRU(3, 0x7742467F, "Диапазон версий [1-X]"),
+	HRIGA(4, "@range", 'a', "-range X", "Range is single version X"),
+	HIT(4, 0x7475B166, "Solo la versione X"),
+	HRU(4, 0x7475B166, "Только версия X"),
+	HRIGA(5, "@range", 'a', "-range ::X", "Last X versions"),
+	HIT(5, 0x57AF5FD2, "Le ultime X versioni"),
+	HRU(5, 0x57AF5FD2, "Последние X версий"),
+	HRIGA(6, "@range", 'a', "-utf", "Remove non-utf8 chars"),
+	HIT(6, 0xDEC63A3F, "Toglie i caratteri non utf8"),
+	HRU(6, 0xDEC63A3F, "Удалить символы, не являющиеся UTF-8"),
+	HRIGA(7, "@range", 'a', "-utf", "Remove non-utf8 chars"),
+	HIT(7, 0xDEC63A3F, "Toglie i caratteri non utf8"),
+	HRU(7, 0xDEC63A3F, "Удалить символы, не являющиеся UTF-8"),
+	/// @date
+	HRIGA(8, "@date", 'a', "-datefrom X", "datetime>=X The length must be even, beware of leading zeros"),
+	HIT(8, 0x45F7BA0E, "data e ora>=X La lunghezza deve essere|  pari, attenzione agli zeri iniziali"),
+	HRU(8, 0x45F7BA0E, "дата/время>=X Длина должна быть|  чётной, следите за ведущими нулями"),
+	HRIGA(9, "@date", 'a', "-dateto   Y", "datetime<=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405|Y is the end of its period: -dateto 2022 => up to 2022-12-31 23:59:59|Local time, as the dates shown (with -utc: UTC)"),
+	HIT(9, 0x49FFF944, "data e ora<=Y OK 2022, 202210, 2022-12-25,|2002-12-25_03:04:05, 20121225030405|Y e' la fine del suo periodo: -dateto 2022 => fino al 2022-12-31 23:59:59|Ora locale, come le date mostrate (con -utc: UTC)"),
+	HRU(9, 0x49FFF944, "дата/время<=Y OK 2022, 202210, 2022-12-25,|2002-12-25_03:04:05, 20121225030405|Y - конец своего периода: -dateto 2022 => до 2022-12-31 23:59:59|Местное время, как в показанных датах (с -utc: UTC)"),
+	/// @size
+	HRIGA(10, "@size", 'a', "-maxsize X", "Filter on filesize. Use K, M, G, T and KB,MB,GB,TB"),
+	HIT(10, 0x4096AFC7, "Filtro sulla dimensione dei file.|  Usare K, M, G, T e KB,MB,GB,TB"),
+	HRU(10, 0x4096AFC7, "Фильтр по размеру файла. Используйте|  K, M, G, T и KB,MB,GB,TB"),
+	HRIGA(11, "@size", 'a', "-minsize Y", "ex. 3000000, 3.000.000, 3000K, 3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T"),
+	HIT(11, 0xF91ECE0A, "es. 3000000, 3.000.000, 3000K, 3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T"),
+	HRU(11, 0xF91ECE0A, "напр. 3000000, 3.000.000, 3000K,|  3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T"),
+	/// @orderby
+	HRIGA(12, "@orderby", 'a', "-orderby x", "Sort files by (one or more of) ext;name;full;fullname;hash;size;|attr;date;creation;access;"),
+	HIT(12, 0xA4102E89, "Ordina i file per (uno o piu' tra)|ext;name;full;fullname;hash;size; attr;date;creation;access;"),
+	HRU(12, 0xA4102E89, "Сортировать файлы по (одному или нескольким)|ext;name;full;fullname;hash;size; attr;date;creation;access;"),
+	HRIGA(13, "@orderby", 'a', "-desc", "Descending sort (if -orderby)"),
+	HIT(13, 0x1AB06B81, "Ordine decrescente (con -orderby)"),
+	HRU(13, 0x1AB06B81, "Сортировка по убыванию (при -orderby)"),
+	/// b
+	HU(14, "b", "CMD b", "Bbenchmark and CPU stresser|Rough benchmarking of hash-checksum|franzomips (fake index) showed if no switch selected|By default test ALL for 5 seconds with 400.000 bytes|NOTE: This reflects maximum theoretical performance,|not real-world speeds"),
+	HIT(14, 0x22125B3A, "Benchmark e stress della CPU|Misura grossolana di hash e checksum|franzomips (indice finto) se non c'e' nessuno switch|Di default prova TUTTO per 5 secondi con 400.000 byte|NOTA: e' la prestazione massima teorica,|non la velocita' reale"),
+	HRU(14, 0x22125B3A, "Бенчмарк и нагрузка на CPU|Грубое измерение скорости хешей и контрольных сумм|franzomips (условный индекс), если не задан ни один ключ|По умолчанию проверяется ВСЁ по 5 секунд на 400.000 байт|ПРИМЕЧАНИЕ: это максимальная теоретическая|производительность, а не реальная скорость"),
+	HU(15, "b", "-debug", "Do internal check (for non-Intel CPU)"),
+	HIT(15, 0xB7FD5B3F, "Controllo interno (per CPU non Intel)"),
+	HRU(15, 0xB7FD5B3F, "Внутренняя проверка (для CPU не Intel)"),
+	HU(16, "b", "-verbose", "Verbose output"),
+	HIT(16, 0xEB4C712A, "Output dettagliato"),
+	HRU(16, 0xEB4C712A, "Подробный вывод"),
+	HU(17, "b", "-n X", "Set time limit to X s (<1000)"),
+	HIT(17, 0x9A26DBC5, "Limite di tempo di X s (<1000)"),
+	HRU(17, 0x9A26DBC5, "Ограничение времени X с (<1000)"),
+	HU(18, "b", "-minsize Y", "Run on chunks of Y bytes (<2000000000)"),
+	HIT(18, 0x3DFB9C81, "Lavora su blocchi di Y byte (<2000000000)"),
+	HRU(18, 0x3DFB9C81, "Работать с блоками по Y байт (<2000000000)"),
+	HGENERA(0, "b", 'u', 'h', "", ""),
+	HU(19, "b", "-all", "Multithread run (CPU cooker)"),
+	HIT(19, 0xC6731B59, "Esecuzione multithread (cuoce la CPU)"),
+	HRU(19, 0xC6731B59, "Многопоточный запуск (разогрев CPU)"),
+	HU(20, "b", "-tX", "With -all limit to X threads"),
+	HIT(20, 0xABDAB076, "Con -all al massimo X thread"),
+	HRU(20, 0xABDAB076, "С -all не более X потоков"),
+	HESEMPI("b", 'b'),
+	HE(21, "b", "Benchmark all", "b"),
+	HIT(21, 0x1055BC9F, "Benchmark di tutto"),
+	HRU(21, 0x1055BC9F, "Бенчмарк всего"),
+	HE(22, "b", "Benchmark all on 1.86GB", "b -minsize 2000000000"),
+	HIT(22, 0x1FFCB3C8, "Benchmark di tutto su 1.86GB"),
+	HRU(22, 0x1FFCB3C8, "Бенчмарк всего на 1.86GB"),
+	HE(23, "b", "Benchmark all on 1MB", "b -minsize 1048576"),
+	HIT(23, 0x62497520, "Benchmark di tutto su 1MB"),
+	HRU(23, 0x62497520, "Бенчмарк всего на 1MB"),
+	HE(24, "b", "Benchmark SHA256 and BLAKE3", "b -sha256 -blake3 -minsize 1048576"), /// 65.14b: it was -blake 3 (-helpcheck)
+	HIT(24, 0x35BBA5A4, "Benchmark di SHA256 e BLAKE3"),
+	HRU(24, 0x35BBA5A4, "Бенчмарк SHA256 и BLAKE3"),
+	HE(25, "b", "Benchmark for 10 second each", "b -n 10 -sha256 -blake3 -minsize 1048576"),
+	HIT(25, 0xA90D0715, "Benchmark di 10 secondi ciascuno"),
+	HRU(25, 0xA90D0715, "Бенчмарк по 10 секунд каждый"),
+	HE(26, "b", "CPU stress test (heats the CPU)", "b -all -n 10000"),
+	HIT(26, 0xFEFD6CD8, "Stress test della CPU (la scalda)"),
+	HRU(26, 0xFEFD6CD8, "Стресс-тест CPU (нагревает процессор)"),
+	HE(27, "b", "Cook the CPU (all cores)", "b -all -n 20 -blake3"),
+	HIT(27, 0x5D708452, "Cuoce la CPU (tutti i core)"),
+	HRU(27, 0x5D708452, "Прогреть CPU (все ядра)"),
+	HE(28, "b", "Cook the CPU (8 cores)", "b -all -t8 -n 20 -blake3"),
+	HIT(28, 0xFEE274F3, "Cuoce la CPU (8 core)"),
+	HRU(28, 0xFEE274F3, "Прогреть CPU (8 ядер)"),
+	HBREVE(29, "b", "CPU benchmark, speed in franzomips (!)"),
+	HIT(29, 0x4FC8D3A1, "Benchmark della CPU, velocita' in franzomips (!)"),
+	HRU(29, 0x4FC8D3A1, "Бенчмарк CPU, скорость в franzomips (!)"),
+	/// autotest
+	HU(30, "autotest", "CMD autotest", "Operational self-test on this system"),
+	HIT(30, 0xD319C2A2, "Autotest operativo su questo sistema"),
+	HRU(30, 0xD319C2A2, "Рабочий самотест на этой системе"),
+	HU(31, "autotest", "-all", "Heavy test (all hashes)"),
+	HIT(31, 0x0EF4D58C, "Test pesante (tutti gli hash)"),
+	HRU(31, 0x0EF4D58C, "Тяжёлый тест (все хеши)"),
+	HU(32, "autotest", "-n X", "On heavy test (-all) use X size (min: 200.000,default 1.000.000)"),
+	HIT(32, 0x027D3125, "Nel test pesante (-all) usa la dimensione|  X (min: 200.000, default 1.000.000)"),
+	HRU(32, 0x027D3125, "В тяжёлом тесте (-all) размер X (мин.:|  200.000, по умолчанию 1.000.000)"),
+	HU(33, "autotest", "-n X", "On light test (not -all) use X ASCII chars"),
+	HIT(33, 0x3136C791, "Nel test leggero (senza -all) usa X caratteri ASCII"),
+	HRU(33, 0x3136C791, "В лёгком тесте (без -all) X символов ASCII"),
+	HU(34, "autotest", "-verbose", "Verbose output"),
+	HIT(34, 0xEB4C712A, "Output dettagliato"),
+	HRU(34, 0xEB4C712A, "Подробный вывод"),
+	HU(35, "autotest", "-to d0", "Create (into folder d0) a dotest.sh/bat script)"),
+	HIT(35, 0x4AEA9C8D, "Crea (nella cartella d0) uno script dotest.sh/bat"),
+	HRU(35, 0x4AEA9C8D, "Создать (в папке d0) скрипт dotest.sh/bat"),
+	HU(36, "autotest", "-checktxt X", "Test outYY.txt files inside X folder"),
+	HIT(36, 0xA8C267D2, "Controlla i file outYY.txt nella cartella X"),
+	HRU(36, 0xA8C267D2, "Проверить файлы outYY.txt в папке X"),
+	HU(37, "autotest", "-all -quick", "The QUICK suite (with -to): ONLY extract sha256.zpaq, compress it with|-m1, then with -m8, then t of both archives (script quicktest.sh/bat)|(-quick keeps its general meaning outside autotest -all)"),
+	HIT(37, 0xDB0BAF9D, "La suite RAPIDA (con -to): estrae SOLO sha256.zpaq, lo comprime con|-m1, poi con -m8, poi t di entrambi gli archivi|(script quicktest.sh/bat) (-quick mantiene il|suo significato generale fuori da autotest -all)"),
+	HRU(37, 0xDB0BAF9D, "БЫСТРЫЙ набор (с -to): ТОЛЬКО извлечь sha256.zpaq, сжать его с|-m1, затем с -m8, затем t обоих архивов (скрипт quicktest.sh/bat)|(вне autotest -all ключ -quick сохраняет обычное значение)"),
+	HU(38, "autotest", "-m1 ... -m5", "With -all -to: the level of the tests (no -m: -m4, the suite as before)|-m1 quick (a few MB): default values, x, -fast history, VFILE-info, -comment,|    -fastadd, dump, difficult names|-m2 + 31.080 small files: hashes, -key, multipart, -chunk, backup -chunk, healing,|    -m6, -turbo, -tar (*nix)|-m3 + 1.75 GB of folders: the hashes, encrypted -chunk, -frugal, -m8, -fastadd|-m4 + 6 GB of big files: Franzen, mount, -turbo, backup -chunk (28 GB free)|-m5 everything (hours): every method (t, p), -all, -715, damaged archives,|    the quadratura: in clear, -key, -franzen, both; one piece == multipart|    == -chunk == backup to the byte, and one byte changed must be seen|    (33 GB free; there, a -m5 with 16 threads takes ~6 GB of RAM)|-checktxt checks the level the folder was made with"),
+	HIT(38, 0xC76F91DA, "Con -all -to: il livello dei test (senza -m: -m4, la suite di prima)|-m1 rapido (pochi MB): valori di default, x, storia -fast, VFILE-info, -comment,|    -fastadd, dump, nomi difficili|-m2 + 31.080 file piccoli: hash, -key, multipart, -chunk, backup -chunk, healing,|    -m6, -turbo, -tar (*nix)|-m3 + 1.75 GB di cartelle: gli hash, -chunk cifrato, -frugal, -m8, -fastadd|-m4 + 6 GB di file grossi: Franzen, mount, -turbo, backup -chunk (28 GB liberi)|-m5 tutto (ore): ogni metodo (t, p), -all, -715, archivi danneggiati,|    la quadratura: in chiaro, -key, -franzen, entrambi; un pezzo == multipart|    == -chunk == backup al byte, e un byte cambiato deve essere visto|    (33 GB liberi; li', un -m5 con 16 thread prende ~6 GB di RAM)|-checktxt controlla il livello con cui e' stata fatta la cartella"),
+	HRU(38, 0xC76F91DA, "С -all -to: уровень тестов (без -m: -m4, прежний набор)|-m1 быстрый (несколько MB): значения по умолчанию, x, история -fast, VFILE-info,|    -comment, -fastadd, dump, сложные имена|-m2 + 31.080 мелких файлов: хеши, -key, multipart, -chunk, backup -chunk, healing,|    -m6, -turbo, -tar (*nix)|-m3 + 1.75 GB папок: хеши, зашифрованный -chunk, -frugal, -m8, -fastadd|-m4 + 6 GB больших файлов: Franzen, mount, -turbo, backup -chunk (28 GB свободно)|-m5 всё (часы): все методы (t, p), -all, -715, повреждённые архивы,|    сверка: открыто, -key, -franzen, оба; один кусок == multipart|    == -chunk == backup побайтно, и изменённый байт должен быть замечен|    (33 GB свободно; там -m5 с 16 потоками занимает ~6 GB RAM)|-checktxt проверяет уровень, с которым создана папка"),
+	HU(39, "autotest", "-debug4", "With -all -to: bigone01.big of 4 MB, not 400 (-m5 much faster)"),
+	HIT(39, 0x057749C7, "Con -all -to: bigone01.big da 4 MB,|  non 400 (-m5 molto piu' veloce)"),
+	HRU(39, 0x057749C7, "С -all -to: bigone01.big размером 4|  MB, а не 400 (-m5 гораздо быстрее)"),
+	HU(40, "autotest", "-franzen pippo", "Turn on the franzen test|-to also tests the hash healing (attribute-only change, -touch)|and, if mount works here (tried for real), the mount (mount -test)|and -turbo (the archive must be the same, to the byte, of an a -noturbo)"),
+	HIT(40, 0x5635BE99, "Attiva il test di franzen|-to prova anche il healing degli hash (cambia solo|l'attributo, -touch) e, se qui il mount funziona (provato|davvero), il mount (mount -test) e -turbo (l'archivio|deve essere identico, al byte, a quello di un a -noturbo)"),
+	HRU(40, 0x5635BE99, "Включить тест franzen|-to проверяет также восстановление хешей (меняется|только атрибут, -touch) и, если здесь работает mount|(проверено на деле), сам mount (mount -test) и -turbo|(архив должен побайтно совпасть с архивом от a -noturbo)"),
+	HESEMPI("autotest", 'b'),
+	HE(41, "autotest", "Hashing internal test 'ABCD'", "autotest"),
+	HIT(41, 0x8108EE7A, "Test interno degli hash 'ABCD'"),
+	HRU(41, 0x8108EE7A, "Внутренний тест хешей 'ABCD'"),
+	HE(42, "autotest", "Hashing internal test 'ABCDEFGHIJ'", "autotest -n 10"),
+	HIT(42, 0x4BF78CF3, "Test interno degli hash 'ABCDEFGHIJ'"),
+	HRU(42, 0x4BF78CF3, "Внутренний тест хешей 'ABCDEFGHIJ'"),
+	HE(43, "autotest", "Hashing internal test", "autotest -all"),
+	HIT(43, 0xE9DAA64C, "Test interno degli hash"),
+	HRU(43, 0xE9DAA64C, "Внутренний тест хешей"),
 #if defined(HWSHA1) || defined(HWSHA2)
-		scrivi_esempio("Hashing internal test", "autotest -hw");
+	HE(44, "autotest", "Hashing internal test", "autotest -hw"),
+	HIT(44, 0xE9DAA64C, "Test interno degli hash"),
+	HRU(44, 0xE9DAA64C, "Внутренний тест хешей"),
 #endif // corresponds to #if (#if defined(HWSHA1) || defined(HWSHA2))
-		scrivi_esempio("Prepare a z:\\pippo\\dotest.bat", "autotest -all -verbose -to z:\\pippo");
-		scrivi_esempio("Check output results", "autotest -checktxt z:\\ugo");
-		scrivi_esempio("Test franzen too", "autotest -all -to z:\\pippo -franzen pippo");
-		scrivi_esempio("Quick suite (4 operations)", "autotest -all -quick -to z:\\pippo");
-		scrivi_esempio("Level 1: quick, a few MB", "autotest -all -m1 -to z:\\pippo");
-		scrivi_esempio("Level 5: everything (hours)", "autotest -all -m5 -to z:\\pippo -franzen pippo");
-	}
-	return "Check hidden errors post-build";
-}
+	HE(45, "autotest", "Prepare a z:\\pippo\\dotest.bat", "autotest -all -verbose -to z:\\pippo"),
+	HIT(45, 0x861C061B, "Prepara un z:\\pippo\\dotest.bat"),
+	HRU(45, 0x861C061B, "Подготовить z:\\pippo\\dotest.bat"),
+	HE(46, "autotest", "Check output results", "autotest -checktxt z:\\ugo"),
+	HIT(46, 0x11EACD52, "Controlla i risultati"),
+	HRU(46, 0x11EACD52, "Проверить результаты"),
+	HE(47, "autotest", "Test franzen too", "autotest -all -to z:\\pippo -franzen pippo"),
+	HIT(47, 0xB0B9F787, "Prova anche franzen"),
+	HRU(47, 0xB0B9F787, "Проверить и franzen"),
+	HE(48, "autotest", "Quick suite (4 operations)", "autotest -all -quick -to z:\\pippo"),
+	HIT(48, 0xFA5FFCD9, "Suite rapida (4 operazioni)"),
+	HRU(48, 0xFA5FFCD9, "Быстрый набор (4 операции)"),
+	HE(49, "autotest", "Level 1: quick, a few MB", "autotest -all -m1 -to z:\\pippo"),
+	HIT(49, 0x7810C10B, "Livello 1: rapido, pochi MB"),
+	HRU(49, 0x7810C10B, "Уровень 1: быстрый, несколько MB"),
+	HE(50, "autotest", "Level 5: everything (hours)", "autotest -all -m5 -to z:\\pippo -franzen pippo"),
+	HIT(50, 0x2A06BC0F, "Livello 5: tutto (ore)"),
+	HRU(50, 0x2A06BC0F, "Уровень 5: всё (часы)"),
+	HBREVE(51, "autotest", "Check hidden errors post-build"),
+	HIT(51, 0xA0A12B73, "Cerca errori nascosti dopo la compilazione"),
+	HRU(51, 0xA0A12B73, "Поиск скрытых ошибок после сборки"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-string help_isopen(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD isopen()", "Check if a file is open (and execute some kind of script)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Check some thunderbird running", "isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat");
-	}
-	return ("Detect locked file(s) (by other software)");
-}
+	/// isopen
+	HU(52, "isopen", "CMD isopen()", "Check if a file is open (and execute some kind of script)"),
+	HIT(52, 0x9926F74A, "Controlla se un file e' aperto (ed esegue uno script)"),
+	HRU(52, 0x9926F74A, "Проверить, открыт ли файл (и запустить скрипт)"),
+	HESEMPI("isopen", 'b'),
+	HE(53, "isopen", "Check some thunderbird running", "isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat"),
+	HIT(53, 0x01CFB1FF, "Controlla se thunderbird e' in esecuzione"),
+	HRU(53, 0x01CFB1FF, "Проверить, запущен ли thunderbird"),
+	HBREVE(54, "isopen", "Detect locked file(s) (by other software)"),
+	HIT(54, 0xF278DDCD, "Trova i file bloccati (da altri programmi)"),
+	HRU(54, 0xF278DDCD, "Найти заблокированные файлы (другими программами)"),
 #endif /// NOSFTPEND
-string help_versum(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD versum", "hashdeep-like double check");
-		scrivi_riga(" ", "Double-check for 'remote' restore (ex. Unix => Win)");
-		scrivi_riga(" ", "Heterogeneous restore can be tricky");
-
-		scrivi_riga("-ssd", "Multithread (for SSDs, do NOT use on spinning drives)");
-		scrivi_riga("-find", "Change the source (original) to the destination (extracted)");
-		scrivi_riga("-replace", "folder (if different)");
-		scrivi_riga("-to", "file.zpaq Test against hashes stored in .zpaq (MUST match algo type!)");
-		scrivi_riga(" ", "aka: do NOT compare sha3 hashes with xxhash64 or something !=");
-		scrivi_riga("-hashdeep", "Use hashdeep format for the input file (DEFAULT: zpaqfranz)");
-		scrivi_riga("-checktxt", "Test against .md5 / _md5.txt file (w/wildcards)");
-		scrivi_riga("-fasttxt", "Test against _crc32.txt file (w/wildcards)");
-		scrivi_riga("-fasttxt -quick", "Test QUICK against _crc32.txt file (w/wildcards)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
+	/// versum
+	HU(55, "versum", "CMD versum", "hashdeep-like double check|Double-check for 'remote' restore (ex. Unix => Win)|Heterogeneous restore can be tricky"),
+	HIT(55, 0x7B197C6A, "Doppio controllo stile hashdeep|Doppio controllo per un ripristino|'remoto' (es. Unix => Win)|Il ripristino fra sistemi diversi puo' essere insidioso"),
+	HRU(55, 0x7B197C6A, "Двойная проверка в стиле hashdeep|Двойная проверка 'удалённого'|восстановления (напр. Unix => Win)|Восстановление между разными системами бывает коварным"),
+	HU(56, "versum", "-ssd", "Multithread (for SSDs, do NOT use on spinning drives)"),
+	HIT(56, 0xCF7D877E, "Multithread (per gli SSD, NON usare su dischi meccanici)"),
+	HRU(56, 0xCF7D877E, "Многопоточно (для SSD, НЕ использовать на HDD)"),
+	HU(57, "versum", "-find", "Change the source (original) to the destination (extracted)"),
+	HIT(57, 0x03BD2550, "Cambia la sorgente (originale)|  nella destinazione (estratta)"),
+	HRU(57, 0x03BD2550, "Заменить источник (оригинал) на назначение (извлечённое)"),
+	HU(58, "versum", "-replace", "folder (if different)"),
+	HIT(58, 0x06571B0A, "cartella (se diversa)"),
+	HRU(58, 0x06571B0A, "папка (если отличается)"),
+	HU(59, "versum", "-to", "file.zpaq Test against hashes stored in .zpaq (MUST match algo type!)|aka: do NOT compare sha3 hashes with xxhash64 or something !="),
+	HIT(59, 0x24EB5775, "file.zpaq Controlla con gli hash salvati nel|.zpaq (l'algoritmo DEVE essere lo stesso!) cioe':|NON confrontare hash sha3 con xxhash64 o altro !="),
+	HRU(59, 0x24EB5775, "file.zpaq Сверка с хешами, сохранёнными в .zpaq (алгоритм ДОЛЖЕН|совпадать!) т.е. НЕ сравнивайте хеши sha3 с xxhash64 или другими !="),
+	HU(60, "versum", "-hashdeep", "Use hashdeep format for the input file (DEFAULT: zpaqfranz)"),
+	HIT(60, 0x344170CA, "Formato hashdeep per il file di input (DEFAULT: zpaqfranz)"),
+	HRU(60, 0x344170CA, "Формат hashdeep для входного|  файла (ПО УМОЛЧАНИЮ: zpaqfranz)"),
+	HU(61, "versum", "-checktxt", "Test against .md5 / _md5.txt file (w/wildcards)"),
+	HIT(61, 0x799C64D8, "Controlla con file .md5 / _md5.txt (con caratteri jolly)"),
+	HRU(61, 0x799C64D8, "Сверка с файлом .md5 / _md5.txt (с шаблонами)"),
+	HU(62, "versum", "-fasttxt", "Test against _crc32.txt file (w/wildcards)"),
+	HIT(62, 0x5289F286, "Controlla con file _crc32.txt (con caratteri jolly)"),
+	HRU(62, 0x5289F286, "Сверка с файлом _crc32.txt (с шаблонами)"),
+	HU(63, "versum", "-fasttxt -quick", "Test QUICK against _crc32.txt file (w/wildcards)"),
+	HIT(63, 0x9BD43919, "Controllo RAPIDO con file _crc32.txt (con caratteri jolly)"),
+	HRU(63, 0x9BD43919, "БЫСТРАЯ сверка с файлом _crc32.txt (с шаблонами)"),
+	HESEMPI("versum", 'b'),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		color_yellow();
-		moreprint("Educational purpose zfs-based backup of tank/d with various test on Win (-ssd for multithread)");
-		color_restore();
-		/// moreprint("Destroy the snapshot fc (if any)     zfs destroy  tank/d@fc");
-		scrivi_esempio("Take the snapshot fc of tank/d", "zfs snapshot tank/d@fc");
-		scrivi_esempio("Get the hash list with xxhash64", "sum /tank/d/.zfs/snapshot/fc -forcezfs -ssd -xxhash -noeta -silent -out /tmp/hash_xx64.txt");
-		scrivi_esempio("Create hashdeep.txt w/md5", "hashdeep -c md5 -r /tank/d/.zfs/snapshot/fc >/tmp/hashdeep.txt");
-		scrivi_esempio("Make the backup (fixing path w/-to)", "a /tmp/thebak.zpaq /tank/d/.zfs/snapshot/fc /tmp/hash_xx64.txt /tmp/hashdeep.txt -to /tank/d");
-		scrivi_esempio("Destroy the snapshot", "zfs destroy tank/d@fc");
-		moreprint("!- Transfer somehow thebak.zpaq to Win (usually with rsync)");
-		moreprint("!- Full-scale test (aka:using filesystem), with extraction-restore");
-		scrivi_esempio("Extract in z:\\uno (-longpath)", "x thebak.zpaq -to z:\\uno -longpath");
-		scrivi_esempio("Verify files by hash list", "versum z:\\uno\\_tmp\\hash_xx64.txt -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
-		scrivi_esempio("Paranoid double-check with hashdeep", "versum z:\\uno\\_tmp\\hashdeep.txt -hashdeep -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
-		moreprint("!- Small-scale test, without reading from filesystem");
-		scrivi_esempio("Compare the md5 with the .zpaq", "versum \"*.zpaq\" -checktxt");
-		scrivi_esempio("Compare the crc32 with the .zpaq", "versum \"*.zpaq\" -fasttxt");
-		scrivi_esempio("Compare the quick with the .zpaq", "versum \"*.zpaq\" -fasttxt -quick");
-		scrivi_esempio("Automagically compare  .zpaq", "versum \"*.zpaq\"");
+	HTESTO(64, "versum", 'e', 'y', "Educational purpose zfs-based backup of tank/d with various test on Win (-ssd for multithread)"),
+	HIT(64, 0xCE76CF8F, "A scopo didattico: backup di tank/d basato su zfs,|  con varie prove su Win (-ssd per il multithread)"),
+	HRU(64, 0xCE76CF8F, "Учебный пример: backup tank/d на основе zfs с разными|  проверками в Win (-ssd для многопоточности)"),
+	/// moreprint("Destroy the snapshot fc (if any)     zfs destroy  tank/d@fc");
+	HE(65, "versum", "Take the snapshot fc of tank/d", "zfs snapshot tank/d@fc"),
+	HIT(65, 0xCE4127AA, "Fa lo snapshot fc di tank/d"),
+	HRU(65, 0xCE4127AA, "Сделать снапшот fc для tank/d"),
+	HE(66, "versum", "Get the hash list with xxhash64", "sum /tank/d/.zfs/snapshot/fc -forcezfs -ssd -xxhash -noeta -silent -out /tmp/hash_xx64.txt"),
+	HIT(66, 0x0CE6F1DE, "Elenco degli hash con xxhash64"),
+	HRU(66, 0x0CE6F1DE, "Получить список хешей с xxhash64"),
+	HE(67, "versum", "Create hashdeep.txt w/md5", "hashdeep -c md5 -r /tank/d/.zfs/snapshot/fc >/tmp/hashdeep.txt"),
+	HIT(67, 0x6D458CFD, "Crea hashdeep.txt con md5"),
+	HRU(67, 0x6D458CFD, "Создать hashdeep.txt с md5"),
+	HE(68, "versum", "Make the backup (fixing path w/-to)", "a /tmp/thebak.zpaq /tank/d/.zfs/snapshot/fc /tmp/hash_xx64.txt /tmp/hashdeep.txt -to /tank/d"),
+	HIT(68, 0x4B900D1D, "Fa il backup (sistemando il percorso con -to)"),
+	HRU(68, 0x4B900D1D, "Сделать backup (исправив путь через -to)"),
+	HE(69, "versum", "Destroy the snapshot", "zfs destroy tank/d@fc"),
+	HIT(69, 0x0BFB0B92, "Distrugge lo snapshot"),
+	HRU(69, 0x0BFB0B92, "Удалить снапшот"),
+	HTESTO(70, "versum", 'e', 0, "!- Transfer somehow thebak.zpaq to Win (usually with rsync)"),
+	HIT(70, 0x0675575B, "!- Trasferire in qualche modo thebak.zpaq su Win (di solito con rsync)"),
+	HRU(70, 0x0675575B, "!- Перенести thebak.zpaq в Win любым способом (обычно rsync)"),
+	HTESTO(71, "versum", 'e', 0, "!- Full-scale test (aka:using filesystem), with extraction-restore"),
+	HIT(71, 0xB67D660E, "!- Test completo (cioe' usando il filesystem), con estrazione-ripristino"),
+	HRU(71, 0xB67D660E, "!- Полный тест (т.е. через файловую систему), с извлечением-восстановлением"),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(72, "versum", "Extract in z:\\uno (-longpath)", "x thebak.zpaq -to z:\\uno -longpath"),
+	HIT(72, 0x56E795EE, "Estrae in z:\\uno (-longpath)"),
+	HRU(72, 0x56E795EE, "Извлечь в z:\\uno (-longpath)"),
+#endif
+	HE(73, "versum", "Verify files by hash list", "versum z:\\uno\\_tmp\\hash_xx64.txt -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d"),
+	HIT(73, 0xDDC46168, "Verifica i file con l'elenco degli hash"),
+	HRU(73, 0xDDC46168, "Проверить файлы по списку хешей"),
+	HE(74, "versum", "Paranoid double-check with hashdeep", "versum z:\\uno\\_tmp\\hashdeep.txt -hashdeep -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d"),
+	HIT(74, 0xDEEFFE05, "Doppio controllo paranoico con hashdeep"),
+	HRU(74, 0xDEEFFE05, "Параноидальная двойная проверка с hashdeep"),
+	HTESTO(75, "versum", 'e', 0, "!- Small-scale test, without reading from filesystem"),
+	HIT(75, 0xE06E9994, "!- Test ridotto, senza leggere dal filesystem"),
+	HRU(75, 0xE06E9994, "!- Упрощённый тест, без чтения файловой системы"),
+	HE(76, "versum", "Compare the md5 with the .zpaq", "versum \"*.zpaq\" -checktxt"),
+	HIT(76, 0x439FE210, "Confronta gli md5 con il .zpaq"),
+	HRU(76, 0x439FE210, "Сравнить md5 с .zpaq"),
+	HE(77, "versum", "Compare the crc32 with the .zpaq", "versum \"*.zpaq\" -fasttxt"),
+	HIT(77, 0x9CF310E5, "Confronta i crc32 con il .zpaq"),
+	HRU(77, 0x9CF310E5, "Сравнить crc32 с .zpaq"),
+	HE(78, "versum", "Compare the quick with the .zpaq", "versum \"*.zpaq\" -fasttxt -quick"),
+	HIT(78, 0x34661BBD, "Confronta il quick con il .zpaq"),
+	HRU(78, 0x34661BBD, "Сравнить quick с .zpaq"),
+	HE(79, "versum", "Automagically compare  .zpaq", "versum \"*.zpaq\""),
+	HIT(79, 0xD130610A, "Confronto automagico del .zpaq"),
+	HRU(79, 0xD130610A, "Автоматически сравнить .zpaq"),
 #endif /// NOSFTPEND
-	}
-	return ("Double-check hashes (hashdeep-like)");
-}
-/// zpaqfranz backup z:\prova_????.zpaq c:\zpaqfranz
-
-string help_backup(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD backup", "Multipart-managed backup: keeps part size/hash/quickhash");
-		scrivi_riga(" ", "Hardening backups in 'pieces' (ex. rsync, robocopy etc)");
-		scrivi_riga(" ", "Use command testbackup to check missing or invalid 'pieces'");
-		scrivi_riga("-key X", "AES-256: parts and index encrypted");
-		scrivi_riga("-franzen X", "Parts and index as .franzen files only (also with -key)");
-		scrivi_riga("-chunk X", "No part bigger than X: a run makes as many parts as it takes");
-		scrivi_riga(" ", "(they get their names at the end of the run, all together).");
-		scrivi_riga(" ", "Also with -key, -franzen, both. Not with -backupzeta");
-		scrivi_riga("-backupxxh3", "Store XXH3 instead of default MD5");
-		scrivi_riga("-backupzeta", "Store ZETA instead of default MD5 [UNENCRYPTED]");
-		scrivi_riga("-index X", "Store index (and .pid) files in X folder (for WORM drive)");
-		scrivi_riga("-tmp", ".tmp instead of .zpaq for running multipart");
-		scrivi_riga("-notrim", "DISABLE autotrim (if possible) of incomplete transaction");
-		scrivi_riga("-freeze kajo", "Backup (parts, index, txt) bigger than -freezesize: moved into");
-		scrivi_riga(" ", "a new folder of kajo (named by date and time), then it starts anew");
-		scrivi_riga("-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB");
+	HBREVE(80, "versum", "Double-check hashes (hashdeep-like)"),
+	HIT(80, 0x898631DE, "Doppio controllo degli hash (stile hashdeep)"),
+	HRU(80, 0x898631DE, "Двойная проверка хешей (как hashdeep)"),
+	/// zpaqfranz backup z:\prova_????.zpaq c:\zpaqfranz
+	/// backup
+	HU(81, "backup", "CMD backup", "Multipart-managed backup: keeps part size/hash/quickhash|Hardening backups in 'pieces' (ex. rsync, robocopy etc)|Use command testbackup to check missing or invalid 'pieces'"),
+	HIT(81, 0x9982AA05, "Backup multiparte gestito: tiene|dimensione/hash/quickhash delle parti|Backup robusti a 'pezzi' (es. rsync, robocopy ecc.)|Il comando testbackup controlla|'pezzi' mancanti o non validi"),
+	HRU(81, 0x9982AA05, "Управляемый многотомный backup:|хранит размер/хеш/quickhash частей|Надёжные backup 'кусками' (напр. rsync, robocopy и т.п.)|Команда testbackup проверяет|отсутствующие или повреждённые 'куски'"),
+	HU(82, "backup", "-key X", "AES-256: parts and index encrypted"),
+	HIT(82, 0xC4F75621, "AES-256: parti e indice cifrati"),
+	HRU(82, 0xC4F75621, "AES-256: части и индекс зашифрованы"),
+	HU(83, "backup", "-franzen X", "Parts and index as .franzen files only (also with -key)"),
+	HIT(83, 0x433EFDFF, "Parti e indice solo come file .franzen (anche con -key)"),
+	HRU(83, 0x433EFDFF, "Части и индекс только как файлы .franzen (также с -key)"),
+	HU(84, "backup", "-chunk X", "No part bigger than X: a run makes as many parts as it takes|(they get their names at the end of the run, all together).|Also with -key, -franzen, both. Not with -backupzeta"),
+	HIT(84, 0x8B350D24, "Nessuna parte piu' grande di X: un giro fa|tutte le parti che servono (prendono il|nome alla fine del giro, tutte insieme).|Anche con -key, -franzen, entrambi. Non con -backupzeta"),
+	HRU(84, 0x8B350D24, "Ни одна часть не больше X: за запуск создаётся|столько частей, сколько нужно (имена они|получают в конце запуска, все вместе).|Также с -key, -franzen, обоими. Не с -backupzeta"),
+	HU(85, "backup", "-backupxxh3", "Store XXH3 instead of default MD5"),
+	HIT(85, 0x5DC2AD83, "Salva XXH3 invece dell'MD5 di default"),
+	HRU(85, 0x5DC2AD83, "Хранить XXH3 вместо MD5 по умолчанию"),
+	HU(86, "backup", "-backupzeta", "Store ZETA instead of default MD5 [UNENCRYPTED]"),
+	HIT(86, 0x1064E3B7, "Salva ZETA invece dell'MD5 di default [NON CIFRATO]"),
+	HRU(86, 0x1064E3B7, "Хранить ZETA вместо MD5 по умолчанию [БЕЗ ШИФРОВАНИЯ]"),
+	HU(87, "backup", "-index X", "Store index (and .pid) files in X folder (for WORM drive)"),
+	HIT(87, 0x37F8B968, "Salva l'indice (e i .pid) nella|  cartella X (per dischi WORM)"),
+	HRU(87, 0x37F8B968, "Хранить индекс (и файлы .pid) в папке X (для WORM-дисков)"),
+	HU(88, "backup", "-tmp", ".tmp instead of .zpaq for running multipart"),
+	HIT(88, 0xED182327, ".tmp invece di .zpaq per il multiparte in corso"),
+	HRU(88, 0xED182327, ".tmp вместо .zpaq для многотомного в процессе записи"),
+	HU(89, "backup", "-notrim", "DISABLE autotrim (if possible) of incomplete transaction"),
+	HIT(89, 0xBD8094AC, "DISATTIVA l'autotrim (se possibile)|  delle transazioni incomplete"),
+	HRU(89, 0xBD8094AC, "ОТКЛЮЧИТЬ autotrim (если возможно) незавершённой транзакции"),
+	HU(90, "backup", "-freeze kajo", "Backup (parts, index, txt) bigger than -freezesize: moved into|a new folder of kajo (named by date and time), then it starts anew"),
+	HIT(90, 0x6E83BBAD, "Backup (parti, indice, txt) piu' grande di|-freezesize: spostato in una nuova cartella di|kajo (col nome di data e ora), poi riparte da capo"),
+	HRU(90, 0x6E83BBAD, "Backup (части, индекс, txt) больше -freezesize:|переносится в новую папку в kajo (с именем по|дате и времени), затем начинается заново"),
+	HU(91, "backup", "-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB"),
+	HIT(91, 0x19EE6B36, "La dimensione per -freeze. Usare K, M, G, T e KB,MB,GB,TB"),
+	HRU(91, 0x19EE6B36, "Размер для -freeze. Используйте K, M, G, T и KB,MB,GB,TB"),
 #ifdef _WIN32
-		scrivi_riga("-findzpaq", "On Windows search the backup in every drive letter (USB device)");
+	HU(92, "backup", "-findzpaq", "On Windows search the backup in every drive letter (USB device)"),
+	HIT(92, 0x5843FE4D, "Su Windows cerca il backup in ogni|  lettera di unita' (dispositivo USB)"),
+	HRU(92, 0x5843FE4D, "В Windows искать backup на всех буквах дисков (USB-устройство)"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Use the same parameters as add", "backup z:\\prova.zpaq *.txt -key pippo");
-		scrivi_esempio("Franzen: no cleartext file at all", "backup z:\\prova.zpaq c:\\nz -franzen pluto");
-		scrivi_esempio("AES inside, Franzen outside", "backup z:\\prova.zpaq c:\\nz -key pippo -franzen pluto");
-		scrivi_esempio("No part over 1GB (encrypted)", "backup z:\\prova.zpaq c:\\nz -chunk 1GB -key pippo");
-		scrivi_esempio("Store XXH3 (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupxxh3");
-		scrivi_esempio("Write index in c:\\temp", "backup z:\\prova.zpaq c:\\nz -index c:\\temp");
-		scrivi_esempio("Store ZETA (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupzeta");
-		scrivi_esempio("Rename to .zpaq after completing", "backup z:\\prova.zpaq *.txt -tmp");
-		scrivi_esempio("Over 100GB: all to the NAS, restart", "backup z:\\prova.zpaq c:\\nz -freeze \\\\nas\\old -freezesize 100GB");
-	}
-	return ("Create hardened multipart backup");
-}
-string help_franzencommand(bool i_usage, bool i_example)
-{
-    if (i_usage)
-    {
-        scrivi_riga("CMD franzen", "Encrypt/decrypt files using ChaCha20-Poly1305 (libsodium)");
-        scrivi_riga(" ", "Auto-detects operation: encrypts non-franzen, decrypts franzen files");
-        scrivi_riga(" ", "Output name auto-generated if -to not specified");
-        scrivi_riga("-franzen PWD", "Password for Franzen encryption/decryption");
-        scrivi_riga("-to FILE", "Explicit output filename (default: auto-generated)");
-        scrivi_riga("-ssd", "Enable multi-threaded operation");
-        scrivi_riga("-tN", "Use N threads, ex -t8 (requires -ssd)"); /// 65.13f: it said "-t N": "-t 8" is not taken (unknown option)
-        scrivi_riga(" ", " ");
-        scrivi_riga("SUB test", "Verify decryption without writing output");
-        scrivi_riga("SUB ispasswordok", "Verify if password is correct");
-        scrivi_riga("SUB dump", "Show file structure and header info");
-        scrivi_riga("  -all", "  Show all blocks + nonce uniqueness check");
-        scrivi_riga("  -n N", "  With -all: show first/last N blocks instead of all");
-        scrivi_riga("  -memzero", "  Fill with zero sensitive data ASAP (slower)");
-///        scrivi_riga("  (no -franzen)", "  Show only public header (no password required)");
-    }
-    if (i_usage && i_example)
-        scrivi_examples();
-    if (i_example)
-    {
-        scrivi_esempio("Encrypt file (auto-detect)", "franzen archive.zpaq -franzen mypassword");
-        scrivi_esempio("Decrypt file (auto-detect)", "franzen archive.zpaq.franzen -franzen mypassword");
-        scrivi_esempio("Encrypt with explicit output", "franzen archive.zpaq -franzen mypassword -to backup.franzen");
-        scrivi_esempio("Decrypt with explicit output", "franzen archive.zpaq.franzen -franzen mypassword -to restored.zpaq");
-        scrivi_esempio("Multi-threaded encrypt", "franzen archive.zpaq -franzen mypassword -ssd -t8");
-        scrivi_esempio("Test decryption (no output)", "franzen test archive.zpaq.franzen -franzen mypassword");
-        scrivi_esempio("Check password", "franzen ispasswordok archive.zpaq.franzen -franzen mypassword");
-///        scrivi_esempio("Dump header only (no pwd)", "franzen dump archive.zpaq.franzen");
-        scrivi_esempio("Dump with password analysis", "franzen dump archive.zpaq.franzen -franzen mypassword");
-        scrivi_esempio("Dump + nonce uniqueness", "franzen dump archive.zpaq.franzen -franzen mypassword -all");
-        scrivi_esempio("Dump first/last 20 blocks", "franzen dump archive.zpaq.franzen -franzen mypassword -all -n 20");
-    }
-    return ("Franzen encryption/decryption (ChaCha20-Poly1305)");
-}
-
-
-string help_testbackup(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD testbackup", "Check multipart-managed backup");
-		scrivi_riga("-to", "something Path to .zpaq chunks (if different)");
-		scrivi_riga("-verify", "Read from filesystem and recompute hashes");
-		scrivi_riga("-ssd", "Multithread (for SSDs, do NOT use on spinning drives)");
-		scrivi_riga("-paranoid", "Compare index vs chunks (require password if encrypted)");
-		scrivi_riga(" ", "(-key X and/or -franzen X: the ones given to backup)");
-		scrivi_riga("-verbose", "Show more things");
-		scrivi_riga("-find", "Change something in filenames");
-		scrivi_riga("-replace", "for 'dirty' tricks");
-		scrivi_riga("-checktxt f1", "Load md5sum-like textfile to compare against index");
-		help_range();
-		scrivi_riga("-index X", "Get index (and .pid) files in X folder (for WORM drive)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Quick check local backup", "testbackup foo.zpaq");
-		scrivi_esempio("Multipart in different path", "testbackup foo.zpaq -to \\\\franzk\\z\\ -ssd");
-		scrivi_esempio("Different path, MD5 full test", "testbackup foo.zpaq -to \\\\franzk\\z\\ -verify");
-		scrivi_esempio("With multithread (on solid drives)", "testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd");
-		scrivi_esempio("Check from chunk 10 until last", "testbackup foo.zpaq -range 10: -verify");
-		scrivi_esempio("Test index with password (if any)", "testbackup foo.zpaq -paranoid -key pippo");
-		scrivi_esempio("A Franzen backup (quick: no password)", "testbackup foo.zpaq -verify");
-		scrivi_esempio("A Franzen backup, index vs parts", "testbackup foo.zpaq -paranoid -franzen pluto");
-		scrivi_esempio("Compare md5 hashes", "testbackup foo.zpaq -checktxt z:\\md5.txt");
-		scrivi_esempio("Test with index in c:\\temp", "testbackup z:\\prova.zpaq -index c:\\temp -paranoid");
-	}
-	return ("Verify hardened multipart backup");
-}
+	HESEMPI("backup", 'b'),
+	HE(93, "backup", "Use the same parameters as add", "backup z:\\prova.zpaq *.txt -key pippo"),
+	HIT(93, 0x5B38EA70, "Gli stessi parametri di add"),
+	HRU(93, 0x5B38EA70, "Те же параметры, что и у add"),
+	HE(94, "backup", "Franzen: no cleartext file at all", "backup z:\\prova.zpaq c:\\nz -franzen pluto"),
+	HIT(94, 0x3725C8A0, "Franzen: nessun file in chiaro"),
+	HRU(94, 0x3725C8A0, "Franzen: ни одного открытого файла"),
+	HE(95, "backup", "AES inside, Franzen outside", "backup z:\\prova.zpaq c:\\nz -key pippo -franzen pluto"),
+	HIT(95, 0xF67062A7, "AES dentro, Franzen fuori"),
+	HRU(95, 0xF67062A7, "AES внутри, Franzen снаружи"),
+	HE(96, "backup", "No part over 1GB (encrypted)", "backup z:\\prova.zpaq c:\\nz -chunk 1GB -key pippo"),
+	HIT(96, 0xAD401C32, "Nessuna parte sopra 1GB (cifrato)"),
+	HRU(96, 0xAD401C32, "Ни одной части больше 1GB (зашифровано)"),
+	HE(97, "backup", "Store XXH3 (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupxxh3"),
+	HIT(97, 0x6B68F96F, "Salva XXH3 (invece di MD5)"),
+	HRU(97, 0x6B68F96F, "Хранить XXH3 (вместо MD5)"),
+	HE(98, "backup", "Write index in c:\\temp", "backup z:\\prova.zpaq c:\\nz -index c:\\temp"),
+	HIT(98, 0x2B3F9832, "Scrive l'indice in c:\\temp"),
+	HRU(98, 0x2B3F9832, "Записать индекс в c:\\temp"),
+	HE(99, "backup", "Store ZETA (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupzeta"),
+	HIT(99, 0x3F9064EE, "Salva ZETA (invece di MD5)"),
+	HRU(99, 0x3F9064EE, "Хранить ZETA (вместо MD5)"),
+	HE(100, "backup", "Rename to .zpaq after completing", "backup z:\\prova.zpaq *.txt -tmp"),
+	HIT(100, 0x741184E0, "Rinomina in .zpaq alla fine"),
+	HRU(100, 0x741184E0, "Переименовать в .zpaq по завершении"),
+	HE(101, "backup", "Over 100GB: all to the NAS, restart", "backup z:\\prova.zpaq c:\\nz -freeze \\\\nas\\old -freezesize 100GB"),
+	HIT(101, 0x22CBAC89, "Oltre 100GB: tutto sul NAS, si riparte"),
+	HRU(101, 0x22CBAC89, "Больше 100GB: всё на NAS, начать заново"),
+	HBREVE(102, "backup", "Create hardened multipart backup"),
+	HIT(102, 0x95522BCA, "Crea un backup multiparte robusto"),
+	HRU(102, 0x95522BCA, "Создать надёжный многотомный backup"),
+	/// franzencommand
+	HU(103, "franzencommand", "CMD franzen", "Encrypt/decrypt files using ChaCha20-Poly1305 (libsodium)|Auto-detects operation: encrypts non-franzen, decrypts franzen files|Output name auto-generated if -to not specified"),
+	HIT(103, 0xDF75748B, "Cifra/decifra file con ChaCha20-Poly1305 (libsodium)|Capisce da solo l'operazione: cifra i|non franzen, decifra i file franzen|Nome di output generato da solo se manca -to"),
+	HRU(103, 0xDF75748B, "Шифрование/расшифровка файлов ChaCha20-Poly1305 (libsodium)|Операция определяется сама: шифрует|не-franzen, расшифровывает файлы franzen|Имя выходного файла создаётся автоматически, если не указан -to"),
+	HU(104, "franzencommand", "-franzen PWD", "Password for Franzen encryption/decryption"),
+	HIT(104, 0x48E4F7B4, "Password per cifrare/decifrare con Franzen"),
+	HRU(104, 0x48E4F7B4, "Пароль для шифрования/расшифровки Franzen"),
+	HU(105, "franzencommand", "-to FILE", "Explicit output filename (default: auto-generated)"),
+	HIT(105, 0xBD2201F8, "Nome del file di output (default: generato da solo)"),
+	HRU(105, 0xBD2201F8, "Явное имя выходного файла (по умолчанию: автоматическое)"),
+	HU(106, "franzencommand", "-ssd", "Enable multi-threaded operation"),
+	HIT(106, 0xA3EA3D86, "Attiva il multithread"),
+	HRU(106, 0xA3EA3D86, "Включить многопоточную работу"),
+	HU(107, "franzencommand", "-tN", "Use N threads, ex -t8 (requires -ssd)"), /// 65.13f: it said "-t N": "-t 8" is not taken (unknown option)
+	HIT(107, 0x24351A57, "Usa N thread, es. -t8 (serve -ssd)"),
+	HRU(107, 0x24351A57, "N потоков, напр. -t8 (нужен -ssd)"),
+	HU(0, "franzencommand", " ", " "),
+	HU(108, "franzencommand", "SUB test", "Verify decryption without writing output"),
+	HIT(108, 0x44E609D6, "Verifica la decifratura senza scrivere nulla"),
+	HRU(108, 0x44E609D6, "Проверить расшифровку без записи результата"),
+	HU(109, "franzencommand", "SUB ispasswordok", "Verify if password is correct"),
+	HIT(109, 0x03CB1442, "Verifica se la password e' giusta"),
+	HRU(109, 0x03CB1442, "Проверить правильность пароля"),
+	HU(110, "franzencommand", "SUB dump", "Show file structure and header info"),
+	HIT(110, 0x2D1EA751, "Mostra la struttura del file e l'header"),
+	HRU(110, 0x2D1EA751, "Показать структуру файла и заголовок"),
+	HU(111, "franzencommand", "  -all", "  Show all blocks + nonce uniqueness check"),
+	HIT(111, 0x5EE0D1EF, "  Mostra tutti i blocchi + controllo di unicita' dei nonce"),
+	HRU(111, 0x5EE0D1EF, "  Показать все блоки + проверка уникальности nonce"),
+	HU(112, "franzencommand", "  -n N", "  With -all: show first/last N blocks instead of all"),
+	HIT(112, 0x0CD5DF35, "  Con -all: i primi/ultimi N blocchi invece di tutti"),
+	HRU(112, 0x0CD5DF35, "  С -all: первые/последние N блоков вместо всех"),
+	HU(113, "franzencommand", "  -memzero", "  Fill with zero sensitive data ASAP (slower)"),
+	HIT(113, 0x4C7AFFF0, "  Azzera i dati sensibili il prima possibile (piu' lento)"),
+	HRU(113, 0x4C7AFFF0, "  Обнулять конфиденциальные данные|    как можно раньше (медленнее)"),
+	///        scrivi_riga("  (no -franzen)", "  Show only public header (no password required)");
+	HESEMPI("franzencommand", 'b'),
+	HE(114, "franzencommand", "Encrypt file (auto-detect)", "franzen archive.zpaq -franzen mypassword"),
+	HIT(114, 0x55E21958, "Cifra un file (riconoscimento automatico)"),
+	HRU(114, 0x55E21958, "Зашифровать файл (автоопределение)"),
+	HE(115, "franzencommand", "Decrypt file (auto-detect)", "franzen archive.zpaq.franzen -franzen mypassword"),
+	HIT(115, 0xB5C336C0, "Decifra un file (riconoscimento automatico)"),
+	HRU(115, 0xB5C336C0, "Расшифровать файл (автоопределение)"),
+	HE(116, "franzencommand", "Encrypt with explicit output", "franzen archive.zpaq -franzen mypassword -to backup.franzen"),
+	HIT(116, 0x1DF8C78B, "Cifra con output esplicito"),
+	HRU(116, 0x1DF8C78B, "Зашифровать с явным выходным файлом"),
+	HE(117, "franzencommand", "Decrypt with explicit output", "franzen archive.zpaq.franzen -franzen mypassword -to restored.zpaq"),
+	HIT(117, 0x0A0B0443, "Decifra con output esplicito"),
+	HRU(117, 0x0A0B0443, "Расшифровать с явным выходным файлом"),
+	HE(118, "franzencommand", "Multi-threaded encrypt", "franzen archive.zpaq -franzen mypassword -ssd -t8"),
+	HIT(118, 0xF93DCA79, "Cifratura multithread"),
+	HRU(118, 0xF93DCA79, "Многопоточное шифрование"),
+	HE(119, "franzencommand", "Test decryption (no output)", "franzen test archive.zpaq.franzen -franzen mypassword"),
+	HIT(119, 0x2C7C4639, "Prova la decifratura (senza output)"),
+	HRU(119, 0x2C7C4639, "Проверить расшифровку (без вывода)"),
+	HE(120, "franzencommand", "Check password", "franzen ispasswordok archive.zpaq.franzen -franzen mypassword"),
+	HIT(120, 0x3101C198, "Controlla la password"),
+	HRU(120, 0x3101C198, "Проверить пароль"),
+	///        scrivi_esempio("Dump header only (no pwd)", "franzen dump archive.zpaq.franzen");
+	HE(121, "franzencommand", "Dump with password analysis", "franzen dump archive.zpaq.franzen -franzen mypassword"),
+	HIT(121, 0x4603D37C, "Dump con analisi della password"),
+	HRU(121, 0x4603D37C, "Дамп с анализом пароля"),
+	HE(122, "franzencommand", "Dump + nonce uniqueness", "franzen dump archive.zpaq.franzen -franzen mypassword -all"),
+	HIT(122, 0x8080A29B, "Dump + unicita' dei nonce"),
+	HRU(122, 0x8080A29B, "Дамп + уникальность nonce"),
+	HE(123, "franzencommand", "Dump first/last 20 blocks", "franzen dump archive.zpaq.franzen -franzen mypassword -all -n 20"),
+	HIT(123, 0x7677750E, "Dump dei primi/ultimi 20 blocchi"),
+	HRU(123, 0x7677750E, "Дамп первых/последних 20 блоков"),
+	HBREVE(124, "franzencommand", "Franzen encryption/decryption (ChaCha20-Poly1305)"),
+	HIT(124, 0x26A6AC57, "Cifratura/decifratura Franzen (ChaCha20-Poly1305)"),
+	HRU(124, 0x26A6AC57, "Шифрование/расшифровка Franzen (ChaCha20-Poly1305)"),
+	/// testbackup
+	HU(125, "testbackup", "CMD testbackup", "Check multipart-managed backup"),
+	HIT(125, 0xF46CCB0F, "Controlla un backup multiparte gestito"),
+	HRU(125, 0xF46CCB0F, "Проверить управляемый многотомный backup"),
+	HU(126, "testbackup", "-to", "something Path to .zpaq chunks (if different)"),
+	HIT(126, 0x18C8A686, "something Percorso dei pezzi .zpaq (se diverso)"),
+	HRU(126, 0x18C8A686, "something Путь к кускам .zpaq (если другой)"),
+	HU(127, "testbackup", "-verify", "Read from filesystem and recompute hashes"),
+	HIT(127, 0x86F0FC9F, "Legge dal filesystem e ricalcola gli hash"),
+	HRU(127, 0x86F0FC9F, "Прочитать с файловой системы и пересчитать хеши"),
+	HU(128, "testbackup", "-ssd", "Multithread (for SSDs, do NOT use on spinning drives)"),
+	HIT(128, 0xCF7D877E, "Multithread (per gli SSD, NON usare su dischi meccanici)"),
+	HRU(128, 0xCF7D877E, "Многопоточно (для SSD, НЕ использовать на HDD)"),
+	HU(129, "testbackup", "-paranoid", "Compare index vs chunks (require password if encrypted)|(-key X and/or -franzen X: the ones given to backup)"),
+	HIT(129, 0x66B22568, "Confronta indice e pezzi (serve la password se cifrato)|(-key X e/o -franzen X: quelli dati a backup)"),
+	HRU(129, 0x66B22568, "Сравнить индекс с кусками (нужен пароль, если зашифровано)|(-key X и/или -franzen X: те же, что для backup)"),
+	HU(130, "testbackup", "-verbose", "Show more things"),
+	HIT(130, 0x09D57E62, "Mostra piu' cose"),
+	HRU(130, 0x09D57E62, "Показать больше"),
+	HU(131, "testbackup", "-find", "Change something in filenames"),
+	HIT(131, 0x52059FBA, "Cambia qualcosa nei nomi dei file"),
+	HRU(131, 0x52059FBA, "Изменить что-то в именах файлов"),
+	HU(132, "testbackup", "-replace", "for 'dirty' tricks"),
+	HIT(132, 0xEAD05818, "per trucchi 'sporchi'"),
+	HRU(132, 0xEAD05818, "для 'грязных' трюков"),
+	HU(133, "testbackup", "-checktxt f1", "Load md5sum-like textfile to compare against index"),
+	HIT(133, 0x92A8419A, "Carica un file di testo stile md5sum|  da confrontare con l'indice"),
+	HRU(133, 0x92A8419A, "Загрузить текстовый файл в стиле|  md5sum для сверки с индексом"),
+	HINCLUDI("testbackup", 'u', "@range", 'b'),
+	HU(134, "testbackup", "-index X", "Get index (and .pid) files in X folder (for WORM drive)"),
+	HIT(134, 0x8686E5AD, "Prende l'indice (e i .pid) dalla|  cartella X (per dischi WORM)"),
+	HRU(134, 0x8686E5AD, "Брать индекс (и файлы .pid) из папки X (для WORM-дисков)"),
+	HESEMPI("testbackup", 'b'),
+	HE(135, "testbackup", "Quick check local backup", "testbackup foo.zpaq"),
+	HIT(135, 0x74CF5497, "Controllo rapido di un backup locale"),
+	HRU(135, 0x74CF5497, "Быстрая проверка локального backup"),
+	HE(136, "testbackup", "Multipart in different path", "testbackup foo.zpaq -to \\\\franzk\\z\\ -ssd"),
+	HIT(136, 0x9A1BAAAA, "Multiparte in un percorso diverso"),
+	HRU(136, 0x9A1BAAAA, "Многотомный в другом пути"),
+	HE(137, "testbackup", "Different path, MD5 full test", "testbackup foo.zpaq -to \\\\franzk\\z\\ -verify"),
+	HIT(137, 0x444B7280, "Percorso diverso, test completo MD5"),
+	HRU(137, 0x444B7280, "Другой путь, полный тест MD5"),
+	HE(138, "testbackup", "With multithread (on solid drives)", "testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd"),
+	HIT(138, 0xC5C66A0E, "In multithread (su dischi a stato solido)"),
+	HRU(138, 0xC5C66A0E, "Многопоточно (на SSD)"),
+	HE(139, "testbackup", "Check from chunk 10 until last", "testbackup foo.zpaq -range 10: -verify"),
+	HIT(139, 0xB571FD5B, "Controlla dal pezzo 10 all'ultimo"),
+	HRU(139, 0xB571FD5B, "Проверить с куска 10 до последнего"),
+	HE(140, "testbackup", "Test index with password (if any)", "testbackup foo.zpaq -paranoid -key pippo"),
+	HIT(140, 0x87E3105C, "Prova l'indice con la password (se c'e')"),
+	HRU(140, 0x87E3105C, "Проверить индекс с паролем (если есть)"),
+	HE(141, "testbackup", "A Franzen backup (quick: no password)", "testbackup foo.zpaq -verify"),
+	HIT(141, 0x7200477C, "Un backup Franzen (rapido: senza password)"),
+	HRU(141, 0x7200477C, "Backup Franzen (быстро: без пароля)"),
+	HE(142, "testbackup", "A Franzen backup, index vs parts", "testbackup foo.zpaq -paranoid -franzen pluto"),
+	HIT(142, 0x3D2A6E7F, "Un backup Franzen, indice contro parti"),
+	HRU(142, 0x3D2A6E7F, "Backup Franzen, индекс против частей"),
+	HE(143, "testbackup", "Compare md5 hashes", "testbackup foo.zpaq -checktxt z:\\md5.txt"),
+	HIT(143, 0x5A59B384, "Confronta gli hash md5"),
+	HRU(143, 0x5A59B384, "Сравнить хеши md5"),
+	HE(144, "testbackup", "Test with index in c:\\temp", "testbackup z:\\prova.zpaq -index c:\\temp -paranoid"),
+	HIT(144, 0x54141533, "Prova con l'indice in c:\\temp"),
+	HRU(144, 0x54141533, "Проверка с индексом в c:\\temp"),
+	HBREVE(145, "testbackup", "Verify hardened multipart backup"),
+	HIT(145, 0x8CEE2AFB, "Verifica un backup multiparte robusto"),
+	HRU(145, 0x8CEE2AFB, "Проверить надёжный многотомный backup"),
 #ifndef NOEMAIL /// POSTAMI help_email
-string help_email(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD work email", "Send an e-mail via SMTP + TLS, made with the -mail switches");
-		scrivi_riga("-mailserver HOST", "SMTP server (ex. mail.example.com)");
-		scrivi_riga("-mailport N", "Port (default 587 STARTTLS, 465 with -mailssl)");
-		scrivi_riga("-mailssl", "Implicit TLS (SMTPS) instead of STARTTLS");
-		scrivi_riga("-mailuser USER", "Login name (no user: no authentication)");
-		scrivi_riga("-mailpassword PASS", "Password (a user without it: nothing sent). Better in -mailconfig");
-		scrivi_riga("-mailfrom ADDR", "Sender, 'addr' or 'Name <addr>'");
-		scrivi_riga("-mailto ADDR", "Recipient(s), comma separated: \"a@x.com, b@y.org\"");
-		scrivi_riga("-mailcc -mailbcc ADDR", "Carbon copy, blind carbon copy");
-		scrivi_riga("-mailsubject TEXT", "Subject (UTF-8)");
-		scrivi_riga("-mailbody TEXT", "Body text (UTF-8)");
-		scrivi_riga("-mailbodyfile FILE", "Body read from FILE");
-		scrivi_riga("-mailattach F1 F2...", "Attach files as they are (logs, .zpaq...)");
-		scrivi_riga("-mailzip F1 F2...", "Attach F1.zip...: compressed, they open with a click");
-		scrivi_riga("-mailconfig FILE", "'key = value' settings (server port tls user password from");
-		scrivi_riga(" ", "  to subject cafile...): the -mail switches win");
-		scrivi_riga("-mailcafile FILE", "Trusted CAs (default: system store)");
-		scrivi_riga("-mailtlsname NAME", "Verify the server certificate against NAME");
-		scrivi_riga("-mailinsecure", "Do NOT verify the certificate (tests only)");
-		scrivi_riga("-mailtimeout SEC", "Network timeout (default 30)");
-		scrivi_riga("-maillog FILE", "Append the full log (SMTP dialogue, never the password)");
-		scrivi_riga("-verbose -debug", "Show the log / the SMTP dialogue too");
-		scrivi_riga("Exit code", "0 sent, 2 not sent (and why)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Send a log", "work email -mailserver mail.example.com -mailuser me@example.com -mailpassword pw -mailfrom me@example.com -mailto you@example.com -mailsubject \"backup OK\" -mailattach z:\\backup.log");
-		scrivi_esempio("Settings in a file", "work email -mailconfig c:\\zpaqfranz\\email.conf -mailto you@example.com -mailattach z:\\1.zpaq");
-		scrivi_esempio("Mail a zipped log", "work email -mailconfig email.conf -mailsubject \"backup OK\" -mailzip z:\\backup.log");
-		scrivi_esempio("Show the SMTP dialogue", "work email -mailconfig email.conf -debug");
-	}
-	return ("Send e-mail (SMTP/TLS)");
-}
+	/// email
+	HU(146, "email", "CMD work email", "Send an e-mail via SMTP + TLS, made with the -mail switches"),
+	HIT(146, 0x4577F145, "Manda una e-mail via SMTP + TLS, fatta con gli switch -mail"),
+	HRU(146, 0x4577F145, "Отправить e-mail через SMTP +|  TLS, составленное ключами -mail"),
+	HU(147, "email", "-mailserver HOST", "SMTP server (ex. mail.example.com)"),
+	HIT(147, 0xC2D84B4E, "Server SMTP (es. mail.example.com)"),
+	HRU(147, 0xC2D84B4E, "SMTP-сервер (напр. mail.example.com)"),
+	HU(148, "email", "-mailport N", "Port (default 587 STARTTLS, 465 with -mailssl)"),
+	HIT(148, 0x21671CD4, "Porta (default 587 STARTTLS, 465 con -mailssl)"),
+	HRU(148, 0x21671CD4, "Порт (по умолчанию 587 STARTTLS, 465 с -mailssl)"),
+	HU(149, "email", "-mailssl", "Implicit TLS (SMTPS) instead of STARTTLS"),
+	HIT(149, 0xB612BC07, "TLS implicito (SMTPS) invece di STARTTLS"),
+	HRU(149, 0xB612BC07, "Неявный TLS (SMTPS) вместо STARTTLS"),
+	HU(150, "email", "-mailuser USER", "Login name (no user: no authentication)"),
+	HIT(150, 0x058F37CF, "Nome utente (niente utente: niente autenticazione)"),
+	HRU(150, 0x058F37CF, "Имя для входа (без пользователя: без аутентификации)"),
+	HU(151, "email", "-mailpassword PASS", "Password (a user without it: nothing sent). Better in -mailconfig"),
+	HIT(151, 0x0994AAB0, "Password (un utente senza password: non|  si manda nulla). Meglio in -mailconfig"),
+	HRU(151, 0x0994AAB0, "Пароль (пользователь без пароля: ничего|  не отправляется). Лучше в -mailconfig"),
+	HU(152, "email", "-mailfrom ADDR", "Sender, 'addr' or 'Name <addr>'"),
+	HIT(152, 0xD29B79A2, "Mittente, 'indirizzo' oppure 'Nome <indirizzo>'"),
+	HRU(152, 0xD29B79A2, "Отправитель, 'адрес' или 'Имя <адрес>'"),
+	HU(153, "email", "-mailto ADDR", "Recipient(s), comma separated: \"a@x.com, b@y.org\""),
+	HIT(153, 0xBEEE6665, "Destinatario/i, separati da virgola: \"a@x.com, b@y.org\""),
+	HRU(153, 0xBEEE6665, "Получатель(и) через запятую: \"a@x.com, b@y.org\""),
+	HU(154, "email", "-mailcc -mailbcc ADDR", "Carbon copy, blind carbon copy"),
+	HIT(154, 0x9CB91832, "Copia carbone, copia carbone nascosta"),
+	HRU(154, 0x9CB91832, "Копия, скрытая копия"),
+	HU(155, "email", "-mailsubject TEXT", "Subject (UTF-8)"),
+	HIT(155, 0x406E5F74, "Oggetto (UTF-8)"),
+	HRU(155, 0x406E5F74, "Тема (UTF-8)"),
+	HU(156, "email", "-mailbody TEXT", "Body text (UTF-8)"),
+	HIT(156, 0x8A7A5C0B, "Testo del messaggio (UTF-8)"),
+	HRU(156, 0x8A7A5C0B, "Текст письма (UTF-8)"),
+	HU(157, "email", "-mailbodyfile FILE", "Body read from FILE"),
+	HIT(157, 0x51B3EC0D, "Testo letto da FILE"),
+	HRU(157, 0x51B3EC0D, "Текст письма из FILE"),
+	HU(158, "email", "-mailattach F1 F2...", "Attach files as they are (logs, .zpaq...)"),
+	HIT(158, 0xEB3B6297, "Allega file cosi' come sono (log, .zpaq...)"),
+	HRU(158, 0xEB3B6297, "Вложить файлы как есть (журналы, .zpaq...)"),
+	HU(159, "email", "-mailzip F1 F2...", "Attach F1.zip...: compressed, they open with a click"),
+	HIT(159, 0x43E6C498, "Allega F1.zip...: compressi, si aprono con un clic"),
+	HRU(159, 0x43E6C498, "Вложить F1.zip...: сжатые, открываются щелчком"),
+	HU(160, "email", "-mailconfig FILE", "'key = value' settings (server port tls user password from|  to subject cafile...): the -mail switches win"),
+	HIT(160, 0x83E75261, "Impostazioni 'chiave = valore' (server|  port tls user password from to subject|  cafile...): vincono gli switch -mail"),
+	HRU(160, 0x83E75261, "Настройки 'ключ = значение' (server port tls user|  password from to subject cafile...): ключи -mail важнее"),
+	HU(161, "email", "-mailcafile FILE", "Trusted CAs (default: system store)"),
+	HIT(161, 0x45E4EE23, "CA fidate (default: archivio del sistema)"),
+	HRU(161, 0x45E4EE23, "Доверенные CA (по умолчанию: системное хранилище)"),
+	HU(162, "email", "-mailtlsname NAME", "Verify the server certificate against NAME"),
+	HIT(162, 0x3F524889, "Verifica il certificato del server rispetto a NAME"),
+	HRU(162, 0x3F524889, "Проверять сертификат сервера по NAME"),
+	HU(163, "email", "-mailinsecure", "Do NOT verify the certificate (tests only)"),
+	HIT(163, 0x58797A7A, "NON verifica il certificato (solo per prove)"),
+	HRU(163, 0x58797A7A, "НЕ проверять сертификат (только для тестов)"),
+	HU(164, "email", "-mailtimeout SEC", "Network timeout (default 30)"),
+	HIT(164, 0x375034ED, "Timeout di rete (default 30)"),
+	HRU(164, 0x375034ED, "Сетевой тайм-аут (по умолчанию 30)"),
+	HU(165, "email", "-maillog FILE", "Append the full log (SMTP dialogue, never the password)"),
+	HIT(165, 0x184A0462, "Allega il log completo (dialogo SMTP, mai la password)"),
+	HRU(165, 0x184A0462, "Приложить полный журнал (диалог SMTP, без пароля)"),
+	HU(166, "email", "-verbose -debug", "Show the log / the SMTP dialogue too"),
+	HIT(166, 0x44A7495B, "Mostra anche il log / il dialogo SMTP"),
+	HRU(166, 0x44A7495B, "Показать также журнал / диалог SMTP"),
+	HU(167, "email", "Exit code", "0 sent, 2 not sent (and why)"),
+	HIT(167, 0xB3CBA02A, "0 mandata, 2 non mandata (e perche')"),
+	HRU(167, 0xB3CBA02A, "0 отправлено, 2 не отправлено (и почему)"),
+	HESEMPI("email", 'b'),
+	HE(168, "email", "Send a log", "work email -mailserver mail.example.com -mailuser me@example.com -mailpassword pw -mailfrom me@example.com -mailto you@example.com -mailsubject \"backup OK\" -mailattach z:\\backup.log"),
+	HIT(168, 0x0812697E, "Manda un log"),
+	HRU(168, 0x0812697E, "Отправить журнал"),
+	HE(169, "email", "Settings in a file", "work email -mailconfig c:\\zpaqfranz\\email.conf -mailto you@example.com -mailattach z:\\1.zpaq"),
+	HIT(169, 0x75B57DE2, "Impostazioni in un file"),
+	HRU(169, 0x75B57DE2, "Настройки в файле"),
+	HE(170, "email", "Mail a zipped log", "work email -mailconfig email.conf -mailsubject \"backup OK\" -mailzip z:\\backup.log"),
+	HIT(170, 0x29BF9B11, "Manda un log zippato"),
+	HRU(170, 0x29BF9B11, "Отправить журнал в zip"),
+	HE(171, "email", "Show the SMTP dialogue", "work email -mailconfig email.conf -debug"),
+	HIT(171, 0xDBE1F5E1, "Mostra il dialogo SMTP"),
+	HRU(171, 0xDBE1F5E1, "Показать диалог SMTP"),
+	HBREVE(172, "email", "Send e-mail (SMTP/TLS)"),
+	HIT(172, 0x73135309, "Manda e-mail (SMTP/TLS)"),
+	HRU(172, 0x73135309, "Отправка e-mail (SMTP/TLS)"),
 #endif /// POSTAMI help_email END
 #ifndef NOEMAIL
-string help_mailreport(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("SWITCHES mailreport", "At the end of ANY command (a, backup, cloud, t...) the log goes by e-mail");
-		scrivi_riga("-mailfull ADDR", "The log as it is, the names of the files too (-stat): for the owner of the data");
-		scrivi_riga("-mailprivacy ADDR", "The log WITHOUT the names of the files (totals, results): for who looks after");
-		scrivi_riga(" ", "  the backup. Names => ***, the |STAT| lines and the listings are left out");
-		scrivi_riga("-customer NAME", "In the subject: OK|WARNING|ERROR NAME FULL|PRIVACY");
-		scrivi_riga("Who sends", "ONE account, for both e-mails: -mailconfig FILE, a text file of 'key = value'");
-		scrivi_riga(" ", "  (server, port, tls, user, password, from), or the switches -mailserver");
-		scrivi_riga(" ", "  -mailuser -mailpassword -mailfrom (-mailport -mailssl...: see h work)");
-		scrivi_riga(" ", "Typical: one mailbox (log@provider.com) sends, TWO addresses get it:");
-		scrivi_riga(" ", "  -mailfull the customer (full log), -mailprivacy the provider (no names)");
-		scrivi_riga("-mailprovider FILE", "Special case: a SECOND account, for the log without the names. A file as");
-		scrivi_riga(" ", "  -mailconfig, with 'to' too: that log is sent by it, to its 'to' (whatever");
-		scrivi_riga(" ", "  -mailprivacy says). No -mailprovider: zpaqfranz-mail.conf next to the");
-		scrivi_riga(" ", "  executable, if there. Only one of the two accounts: it sends both");
-		scrivi_riga("-mailcafile FILE", "The CA certificates (.pem), where the system has none (ESX, NAS): for both");
-		scrivi_riga(" ", "  accounts, as -mailinsecure (no check of the server), -mailtimeout, -maillog");
-		scrivi_riga("The e-mail", "A summary and the last lines in the body, the whole log attached (zipped)");
-		scrivi_riga("Exit code", "An e-mail not sent: WARNING (1), if the command itself was OK");
-		scrivi_riga("-verbose -debug", "Show the log of the sending / the SMTP dialogue too");
-		scrivi_riga(" ", "  (the lines of a -debug can hold names: not for a log without them)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("One account, two recipients (typical)", "a z:\\1.zpaq c:\\data -stat -mailconfig c:\\zpaqfranz\\mail.conf -mailfull owner@x.com -mailprivacy monitor@provider.com -customer smith");
-		scrivi_esempio("mail.conf", "server = mail.provider.com / port = 587 / tls = starttls / user = log@provider.com / password = pw");
-		scrivi_esempio("Full log only, account by switches", "a z:\\1.zpaq c:\\data -stat -mailfull me@x.com -mailserver mail.x.com -mailuser me@x.com -mailpassword pw");
-		scrivi_esempio("Only the purged log", "backup z:\\nas.zpaq c:\\data -mailconfig c:\\zpaqfranz\\mail.conf -mailprivacy monitor@provider.com -customer smith");
-		scrivi_esempio("A second account for the purged log", "a z:\\1.zpaq c:\\data -stat -mailconfig c:\\zpaqfranz\\mail.conf -mailfull owner@x.com -mailprovider c:\\zpaqfranz\\provider.conf");
-		scrivi_esempio("provider.conf", "server = mail.provider.com / user = log@provider.com / password = pw / to = monitor@provider.com");
-	}
-	return ("Report by e-mail of any command (-mailfull -mailprivacy)");
-}
+	/// mailreport
+	HU(173, "mailreport", "SWITCHES mailreport", "At the end of ANY command (a, backup, cloud, t...) the log goes by e-mail"),
+	HIT(173, 0xE618942E, "Alla fine di QUALSIASI comando (a, backup,|  cloud, t...) il log va per e-mail"),
+	HRU(173, 0xE618942E, "В конце ЛЮБОЙ команды (a, backup, cloud,|  t...) журнал отправляется по e-mail"),
+	HU(174, "mailreport", "-mailfull ADDR", "The log as it is, the names of the files too (-stat): for the owner of the data"),
+	HIT(174, 0x07107F42, "Il log com'e', anche i nomi dei file (-stat): per il proprietario dei dati"),
+	HRU(174, 0x07107F42, "Журнал как есть, с именами файлов (-stat): для владельца данных"),
+	HU(175, "mailreport", "-mailprivacy ADDR", "The log WITHOUT the names of the files (totals, results): for who looks after|  the backup. Names => ***, the ||STAT|| lines and the listings are left out"),
+	HIT(175, 0x25B72647, "Il log SENZA i nomi dei file (totali, esiti): per chi segue|  il backup. Nomi => ***, le righe ||STAT|| e gli elenchi sono tolti"),
+	HRU(175, 0x25B72647, "Журнал БЕЗ имён файлов (итоги, результаты): для того, кто обслуживает|  backup. Имена => ***, строки ||STAT|| и списки убираются"),
+	HU(176, "mailreport", "-customer NAME", "In the subject: OK||WARNING||ERROR NAME FULL||PRIVACY"),
+	HIT(176, 0x0A2BFE8D, "Nell'oggetto: OK||WARNING||ERROR NAME FULL||PRIVACY"),
+	HRU(176, 0x0A2BFE8D, "В теме: OK||WARNING||ERROR NAME FULL||PRIVACY"),
+	HU(177, "mailreport", "Who sends", "ONE account, for both e-mails: -mailconfig FILE, a text file of 'key = value'|  (server, port, tls, user, password, from), or the switches -mailserver|  -mailuser -mailpassword -mailfrom (-mailport -mailssl...: see h work)|Typical: one mailbox (log@provider.com) sends, TWO addresses get it:|  -mailfull the customer (full log), -mailprivacy the provider (no names)"),
+	HIT(177, 0x42BED82C, "UN account, per entrambe le e-mail: -mailconfig FILE, un|  file di testo 'chiave = valore' (server, port, tls,|  user, password, from), oppure gli switch -mailserver|  -mailuser -mailpassword -mailfrom (-mailport -mailssl...: vedi h work)|Tipico: una casella (log@provider.com) manda, DUE indirizzi ricevono:|  -mailfull il cliente (log completo), -mailprivacy il fornitore (senza nomi)"),
+	HRU(177, 0x42BED82C, "ОДНА учётная запись для обоих писем: -mailconfig FILE, текстовый файл 'ключ =|  значение' (server, port, tls, user, password, from), или ключи -mailserver|  -mailuser -mailpassword -mailfrom (-mailport -mailssl...: см. h work)|Обычно: один ящик (log@provider.com) отправляет, ДВА адреса получают:|  -mailfull клиент (полный журнал), -mailprivacy поставщик (без имён)"),
+	HU(178, "mailreport", "-mailprovider FILE", "Special case: a SECOND account, for the log without the names. A file as|  -mailconfig, with 'to' too: that log is sent by it, to its 'to' (whatever|  -mailprivacy says). No -mailprovider: zpaqfranz-mail.conf next to the|  executable, if there. Only one of the two accounts: it sends both"),
+	HIT(178, 0x30675C07, "Caso speciale: un SECONDO account, per il log senza i nomi. Un file come|  -mailconfig, anche con 'to': quel log lo manda lui, al suo|  'to' (qualunque cosa dica -mailprivacy). Senza|  -mailprovider: zpaqfranz-mail.conf accanto all'eseguibile,|  se c'e'. Solo uno dei due account: manda entrambe"),
+	HRU(178, 0x30675C07, "Особый случай: ВТОРАЯ учётная запись, для журнала без имён. Файл как|  -mailconfig, также с 'to': этот журнал отправляет она, на свой|  'to' (что бы ни говорил -mailprivacy). Без -mailprovider:|  zpaqfranz-mail.conf рядом с исполняемым файлом, если есть.|  Только одна из двух записей: она отправляет оба"),
+	HU(179, "mailreport", "-mailcafile FILE", "The CA certificates (.pem), where the system has none (ESX, NAS): for both|  accounts, as -mailinsecure (no check of the server), -mailtimeout, -maillog"),
+	HIT(179, 0x5B33E063, "I certificati delle CA (.pem), dove il sistema non li ha|  (ESX, NAS): per entrambi gli account, come -mailinsecure|  (nessun controllo del server), -mailtimeout, -maillog"),
+	HRU(179, 0x5B33E063, "Сертификаты CA (.pem), где их нет в системе (ESX, NAS): для обеих учётных|  записей, как -mailinsecure (без проверки сервера), -mailtimeout, -maillog"),
+	HU(180, "mailreport", "The e-mail", "A summary and the last lines in the body, the whole log attached (zipped)"),
+	HIT(180, 0xD2A442DA, "Un riepilogo e le ultime righe nel testo, tutto il log allegato (zippato)"),
+	HRU(180, 0xD2A442DA, "Сводка и последние строки в тексте письма, весь журнал во вложении (zip)"),
+	HU(181, "mailreport", "Exit code", "An e-mail not sent: WARNING (1), if the command itself was OK"),
+	HIT(181, 0xD9CCC3B9, "Una e-mail non mandata: WARNING|  (1), se il comando in se' era OK"),
+	HRU(181, 0xD9CCC3B9, "Неотправленное письмо: WARNING|  (1), если сама команда прошла OK"),
+	HU(182, "mailreport", "-verbose -debug", "Show the log of the sending / the SMTP dialogue too|  (the lines of a -debug can hold names: not for a log without them)"),
+	HIT(182, 0xB4EF7C3A, "Mostra anche il log dell'invio / il dialogo SMTP (le righe di|  un -debug possono contenere nomi: non per un log senza nomi)"),
+	HRU(182, 0xB4EF7C3A, "Показать также журнал отправки / диалог SMTP|  (строки -debug могут содержать имена: не для журнала без имён)"),
+	HESEMPI("mailreport", 'b'),
+	HE(183, "mailreport", "One account, two recipients (typical)", "a z:\\1.zpaq c:\\data -stat -mailconfig c:\\zpaqfranz\\mail.conf -mailfull owner@x.com -mailprivacy monitor@provider.com -customer smith"),
+	HIT(183, 0x98D97A71, "Un account, due destinatari (tipico)"),
+	HRU(183, 0x98D97A71, "Одна учётная запись, два получателя (обычно)"),
+	HE(0, "mailreport", "mail.conf", "server = mail.provider.com / port = 587 / tls = starttls / user = log@provider.com / password = pw"),
+	HE(184, "mailreport", "Full log only, account by switches", "a z:\\1.zpaq c:\\data -stat -mailfull me@x.com -mailserver mail.x.com -mailuser me@x.com -mailpassword pw"),
+	HIT(184, 0x2C8EE5CC, "Solo il log completo, account dagli switch"),
+	HRU(184, 0x2C8EE5CC, "Только полный журнал, учётная запись через ключи"),
+	HE(185, "mailreport", "Only the purged log", "backup z:\\nas.zpaq c:\\data -mailconfig c:\\zpaqfranz\\mail.conf -mailprivacy monitor@provider.com -customer smith"),
+	HIT(185, 0x8AB2ACEF, "Solo il log ripulito"),
+	HRU(185, 0x8AB2ACEF, "Только очищенный журнал"),
+	HE(186, "mailreport", "A second account for the purged log", "a z:\\1.zpaq c:\\data -stat -mailconfig c:\\zpaqfranz\\mail.conf -mailfull owner@x.com -mailprovider c:\\zpaqfranz\\provider.conf"),
+	HIT(186, 0xCC65066E, "Un secondo account per il log ripulito"),
+	HRU(186, 0xCC65066E, "Вторая учётная запись для очищенного журнала"),
+	HE(0, "mailreport", "provider.conf", "server = mail.provider.com / user = log@provider.com / password = pw / to = monitor@provider.com"),
+	HBREVE(187, "mailreport", "Report by e-mail of any command (-mailfull -mailprivacy)"),
+	HIT(187, 0xD8C2E325, "Report per e-mail di qualsiasi comando (-mailfull -mailprivacy)"),
+	HRU(187, 0xD8C2E325, "Отчёт по e-mail о любой команде (-mailfull -mailprivacy)"),
 #endif
-
-string help_work(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD work", "Execute multiple commands (verb-noun format)");
-		scrivi_riga("Available nouns:", "");
-		scrivi_riga("big               ", "Outputs a large ASCII string from input text");
-		scrivi_riga("pad               ", "Left-pads a number with zeros");
-		scrivi_riga("filepathnotrailing", "Returns a file path without trailing backslash");
-		scrivi_riga("date              ", "Displays current date or datetime");
-		scrivi_riga("printbar          ", "Prints a row of repeated characters");
-		scrivi_riga("turbo             ", "Sets CPU power to maximum (enables Turbo Boost)");
-		scrivi_riga("noturbo           ", "Reduces CPU speed (limits Turbo Boost)");
-		scrivi_riga("monitoroff        ", "Turns off the monitor");
-		scrivi_riga("monitoron         ", "Turns on the monitor");
-		scrivi_riga("shutdown          ", "(Try to) shutdown");
+	/// work
+	HU(188, "work", "CMD work", "Execute multiple commands (verb-noun format)"),
+	HIT(188, 0xD8E45B48, "Esegue piu' comandi (formato verbo-nome)"),
+	HRU(188, 0xD8E45B48, "Выполнить несколько команд (формат глагол-объект)"),
+	HU(0, "work", "Available nouns:", ""),
+	HU(189, "work", "big               ", "Outputs a large ASCII string from input text"),
+	HIT(189, 0x2B26BAB0, "Scrive in grande, in ASCII, il testo dato"),
+	HRU(189, 0x2B26BAB0, "Выводит крупную ASCII-надпись из текста"),
+	HU(190, "work", "pad               ", "Left-pads a number with zeros"),
+	HIT(190, 0xE590FBA2, "Riempie un numero con zeri a sinistra"),
+	HRU(190, 0xE590FBA2, "Дополняет число нулями слева"),
+	HU(191, "work", "filepathnotrailing", "Returns a file path without trailing backslash"),
+	HIT(191, 0x7B9850F2, "Un percorso senza la barra rovesciata finale"),
+	HRU(191, 0x7B9850F2, "Путь без завершающей обратной косой черты"),
+	HU(192, "work", "date              ", "Displays current date or datetime"),
+	HIT(192, 0x6429FB13, "Mostra la data o la data e ora di adesso"),
+	HRU(192, 0x6429FB13, "Показывает текущую дату или дату и время"),
+	HU(193, "work", "printbar          ", "Prints a row of repeated characters"),
+	HIT(193, 0x072C67C1, "Stampa una riga di caratteri ripetuti"),
+	HRU(193, 0x072C67C1, "Печатает строку из повторяющихся символов"),
+	HU(194, "work", "turbo             ", "Sets CPU power to maximum (enables Turbo Boost)"),
+	HIT(194, 0xD88BFFE0, "CPU alla massima potenza (attiva il Turbo Boost)"),
+	HRU(194, 0xD88BFFE0, "Максимальная мощность CPU (включает Turbo Boost)"),
+	HU(195, "work", "noturbo           ", "Reduces CPU speed (limits Turbo Boost)"),
+	HIT(195, 0x9CF0D3C9, "Riduce la velocita' della CPU (limita il Turbo Boost)"),
+	HRU(195, 0x9CF0D3C9, "Снижает частоту CPU (ограничивает Turbo Boost)"),
+	HU(196, "work", "monitoroff        ", "Turns off the monitor"),
+	HIT(196, 0x108A5EF3, "Spegne il monitor"),
+	HRU(196, 0x108A5EF3, "Выключает монитор"),
+	HU(197, "work", "monitoron         ", "Turns on the monitor"),
+	HIT(197, 0x3AA5EAB9, "Accende il monitor"),
+	HRU(197, 0x3AA5EAB9, "Включает монитор"),
+	HU(198, "work", "shutdown          ", "(Try to) shutdown"),
+	HIT(198, 0x32912F62, "(Prova a) spegnere"),
+	HRU(198, 0x32912F62, "(Пытается) выключить компьютер"),
 #ifdef _WIN32
-		scrivi_riga("fat32 X: [label]", "FAT32 up to 2 TB on X: (only USB/removable, -debug: any)");
-		scrivi_riga("fat32 N  [label]", "Whole disk N: new MBR + FAT32. -boot: BIOS starts BOOTMGR");
-		scrivi_riga("resetacl", "Revert Windows' ACL to administrators");
-		scrivi_riga("frugal", "Check (/delete) the junk space");
+	HU(199, "work", "fat32 X: [label]", "FAT32 up to 2 TB on X: (only USB/removable, -debug: any)"),
+	HIT(199, 0x9286E6AB, "FAT32 fino a 2 TB su X: (solo|  USB/rimovibili, -debug: qualsiasi)"),
+	HRU(199, 0x9286E6AB, "FAT32 до 2 TB на X: (только USB/съёмные, -debug: любые)"),
+	HU(200, "work", "fat32 N  [label]", "Whole disk N: new MBR + FAT32. -boot: BIOS starts BOOTMGR"),
+	HIT(200, 0xA0600142, "Disco intero N: nuovo MBR + FAT32.|  -boot: il BIOS avvia BOOTMGR"),
+	HRU(200, 0xA0600142, "Весь диск N: новый MBR + FAT32.|  -boot: BIOS запускает BOOTMGR"),
+	HU(201, "work", "resetacl", "Revert Windows' ACL to administrators"),
+	HIT(201, 0x0A97C4BE, "Riporta le ACL di Windows agli amministratori"),
+	HRU(201, 0x0A97C4BE, "Вернуть ACL Windows администраторам"),
+	HU(202, "work", "frugal", "Check (/delete) the junk space"),
+	HIT(202, 0x8EEDC053, "Controlla (/cancella) lo spazio spazzatura"),
+	HRU(202, 0x8EEDC053, "Проверить (/удалить) мусорное пространство"),
 #endif
-		scrivi_riga("devart         ", "Outputs a large ASCII string from input text");
-		scrivi_riga("devart-red     ", "Outputs a red    large ASCII string from input text");
-		scrivi_riga("devart-green   ", "Outputs a green  large ASCII string from input text");
-		scrivi_riga("devart-yellow  ", "Outputs a yellow large ASCII string from input text");
-		scrivi_riga("devart-cyan    ", "Outputs a cyan   large ASCII string from input text");
-		scrivi_riga("last X", "Show last file in X");
-		scrivi_riga("lastfile X", "Show last file in X (only filename)");
-		scrivi_riga("getsize X", "Show size of X (multiple / wildcard allowed)");
-		scrivi_riga("checkspace", "Check if enough free space");
+	HU(203, "work", "devart         ", "Outputs a large ASCII string from input text"),
+	HIT(203, 0x2B26BAB0, "Scrive in grande, in ASCII, il testo dato"),
+	HRU(203, 0x2B26BAB0, "Выводит крупную ASCII-надпись из текста"),
+	HU(204, "work", "devart-red     ", "Outputs a red    large ASCII string from input text"),
+	HIT(204, 0x8002455B, "Scrive in grande, in ASCII rosso,  il testo dato"),
+	HRU(204, 0x8002455B, "Выводит крупную красную  ASCII-надпись из текста"),
+	HU(205, "work", "devart-green   ", "Outputs a green  large ASCII string from input text"),
+	HIT(205, 0xA27C15CF, "Scrive in grande, in ASCII verde,  il testo dato"),
+	HRU(205, 0xA27C15CF, "Выводит крупную зелёную  ASCII-надпись из текста"),
+	HU(206, "work", "devart-yellow  ", "Outputs a yellow large ASCII string from input text"),
+	HIT(206, 0xA94A9A3C, "Scrive in grande, in ASCII giallo, il testo dato"),
+	HRU(206, 0xA94A9A3C, "Выводит крупную жёлтую   ASCII-надпись из текста"),
+	HU(207, "work", "devart-cyan    ", "Outputs a cyan   large ASCII string from input text"),
+	HIT(207, 0x318A2C5D, "Scrive in grande, in ASCII ciano,  il testo dato"),
+	HRU(207, 0x318A2C5D, "Выводит крупную голубую  ASCII-надпись из текста"),
+	HU(208, "work", "last X", "Show last file in X"),
+	HIT(208, 0x11BFB6D1, "Mostra l'ultimo file in X"),
+	HRU(208, 0x11BFB6D1, "Показать последний файл в X"),
+	HU(209, "work", "lastfile X", "Show last file in X (only filename)"),
+	HIT(209, 0x8338C867, "Mostra l'ultimo file in X (solo il nome)"),
+	HRU(209, 0x8338C867, "Показать последний файл в X (только имя)"),
+	HU(210, "work", "getsize X", "Show size of X (multiple / wildcard allowed)"),
+	HIT(210, 0xA5718316, "Mostra la dimensione di X (piu'|  d'uno / caratteri jolly ammessi)"),
+	HRU(210, 0xA5718316, "Показать размер X (можно несколько / шаблоны)"),
+	HU(211, "work", "checkspace", "Check if enough free space"),
+	HIT(211, 0x56771E52, "Controlla se c'e' abbastanza spazio libero"),
+	HRU(211, 0x56771E52, "Проверить, достаточно ли свободного места"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_riga("encode f1 f2 pass", "FRANZEN encrypt. Use -ssd for multithread (limit with -tX)");
-		scrivi_riga("decode f1 f2 pass", "FRANZEN decrypt. Use -ssd for multithread (limit with -tX)");
-		scrivi_riga("test   f1 pass", "FRANZEN test.    Use -ssd for multithread (limit with -tX)");
-		scrivi_riga("fulltest f1 f2 pass", "FRANZEN full test. Encrypt, decrypt, compare");
-		scrivi_riga("autotest", "FRANZEN (quick) autotest");
-		scrivi_riga("ispasswordok", "FRANZEN quickly check password");
-		scrivi_riga("vss", "franzVSS manager");
+	HU(212, "work", "encode f1 f2 pass", "FRANZEN encrypt. Use -ssd for multithread (limit with -tX)"),
+	HIT(212, 0x510B7889, "Cifra con FRANZEN. -ssd per il multithread (limite con -tX)"),
+	HRU(212, 0x510B7889, "Шифрование FRANZEN. -ssd для|  многопоточности (ограничение -tX)"),
+	HU(213, "work", "decode f1 f2 pass", "FRANZEN decrypt. Use -ssd for multithread (limit with -tX)"),
+	HIT(213, 0xA8A3C3E1, "Decifra con FRANZEN. -ssd per il|  multithread (limite con -tX)"),
+	HRU(213, 0xA8A3C3E1, "Расшифровка FRANZEN. -ssd для|  многопоточности (ограничение -tX)"),
+	HU(214, "work", "test   f1 pass", "FRANZEN test.    Use -ssd for multithread (limit with -tX)"),
+	HIT(214, 0x4397177E, "Prova FRANZEN. -ssd per il multithread (limite con -tX)"),
+	HRU(214, 0x4397177E, "Проверка FRANZEN. -ssd для|  многопоточности (ограничение -tX)"),
+	HU(215, "work", "fulltest f1 f2 pass", "FRANZEN full test. Encrypt, decrypt, compare"),
+	HIT(215, 0x7B942403, "Prova completa di FRANZEN. Cifra, decifra, confronta"),
+	HRU(215, 0x7B942403, "Полный тест FRANZEN. Шифрование, расшифровка, сравнение"),
+	HU(216, "work", "autotest", "FRANZEN (quick) autotest"),
+	HIT(216, 0x93FD0F20, "Autotest (rapido) di FRANZEN"),
+	HRU(216, 0x93FD0F20, "(Быстрый) самотест FRANZEN"),
+	HU(217, "work", "ispasswordok", "FRANZEN quickly check password"),
+	HIT(217, 0xCF8DCDA8, "Controllo rapido della password FRANZEN"),
+	HRU(217, 0xCF8DCDA8, "Быстрая проверка пароля FRANZEN"),
+	HU(218, "work", "vss", "franzVSS manager"),
+	HIT(218, 0xEFACA8CF, "Gestore di franzVSS"),
+	HRU(218, 0xEFACA8CF, "Менеджер franzVSS"),
 #endif /// NOSFTPEND
-		scrivi_riga("compare2", "Compare substrings from 2 files");
-		scrivi_riga("fc", "Binary comparing two files");
-		scrivi_riga("poke f o v", "The byte at offset o (from 0) of f becomes v (0-255); o:e from o to e");
-		scrivi_riga(" ", "  (e included). v ~ = its complement. Not past the end. Only with -force -kill");
-		scrivi_riga("quadra a b", "Two archives as one stream (parts glued, franzen decoded with -franzen,");
-		scrivi_riga(" ", "  AES as it is: no -key) must be the same bytes. a b can be multipart with ?");
-		scrivi_riga("zip f1 f2", "Compress f1 into the new .zip f2 (-force to overwrite)"); /// POSTAMI help_work zip
+	HU(219, "work", "compare2", "Compare substrings from 2 files"),
+	HIT(219, 0xB4E868D1, "Confronta sottostringhe di 2 file"),
+	HRU(219, 0xB4E868D1, "Сравнить подстроки из 2 файлов"),
+	HU(220, "work", "fc", "Binary comparing two files"),
+	HIT(220, 0x51F1A055, "Confronto binario di due file"),
+	HRU(220, 0x51F1A055, "Двоичное сравнение двух файлов"),
+	HU(221, "work", "poke f o v", "The byte at offset o (from 0) of f becomes v (0-255); o:e from o to e|  (e included). v ~ = its complement. Not past the end. Only with -force -kill"),
+	HIT(221, 0x8A04C4CE, "Il byte all'offset o (da 0) di f diventa v (0-255); o:e da o a e (e compreso).|  v ~ = il suo complemento. Non oltre la fine. Solo con -force -kill"),
+	HRU(221, 0x8A04C4CE, "Байт по смещению o (от 0) в f становится v (0-255); o:e|  от o до e (e включительно). v ~ = его дополнение. Не|  за концом файла. Только с -force -kill"),
+	HU(222, "work", "quadra a b", "Two archives as one stream (parts glued, franzen decoded with -franzen,|  AES as it is: no -key) must be the same bytes. a b can be multipart with ?"),
+	HIT(222, 0xEE3D9867, "Due archivi come un unico flusso (parti|  incollate, franzen decodificato con -franzen,|  AES com'e': niente -key) devono avere gli stessi|  byte. a b possono essere multiparte con ?"),
+	HRU(222, 0xEE3D9867, "Два архива как один поток (части склеены, franzen расшифрован с -franzen,|  AES как есть: без -key) должны совпадать|  побайтно. a b могут быть многотомными с ?"),
+	HU(223, "work", "zip f1 f2", "Compress f1 into the new .zip f2 (-force to overwrite)"), /// POSTAMI help_work zip
+	HIT(223, 0xC4916D3F, "Comprime f1 nel nuovo .zip f2 (-force per sovrascrivere)"),
+	HRU(223, 0xC4916D3F, "Сжать f1 в новый .zip f2 (-force для перезаписи)"),
 #ifndef NOEMAIL /// POSTAMI help_work usage
-		scrivi_riga("email", "Send an e-mail (SMTP/TLS), see below");
-		help_email(true, false);
+	HU(224, "work", "email", "Send an e-mail (SMTP/TLS), see below"),
+	HIT(224, 0xC007E952, "Manda una e-mail (SMTP/TLS), vedi sotto"),
+	HRU(224, 0xC007E952, "Отправить e-mail (SMTP/TLS), см. ниже"),
+	HINCLUDI("work", 'u', "email", 'u'),
 #endif
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Write a large ASCII string", "work big \"count the ok\"");
-		scrivi_esempio("Write in uppercase ASCII  ", "work big \"COUNT THE OK\"");
-		scrivi_esempio("Write a custom big string ", "work big \"forza inter\"");
-		scrivi_esempio("Pad number to 8 digits", "work pad 123");
-		scrivi_esempio("Pad number to 4 digits", "work pad 123 -n 4");
-		scrivi_esempio("Remove trailing backslash", "work filepathnotrailing \"z:\\doc\\2\\3.eml\"");
-		scrivi_esempio("Show concise datetime", "work date -terse");
-		scrivi_esempio("Format date as year_month_day", "work date \"%year_%month_%day\" -terse");
-		scrivi_esempio("Print a line of dashes", "work printbar -terse");
-		scrivi_esempio("Print a line of exclamation marks", "work printbar \"!\" -terse");
-		scrivi_esempio("Reduce CPU speed (and power usage)", "work noturbo");
-		scrivi_esempio("Turn off monitor", "work monitoroff");
-		scrivi_esempio("Shutdown", "work shutdown");
+	HESEMPI("work", 'b'),
+	HE(225, "work", "Write a large ASCII string", "work big \"count the ok\""),
+	HIT(225, 0x56FC44A8, "Scrive in grande, in ASCII"),
+	HRU(225, 0x56FC44A8, "Вывести крупную ASCII-надпись"),
+	HE(226, "work", "Write in uppercase ASCII  ", "work big \"COUNT THE OK\""),
+	HIT(226, 0x81E489C0, "Scrive in ASCII maiuscolo  "),
+	HRU(226, 0x81E489C0, "Вывести ASCII заглавными"),
+	HE(227, "work", "Write a custom big string ", "work big \"forza inter\""),
+	HIT(227, 0x4F6D9847, "Scrive una stringa grande a scelta "),
+	HRU(227, 0x4F6D9847, "Вывести свою крупную надпись"),
+	HE(228, "work", "Pad number to 8 digits", "work pad 123"),
+	HIT(228, 0x7EA6388A, "Numero a 8 cifre"),
+	HRU(228, 0x7EA6388A, "Дополнить число до 8 цифр"),
+	HE(229, "work", "Pad number to 4 digits", "work pad 123 -n 4"),
+	HIT(229, 0x767FC67E, "Numero a 4 cifre"),
+	HRU(229, 0x767FC67E, "Дополнить число до 4 цифр"),
+	HE(230, "work", "Remove trailing backslash", "work filepathnotrailing \"z:\\doc\\2\\3.eml\""),
+	HIT(230, 0xED226D23, "Toglie la barra rovesciata finale"),
+	HRU(230, 0xED226D23, "Убрать завершающую обратную косую черту"),
+	HE(231, "work", "Show concise datetime", "work date -terse"),
+	HIT(231, 0xE8156731, "Data e ora compatte"),
+	HRU(231, 0xE8156731, "Краткие дата и время"),
+	HE(232, "work", "Format date as year_month_day", "work date \"%year_%month_%day\" -terse"),
+	HIT(232, 0x6AF96523, "Data come anno_mese_giorno"),
+	HRU(232, 0x6AF96523, "Дата в виде год_месяц_день"),
+	HE(233, "work", "Print a line of dashes", "work printbar -terse"),
+	HIT(233, 0xFFA8EF34, "Stampa una riga di trattini"),
+	HRU(233, 0xFFA8EF34, "Напечатать строку дефисов"),
+	HE(234, "work", "Print a line of exclamation marks", "work printbar \"!\" -terse"),
+	HIT(234, 0xF6E3808B, "Stampa una riga di punti esclamativi"),
+	HRU(234, 0xF6E3808B, "Напечатать строку восклицательных знаков"),
+	HE(235, "work", "Reduce CPU speed (and power usage)", "work noturbo"),
+	HIT(235, 0x6A05E16C, "Riduce la velocita' della CPU (e il consumo)"),
+	HRU(235, 0x6A05E16C, "Снизить частоту CPU (и энергопотребление)"),
+	HE(236, "work", "Turn off monitor", "work monitoroff"),
+	HIT(236, 0xAABDA345, "Spegne il monitor"),
+	HRU(236, 0xAABDA345, "Выключить монитор"),
+	HE(237, "work", "Shutdown", "work shutdown"),
+	HIT(237, 0xF1F1C26B, "Spegne il computer"),
+	HRU(237, 0xF1F1C26B, "Выключить компьютер"),
 #ifdef _WIN32
-		scrivi_esempio("FAT32 on the USB stick E:", "work fat32 e: DIAG");
-		scrivi_esempio("Whole disk 3, BIOS boot (WinPE)", "work fat32 3 WINPE -boot");
-		scrivi_esempio("Fix 'strange' ACLs", "work resetacl z:\\temp");
-		scrivi_esempio("Free junk space", "work frugal -kill");
+	HE(238, "work", "FAT32 on the USB stick E:", "work fat32 e: DIAG"),
+	HIT(238, 0x236B96D6, "FAT32 sulla chiavetta USB E:"),
+	HRU(238, 0x236B96D6, "FAT32 на USB-флешке E:"),
+	HE(239, "work", "Whole disk 3, BIOS boot (WinPE)", "work fat32 3 WINPE -boot"),
+	HIT(239, 0x551382DD, "Disco intero 3, avvio da BIOS (WinPE)"),
+	HRU(239, 0x551382DD, "Весь диск 3, загрузка через BIOS (WinPE)"),
+	HE(240, "work", "Fix 'strange' ACLs", "work resetacl z:\\temp"),
+	HIT(240, 0x035BA425, "Sistema ACL 'strane'"),
+	HRU(240, 0x035BA425, "Исправить 'странные' ACL"),
+	HE(241, "work", "Free junk space", "work frugal -kill"),
+	HIT(241, 0xC3619275, "Libera lo spazio spazzatura"),
+	HRU(241, 0xC3619275, "Освободить мусорное пространство"),
 #endif
-		scrivi_esempio("Devart", "work devart ALL-OK");
-		scrivi_esempio("Last file name", "work lastfile z:\\temp\\copia*.zpaq -terse");
-		scrivi_esempio("Scary text", "work devart-red ERROR! -terse");
-		scrivi_esempio("Show filesize", "work getsize zpaqfranz*.cpp /tmp/prova");
-		scrivi_esempio("Check free space", "work checkspace c:\\ 10g d:\\ 20g -exec_error nospace.bat");
+	HE(0, "work", "Devart", "work devart ALL-OK"),
+	HE(242, "work", "Last file name", "work lastfile z:\\temp\\copia*.zpaq -terse"),
+	HIT(242, 0x976AD34C, "Nome dell'ultimo file"),
+	HRU(242, 0x976AD34C, "Имя последнего файла"),
+	HE(243, "work", "Scary text", "work devart-red ERROR! -terse"),
+	HIT(243, 0xECCC9986, "Testo che fa paura"),
+	HRU(243, 0xECCC9986, "Пугающий текст"),
+	HE(244, "work", "Show filesize", "work getsize zpaqfranz*.cpp /tmp/prova"),
+	HIT(244, 0xD3E41F0B, "Mostra la dimensione dei file"),
+	HRU(244, 0xD3E41F0B, "Показать размер файлов"),
+	HE(245, "work", "Check free space", "work checkspace c:\\ 10g d:\\ 20g -exec_error nospace.bat"),
+	HIT(245, 0xBAE09161, "Controlla lo spazio libero"),
+	HRU(245, 0xBAE09161, "Проверить свободное место"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_esempio("Encrypt (experimental)", "work encode j:\\1.zpaq z:\\crip.cha pippo -ssd");
-		scrivi_esempio("Test FRANZEN file", "work test z:\\crip.cha pippo -ssd");
-		scrivi_esempio("Encrypt fulltest", "work fulltest j:\\1.zpaq z:\\testme pippo -ssd");
-		scrivi_esempio("FRANZEN autotest", "work autotest");
-		scrivi_esempio("FRANZEN password", "work ispasswordok z:\\1.zpaq pippo");
-		scrivi_esempio("Manage VSS (shadow copy)", "work vss");
+	HE(246, "work", "Encrypt (experimental)", "work encode j:\\1.zpaq z:\\crip.cha pippo -ssd"),
+	HIT(246, 0xB8AE4443, "Cifra (sperimentale)"),
+	HRU(246, 0xB8AE4443, "Зашифровать (экспериментально)"),
+	HE(247, "work", "Test FRANZEN file", "work test z:\\crip.cha pippo -ssd"),
+	HIT(247, 0x17759299, "Prova un file FRANZEN"),
+	HRU(247, 0x17759299, "Проверить файл FRANZEN"),
+	HE(248, "work", "Encrypt fulltest", "work fulltest j:\\1.zpaq z:\\testme pippo -ssd"),
+	HIT(248, 0x40B7C37B, "Prova completa della cifratura"),
+	HRU(248, 0x40B7C37B, "Полный тест шифрования"),
+	HE(249, "work", "FRANZEN autotest", "work autotest"),
+	HIT(249, 0xB5514D52, "Autotest di FRANZEN"),
+	HRU(249, 0xB5514D52, "Самотест FRANZEN"),
+	HE(250, "work", "FRANZEN password", "work ispasswordok z:\\1.zpaq pippo"),
+	HIT(250, 0xDCBBA264, "Password FRANZEN"),
+	HRU(250, 0xDCBBA264, "Пароль FRANZEN"),
+	HE(251, "work", "Manage VSS (shadow copy)", "work vss"),
+	HIT(251, 0x9CBA21DE, "Gestisce VSS (copie shadow)"),
+	HRU(251, 0x9CBA21DE, "Управление VSS (теневые копии)"),
 #endif /// NOSFTPEND
-		scrivi_esempio("Compare global hash", "work compare2 1.txt 2.txt \"GLOBAL SHA256:\" \"hashme:\"");
-		scrivi_esempio("Compare file1 and file2", "work fc file1 file2");
+	HE(252, "work", "Compare global hash", "work compare2 1.txt 2.txt \"GLOBAL SHA256:\" \"hashme:\""),
+	HIT(252, 0x26371435, "Confronta l'hash globale"),
+	HRU(252, 0x26371435, "Сравнить общий хеш"),
+	HE(253, "work", "Compare file1 and file2", "work fc file1 file2"),
+	HIT(253, 0x35F60DB8, "Confronta file1 e file2"),
+	HRU(253, 0x35F60DB8, "Сравнить file1 и file2"),
 #ifndef NOEMAIL /// POSTAMI help_work examples
-		help_email(false, true);
+	HINCLUDI("work", 'e', "email", 'e'),
 #endif
-		scrivi_esempio("Zip a log (click to open)", "work zip z:\\backup.log z:\\backup.zip"); /// POSTAMI help_work zip example
-	}
-	return ("Run multiple commands");
-}
+	HE(254, "work", "Zip a log (click to open)", "work zip z:\\backup.log z:\\backup.zip"), /// POSTAMI help_work zip example
+	HIT(254, 0xC61D9513, "Zippa un log (si apre con un clic)"),
+	HRU(254, 0xC61D9513, "Упаковать журнал в zip (открывается щелчком)"),
+	HBREVE(255, "work", "Run multiple commands"),
+	HIT(255, 0xA5D20944, "Esegue piu' comandi"),
+	HRU(255, 0xA5D20944, "Выполнить несколько команд"),
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef SFTP
-string help_sftp(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD sftp", "Multiple commands (verb-noun) for SFTP servers");
-		scrivi_riga("noun  upload", "Upload a single file to SFTP");
-		scrivi_riga("noun  verify", "Quick compare local to remote file");
-		scrivi_riga("noun  quick ", "Get the QUICK hash of a remote file");
-		scrivi_riga("noun  ls    ", "List remote folder");
-		scrivi_riga("noun  delete", "Delete remote file");
-		scrivi_riga("noun  size  ", "Get size of remote file");
-		scrivi_riga("noun  rsync ", "Rsync-like local files to remote folder (-ssd)");
-		scrivi_riga(" ", "   -force: do NOT append");
-		scrivi_riga("noun  1on1  ", "Quick compare local files to remote folder (-ssd)");
-		scrivi_riga("noun  mkdir ", "Create a remote folder");
-		scrivi_riga("-host", "A  IPV4 hostname (ex. pippo.ciao.com)");
-		scrivi_riga("-user", "B  SFTP username (ex. thesftpuser)");
-		scrivi_riga("-password", "C  SFTP password (ex. thehardpwd)");
-		scrivi_riga("-port", "D  SFTP port     (ex. 22)");
-		scrivi_riga("-ssh", "E  SSH key       (ex. thekey)");
-		scrivi_riga("-bandwidth", "F  Limit global speed");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Upload a file", "sftp upload j:\\1.zpaq /tmp/bak         -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Verify a file", "sftp verify j:\\1.zpaq /tmp/bak/1.zpaq  -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("ls", "sftp ls     /tmp                       -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Delete a file", "sftp delete /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Get size", "sftp size   /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Get remote hash", "sftp quick  /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Multithread", "sftp quick  /tmp/remotefolder     -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Rsync", "sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("1on1", "sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		scrivi_esempio("Rsync w/limit", "sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
-		scrivi_esempio("ls", "sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
-		scrivi_esempio("Mkdir", "sftp mkdirl /home/franco/pippo         -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
-	}
-	return ("SFTP interface");
-}
-string help_ssh(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD ssh", "Multiple commands (verb-noun) for SSH servers");
-		scrivi_riga("libssh required", "Win64 auto-downloads DLLs to zpaqfranz folder");
+	/// sftp
+	HU(256, "sftp", "CMD sftp", "Multiple commands (verb-noun) for SFTP servers"),
+	HIT(256, 0x3D1755DA, "Piu' comandi (verbo-nome) per server SFTP"),
+	HRU(256, 0x3D1755DA, "Несколько команд (глагол-объект) для SFTP-серверов"),
+	HU(257, "sftp", "noun  upload", "Upload a single file to SFTP"),
+	HIT(257, 0x8070D137, "Carica un singolo file su SFTP"),
+	HRU(257, 0x8070D137, "Загрузить один файл на SFTP"),
+	HU(258, "sftp", "noun  verify", "Quick compare local to remote file"),
+	HIT(258, 0x3CC326C1, "Confronto rapido fra file locale e remoto"),
+	HRU(258, 0x3CC326C1, "Быстро сравнить локальный и удалённый файл"),
+	HU(259, "sftp", "noun  quick ", "Get the QUICK hash of a remote file"),
+	HIT(259, 0x7E6A1431, "L'hash QUICK di un file remoto"),
+	HRU(259, 0x7E6A1431, "Получить хеш QUICK удалённого файла"),
+	HU(260, "sftp", "noun  ls    ", "List remote folder"),
+	HIT(260, 0xE7EBFC3F, "Elenca una cartella remota"),
+	HRU(260, 0xE7EBFC3F, "Список удалённой папки"),
+	HU(261, "sftp", "noun  delete", "Delete remote file"),
+	HIT(261, 0x810348F2, "Cancella un file remoto"),
+	HRU(261, 0x810348F2, "Удалить удалённый файл"),
+	HU(262, "sftp", "noun  size  ", "Get size of remote file"),
+	HIT(262, 0xF16D0BD9, "Dimensione di un file remoto"),
+	HRU(262, 0xF16D0BD9, "Размер удалённого файла"),
+	HU(263, "sftp", "noun  rsync ", "Rsync-like local files to remote folder (-ssd)|   -force: do NOT append"),
+	HIT(263, 0x431BCB47, "File locali verso una cartella remota, stile rsync (-ssd)|   -force: NON accodare"),
+	HRU(263, 0x431BCB47, "Локальные файлы в удалённую папку в стиле rsync (-ssd)|   -force: НЕ дописывать"),
+	HU(264, "sftp", "noun  1on1  ", "Quick compare local files to remote folder (-ssd)"),
+	HIT(264, 0xFFF37E54, "Confronto rapido fra file locali e cartella remota (-ssd)"),
+	HRU(264, 0xFFF37E54, "Быстро сравнить локальные файлы с удалённой папкой (-ssd)"),
+	HU(265, "sftp", "noun  mkdir ", "Create a remote folder"),
+	HIT(265, 0x50C56618, "Crea una cartella remota"),
+	HRU(265, 0x50C56618, "Создать удалённую папку"),
+	HU(266, "sftp", "-host", "A  IPV4 hostname (ex. pippo.ciao.com)"),
+	HIT(266, 0x77FABFE9, "A  nome host IPV4 (es. pippo.ciao.com)"),
+	HRU(266, 0x77FABFE9, "A  имя хоста IPV4 (напр. pippo.ciao.com)"),
+	HU(267, "sftp", "-user", "B  SFTP username (ex. thesftpuser)"),
+	HIT(267, 0xAD650907, "B  utente SFTP (es. thesftpuser)"),
+	HRU(267, 0xAD650907, "B  пользователь SFTP (напр. thesftpuser)"),
+	HU(268, "sftp", "-password", "C  SFTP password (ex. thehardpwd)"),
+	HIT(268, 0xEFF4E9C9, "C  password SFTP (es. thehardpwd)"),
+	HRU(268, 0xEFF4E9C9, "C  пароль SFTP (напр. thehardpwd)"),
+	HU(269, "sftp", "-port", "D  SFTP port     (ex. 22)"),
+	HIT(269, 0x6A504419, "D  porta SFTP    (es. 22)"),
+	HRU(269, 0x6A504419, "D  порт SFTP     (напр. 22)"),
+	HU(270, "sftp", "-ssh", "E  SSH key       (ex. thekey)"),
+	HIT(270, 0x4A90C5D7, "E  chiave SSH    (es. thekey)"),
+	HRU(270, 0x4A90C5D7, "E  ключ SSH      (напр. thekey)"),
+	HU(271, "sftp", "-bandwidth", "F  Limit global speed"),
+	HIT(271, 0x25A1D040, "F  limite della velocita' globale"),
+	HRU(271, 0x25A1D040, "F  ограничение общей скорости"),
+	HESEMPI("sftp", 'b'),
+	HE(272, "sftp", "Upload a file", "sftp upload j:\\1.zpaq /tmp/bak         -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(272, 0x0D20CA7B, "Carica un file"),
+	HRU(272, 0x0D20CA7B, "Загрузить файл"),
+	HE(273, "sftp", "Verify a file", "sftp verify j:\\1.zpaq /tmp/bak/1.zpaq  -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(273, 0x6A94A0B3, "Verifica un file"),
+	HRU(273, 0x6A94A0B3, "Проверить файл"),
+	HE(0, "sftp", "ls", "sftp ls     /tmp                       -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HE(274, "sftp", "Delete a file", "sftp delete /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(274, 0x24453B09, "Cancella un file"),
+	HRU(274, 0x24453B09, "Удалить файл"),
+	HE(275, "sftp", "Get size", "sftp size   /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(275, 0xEC7BC50C, "Dimensione"),
+	HRU(275, 0xEC7BC50C, "Размер"),
+	HE(276, "sftp", "Get remote hash", "sftp quick  /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(276, 0x9A295265, "Hash remoto"),
+	HRU(276, 0x9A295265, "Удалённый хеш"),
+	HE(277, "sftp", "Multithread", "sftp quick  /tmp/remotefolder     -ssd -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HIT(277, 0x2868FDC6, "Multithread"),
+	HRU(277, 0x2868FDC6, "Многопоточно"),
+	HE(0, "sftp", "Rsync", "sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HE(0, "sftp", "1on1", "sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23"),
+	HE(278, "sftp", "Rsync w/limit", "sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m"),
+	HIT(278, 0x23E0080F, "Rsync con limite"),
+	HRU(278, 0x23E0080F, "Rsync с ограничением"),
+	HE(0, "sftp", "ls", "sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key "),
+	HE(0, "sftp", "Mkdir", "sftp mkdirl /home/franco/pippo         -host 1.2.3.4 -user k1 -ssh theopensshkey.key "),
+	HBREVE(279, "sftp", "SFTP interface"),
+	HIT(279, 0xD469E36B, "Interfaccia SFTP"),
+	HRU(279, 0xD469E36B, "Интерфейс SFTP"),
+	/// ssh
+	HU(280, "ssh", "CMD ssh", "Multiple commands (verb-noun) for SSH servers"),
+	HIT(280, 0xA119883F, "Piu' comandi (verbo-nome) per server SSH"),
+	HRU(280, 0xA119883F, "Несколько команд (глагол-объект) для SSH-серверов"),
+	HU(281, "ssh", "libssh required", "Win64 auto-downloads DLLs to zpaqfranz folder"),
+	HIT(281, 0xE4DA427D, "Win64 scarica da solo le DLL nella cartella di zpaqfranz"),
+	HRU(281, 0xE4DA427D, "Win64 сам скачивает DLL в папку zpaqfranz"),
 #ifdef _WIN64
-		scrivi_riga("noun  md5sum", "Compare local folder to remote, with md5");
-		scrivi_riga("noun  sha1sum", "Compare local folder to remote, with sha1");
-		scrivi_riga("noun  sha256sum", "Compare local folder to remote, with sha256");
+	HU(282, "ssh", "noun  md5sum", "Compare local folder to remote, with md5"),
+	HIT(282, 0x2EC3E554, "Confronta cartella locale e remota, con md5"),
+	HRU(282, 0x2EC3E554, "Сравнить локальную папку с удалённой по md5"),
+	HU(283, "ssh", "noun  sha1sum", "Compare local folder to remote, with sha1"),
+	HIT(283, 0xB1DC0AC5, "Confronta cartella locale e remota, con sha1"),
+	HRU(283, 0xB1DC0AC5, "Сравнить локальную папку с удалённой по sha1"),
+	HU(284, "ssh", "noun  sha256sum", "Compare local folder to remote, with sha256"),
+	HIT(284, 0xE7A76EF7, "Confronta cartella locale e remota, con sha256"),
+	HRU(284, 0xE7A76EF7, "Сравнить локальную папку с удалённой по sha256"),
 #endif
-		scrivi_riga("-host", "A  IPV4 hostname (ex. pippo.ciao.com)");
-		scrivi_riga("-user", "B  SSH username (ex. thesftpuser)");
-		scrivi_riga("-password", "C  SSH password (ex. thehardpwd)");
-		scrivi_riga("-port", "D  SSH port     (ex. 22)");
-		scrivi_riga("-ssh", "E  SSH key       (ex. thekey)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Compare with sha1", "ssh sha1sum d:\\bak -remote /pip -host 1.2.3.4 -user k1 -password pippo");
-		scrivi_esempio("Compare with wildcard", "ssh sha1sum d:\\bak\\*.txt -remote /pip/*.txt -host 1.2.3.4 -user k1 -password pippo");
-	}
-	return ("SSH interface");
-}
-
-string help_cloud(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		color_green();
-		moreprint("CMD   cloud              zpaqfranz-to-cloud-via-SFTP");
-		color_restore();
-		moreprint("");
-		color_cyan();
-		moreprint("SFTP REQUIRED:");
-		color_restore();
-		moreprint("+ : -host        A SFTP server hostname          (ex. backup.example.com)");
-		moreprint("+ : -user        B SFTP username                 (ex. backupuser)");
-		moreprint("+ : -remote      C Remote destination path       (ex. /home/backup/archives/)");
-		moreprint("");
-		color_cyan();
-		moreprint("SFTP AUTHENTICATION (choose one):");
-		color_restore();
-		moreprint("+ : -password    D SFTP password                 (ex. mySecretPass123)");
-		moreprint("+ : -ssh         E SSH private key               (ex. ~/.ssh/backup_key)");
-		moreprint("");
-		color_cyan();
-		moreprint("OPTIONAL SETTINGS:");
-		color_restore();
-		color_yellow();
-		moreprint("+ : -key           Enable encryption password    (**RECOMMENDED**)");
-		color_restore();
-		moreprint("                   Without a value it is asked   (twice for a new archive)");
-		moreprint("+ : -port        F SFTP port                     (ex. 23, default: 22)");
-		moreprint("+ : -bandwidth   G Limit global upload speed     (ex. 1000K)");
-		moreprint("+ : -stat          Always on in cloud            (accepted, not needed)");
-		moreprint("+ : -n             Names in the log, at most     (ex. 100, for each kind)");
-		moreprint("+ : -image         The image of ONE drive        (ex. c:)");
-		moreprint("                   It is 'a archive c: -image' as it is (-raw -novss -turbo...:");
-		moreprint("                   see h a), then all the rest. No list of files");
-		moreprint("                   Not an administrator: it asks (UAC), the work goes on in a new");
-		moreprint("                   elevated window, this one waits and ends with its exit code");
-		moreprint("+ : -noturbo       Plain add, one thread         (default: -turbo, as in a)");
-		moreprint("+ : -test          Test archive before upload    (time-consuming)");
-		moreprint("+ : -verify        Verify CRC-32 before upload");
-		moreprint("+ : -force         **OVERWRITE** remote archive  (DANGEROUS, needs captcha)");
-		moreprint("+ : -onlyupload    Continue upload only");
-		moreprint("+ : -md5deep       Run a full deep ssh test  (old but fast)");
-		moreprint("+ : -sha1deep      Run a full deep ssh test  (good)");
-		moreprint("+ : -sha256deep    Run a full deep ssh test  (paranoid)");
-		moreprint("");
-		color_yellow();
-		moreprint("PRIVACY RISK:");
-		color_restore();
-		moreprint("cloud ALWAYS lists the names of the changed files (as -stat does)");
-		moreprint("  -mailfull        carries the names: only for the owner of the data");
-		moreprint("  -mailprivacy     names => ***, totals and results only");
-		moreprint("                   The purge is best effort: never with -debug");
-		moreprint("");
-		color_cyan();
-		moreprint("EMAIL NOTIFICATIONS:");
-		color_restore();
-		moreprint("+ : -mailfull    H Full report e-mail            (ex. customer@gmail.com)");
-		moreprint("+ : -mailprivacy I Privacy report e-mail         (ex. provider@gmail.com)");
-		moreprint("+ : -mailconfig  J The ONE account that sends    (ex. c:\\zpaqfranz\\mail.conf)");
-		moreprint("+ : -customer    K Email subject text            (ex. myhomebackup)");
-		moreprint("                   Sent by zpaqfranz itself (SMTP+TLS): zpaqfranz h mailreport");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		moreprint("");
-		color_cyan();
-		moreprint("Basic automated backup, hardcoded key:");
-		color_restore();
-		moreprint("cloud u:\\backup.zpaq c:\\data\\*.cpp -host backup.company.com -user backupuser");
-		moreprint(" -password mySFTPpass123 -port 23456 -remote /home/backups/paqqa/ -key pippo");
-		moreprint("");
-
-		color_cyan();
-		moreprint("Secure verified SSH backup, key prompt:");
-		color_restore();
-		moreprint("cloud u:\\prod.zpaq c:\\server\\*.*  -host secure.example.com -user produser");
-		moreprint(" -ssh ~/.ssh/prod_key -remote /secure/backups/ -test -verify -bandwidth 1m -key");
-		moreprint("");
-
-		color_cyan();
-		moreprint("Full backup, two e-mails by ONE account (full: customer, filtered: provider):");
-		color_restore();
-		moreprint("cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23");
-		moreprint(" -ssh thekey -remote /home/p/z/ -test -verify -key -mailconfig c:\\zpaqfranz\\mail.conf");
-		moreprint(" -mailfull customer@user.com -mailprivacy provider@gmail.com -customer zcloud");
-		moreprint("");
-
-		color_cyan();
-		moreprint("The whole C: (image; it asks to be elevated), tested, to the cloud:");
-		color_restore();
-		moreprint("cloud u:\\c.zpaq c: -image -host theserver.something -user theuser -port 23");
-		moreprint(" -ssh thekey -remote /home/p/image/ -test -verify -key");
-		moreprint(" -mailconfig c:\\zpaqfranz\\mail.conf -mailfull customer@user.com");
-		moreprint("");
-
-		color_cyan();
-		moreprint("Resume upload only, no key asked:");
-		color_restore();
-		moreprint("cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23");
-		moreprint(" -ssh thekey -remote /home/p4/franz/ -onlyupload");
-		moreprint("");
-
-		color_cyan();
-		moreprint("E-mail reports (see zpaqfranz h mailreport):");
-		color_restore();
-		moreprint("  -mailfull     Detailed report with filenames        (ex.  personal backups)");
-		moreprint("  -mailprivacy  Filtered report with data totals only (ex. for third parties)");
-		moreprint("  -mailconfig   The account (a file) that sends them: ONE, for both");
-		moreprint("Scenario:   One mailbox sends: full log to the client (w/files), filtered to the admin");
-	}
-	return ("Upload .zpaq (via SFTP)");
-}
+	HU(285, "ssh", "-host", "A  IPV4 hostname (ex. pippo.ciao.com)"),
+	HIT(285, 0x77FABFE9, "A  nome host IPV4 (es. pippo.ciao.com)"),
+	HRU(285, 0x77FABFE9, "A  имя хоста IPV4 (напр. pippo.ciao.com)"),
+	HU(286, "ssh", "-user", "B  SSH username (ex. thesftpuser)"),
+	HIT(286, 0xB8AB5490, "B  utente SSH (es. thesftpuser)"),
+	HRU(286, 0xB8AB5490, "B  пользователь SSH (напр. thesftpuser)"),
+	HU(287, "ssh", "-password", "C  SSH password (ex. thehardpwd)"),
+	HIT(287, 0x4E8FE31E, "C  password SSH (es. thehardpwd)"),
+	HRU(287, 0x4E8FE31E, "C  пароль SSH (напр. thehardpwd)"),
+	HU(288, "ssh", "-port", "D  SSH port     (ex. 22)"),
+	HIT(288, 0x75E01AE0, "D  porta SSH     (es. 22)"),
+	HRU(288, 0x75E01AE0, "D  порт SSH      (напр. 22)"),
+	HU(289, "ssh", "-ssh", "E  SSH key       (ex. thekey)"),
+	HIT(289, 0x4A90C5D7, "E  chiave SSH    (es. thekey)"),
+	HRU(289, 0x4A90C5D7, "E  ключ SSH      (напр. thekey)"),
+	HESEMPI("ssh", 'b'),
+	HE(290, "ssh", "Compare with sha1", "ssh sha1sum d:\\bak -remote /pip -host 1.2.3.4 -user k1 -password pippo"),
+	HIT(290, 0x0D9DF081, "Confronta con sha1"),
+	HRU(290, 0x0D9DF081, "Сравнить по sha1"),
+	HE(291, "ssh", "Compare with wildcard", "ssh sha1sum d:\\bak\\*.txt -remote /pip/*.txt -host 1.2.3.4 -user k1 -password pippo"),
+	HIT(291, 0x6E5F0396, "Confronta con caratteri jolly"),
+	HRU(291, 0x6E5F0396, "Сравнить по шаблону"),
+	HBREVE(292, "ssh", "SSH interface"),
+	HIT(292, 0xCCDA39F2, "Interfaccia SSH"),
+	HRU(292, 0xCCDA39F2, "Интерфейс SSH"),
+	/// cloud
+	HTESTO(293, "cloud", 'u', 'g', "CMD   cloud              zpaqfranz-to-cloud-via-SFTP"),
+	HIT(293, 0xD24D910E, "CMD   cloud              zpaqfranz verso il cloud via SFTP"),
+	HRU(293, 0xD24D910E, "CMD   cloud              zpaqfranz в облако через SFTP"),
+	HTESTO(0, "cloud", 'u', 0, ""),
+	HTESTO(294, "cloud", 'u', 'c', "SFTP REQUIRED:"),
+	HIT(294, 0xD98A1931, "SFTP OBBLIGATORI:"),
+	HRU(294, 0xD98A1931, "SFTP ОБЯЗАТЕЛЬНО:"),
+	HTESTO(295, "cloud", 'u', 0, "+ : -host        A SFTP server hostname          (ex. backup.example.com)"),
+	HIT(295, 0x905A4420, "+ : -host        A nome host del server SFTP     (es. backup.example.com)"),
+	HRU(295, 0x905A4420, "+ : -host        A имя хоста SFTP-сервера        (напр. backup.example.com)"),
+	HTESTO(296, "cloud", 'u', 0, "+ : -user        B SFTP username                 (ex. backupuser)"),
+	HIT(296, 0x10A2C1C6, "+ : -user        B utente SFTP                   (es. backupuser)"),
+	HRU(296, 0x10A2C1C6, "+ : -user        B пользователь SFTP             (напр. backupuser)"),
+	HTESTO(297, "cloud", 'u', 0, "+ : -remote      C Remote destination path       (ex. /home/backup/archives/)"),
+	HIT(297, 0x6A7F7E0D, "+ : -remote      C percorso remoto di destinazione (es. /home/backup/archives/)"),
+	HRU(297, 0x6A7F7E0D, "+ : -remote      C удалённый путь назначения     (напр. /home/backup/archives/)"),
+	HTESTO(0, "cloud", 'u', 0, ""),
+	HTESTO(298, "cloud", 'u', 'c', "SFTP AUTHENTICATION (choose one):"),
+	HIT(298, 0xAB5B1F62, "AUTENTICAZIONE SFTP (scegline una):"),
+	HRU(298, 0xAB5B1F62, "АУТЕНТИФИКАЦИЯ SFTP (выберите одну):"),
+	HTESTO(299, "cloud", 'u', 0, "+ : -password    D SFTP password                 (ex. mySecretPass123)"),
+	HIT(299, 0xC5EB4993, "+ : -password    D password SFTP                 (es. mySecretPass123)"),
+	HRU(299, 0xC5EB4993, "+ : -password    D пароль SFTP                   (напр. mySecretPass123)"),
+	HTESTO(300, "cloud", 'u', 0, "+ : -ssh         E SSH private key               (ex. ~/.ssh/backup_key)"),
+	HIT(300, 0x033E4F7C, "+ : -ssh         E chiave privata SSH            (es. ~/.ssh/backup_key)"),
+	HRU(300, 0x033E4F7C, "+ : -ssh         E закрытый ключ SSH             (напр. ~/.ssh/backup_key)"),
+	HTESTO(0, "cloud", 'u', 0, ""),
+	HTESTO(301, "cloud", 'u', 'c', "OPTIONAL SETTINGS:"),
+	HIT(301, 0xA1D9F0B4, "IMPOSTAZIONI FACOLTATIVE:"),
+	HRU(301, 0xA1D9F0B4, "НЕОБЯЗАТЕЛЬНЫЕ НАСТРОЙКИ:"),
+	HTESTO(302, "cloud", 'u', 'y', "+ : -key           Enable encryption password    (**RECOMMENDED**)"),
+	HIT(302, 0x2F84DABF, "+ : -key           password di cifratura         (**CONSIGLIATA**)"),
+	HRU(302, 0x2F84DABF, "+ : -key           пароль шифрования             (**РЕКОМЕНДУЕТСЯ**)"),
+	HTESTO(303, "cloud", 'u', 0, "                   Without a value it is asked   (twice for a new archive)"),
+	HIT(303, 0x57672E3F, "                   Senza valore viene chiesta (due volte per un archivio nuovo)"),
+	HRU(303, 0x57672E3F, "                   Без значения запрашивается    (дважды для нового архива)"),
+	HTESTO(304, "cloud", 'u', 0, "+ : -port        F SFTP port                     (ex. 23, default: 22)"),
+	HIT(304, 0x83ADB24C, "+ : -port        F porta SFTP                    (es. 23, default: 22)"),
+	HRU(304, 0x83ADB24C, "+ : -port        F порт SFTP                     (напр. 23, по умолчанию: 22)"),
+	HTESTO(305, "cloud", 'u', 0, "+ : -bandwidth   G Limit global upload speed     (ex. 1000K)"),
+	HIT(305, 0x73166127, "+ : -bandwidth   G limite globale di upload      (es. 1000K)"),
+	HRU(305, 0x73166127, "+ : -bandwidth   G ограничение скорости выгрузки (напр. 1000K)"),
+	HTESTO(306, "cloud", 'u', 0, "+ : -stat          Always on in cloud            (accepted, not needed)"),
+	HIT(306, 0xB4B4B78F, "+ : -stat          Sempre attivo in cloud        (accettato, non serve)"),
+	HRU(306, 0xB4B4B78F, "+ : -stat          В cloud всегда включён        (принимается, не нужен)"),
+	HTESTO(307, "cloud", 'u', 0, "+ : -n             Names in the log, at most     (ex. 100, for each kind)"),
+	HIT(307, 0x0C2CDDE4, "+ : -n             Nomi nel log, al massimo      (es. 100, per ogni tipo)"),
+	HRU(307, 0x0C2CDDE4, "+ : -n             Имён в журнале, не более      (напр. 100, для каждого вида)"),
+	HTESTO(308, "cloud", 'u', 0, "+ : -image         The image of ONE drive        (ex. c:)"),
+	HIT(308, 0xF1BCFC2E, "+ : -image         L'immagine di UN'unita'       (es. c:)"),
+	HRU(308, 0xF1BCFC2E, "+ : -image         Образ ОДНОГО диска            (напр. c:)"),
+	HTESTO(309, "cloud", 'u', 0, "                   It is 'a archive c: -image' as it is (-raw -novss -turbo...:"),
+	HIT(309, 0x21A7EC99, "                   E' 'a archivio c: -image' cosi'|                     com'e' (-raw -novss -turbo...:"),
+	HRU(309, 0x21A7EC99, "                   Это 'a архив c: -image' как есть (-raw -novss -turbo...:"),
+	HTESTO(310, "cloud", 'u', 0, "                   see h a), then all the rest. No list of files"),
+	HIT(310, 0x3B654F04, "                   vedi h a), poi tutto il resto. Nessun elenco di file"),
+	HRU(310, 0x3B654F04, "                   см. h a), затем всё остальное. Без списка файлов"),
+	HTESTO(311, "cloud", 'u', 0, "                   Not an administrator: it asks (UAC), the work goes on in a new"),
+	HIT(311, 0x98D03BEE, "                   Non amministratore: chiede (UAC),|                     il lavoro prosegue in una nuova"),
+	HRU(311, 0x98D03BEE, "                   Не администратор: запрос (UAC), работа продолжается в новом"),
+	HTESTO(312, "cloud", 'u', 0, "                   elevated window, this one waits and ends with its exit code"),
+	HIT(312, 0x64DB3709, "                   finestra elevata, questa aspetta e|                     finisce col suo codice di uscita"),
+	HRU(312, 0x64DB3709, "                   окне с повышенными правами, это|                     ждёт и завершается с его кодом"),
+	HTESTO(313, "cloud", 'u', 0, "+ : -noturbo       Plain add, one thread         (default: -turbo, as in a)"),
+	HIT(313, 0x08659BBC, "+ : -noturbo       add semplice, un thread       (default: -turbo, come in a)"),
+	HRU(313, 0x08659BBC, "+ : -noturbo Обычный add, один поток (по умолчанию: -turbo, как в a)"),
+	HTESTO(314, "cloud", 'u', 0, "+ : -test          Test archive before upload    (time-consuming)"),
+	HIT(314, 0xC0826D5D, "+ : -test          Prova l'archivio prima dell'upload (richiede tempo)"),
+	HRU(314, 0xC0826D5D, "+ : -test          Проверить архив перед выгрузкой (занимает время)"),
+	HTESTO(315, "cloud", 'u', 0, "+ : -verify        Verify CRC-32 before upload"),
+	HIT(315, 0x51A55801, "+ : -verify        Verifica i CRC-32 prima dell'upload"),
+	HRU(315, 0x51A55801, "+ : -verify        Проверить CRC-32 перед выгрузкой"),
+	HTESTO(316, "cloud", 'u', 0, "+ : -force         **OVERWRITE** remote archive  (DANGEROUS, needs captcha)"),
+	HIT(316, 0x4E713763, "+ : -force **SOVRASCRIVE** l'archivio remoto (PERICOLOSO, serve il captcha)"),
+	HRU(316, 0x4E713763, "+ : -force         **ПЕРЕЗАПИСАТЬ** удалённый архив (ОПАСНО, нужна капча)"),
+	HTESTO(317, "cloud", 'u', 0, "+ : -onlyupload    Continue upload only"),
+	HIT(317, 0x1F984C28, "+ : -onlyupload    Continua solo l'upload"),
+	HRU(317, 0x1F984C28, "+ : -onlyupload    Только продолжить выгрузку"),
+	HTESTO(318, "cloud", 'u', 0, "+ : -md5deep       Run a full deep ssh test  (old but fast)"),
+	HIT(318, 0x9CEC4B3D, "+ : -md5deep       Prova completa profonda via ssh (vecchio ma veloce)"),
+	HRU(318, 0x9CEC4B3D, "+ : -md5deep       Полная глубокая проверка по ssh (старый, но быстрый)"),
+	HTESTO(319, "cloud", 'u', 0, "+ : -sha1deep      Run a full deep ssh test  (good)"),
+	HIT(319, 0x816EEB67, "+ : -sha1deep      Prova completa profonda via ssh (buono)"),
+	HRU(319, 0x816EEB67, "+ : -sha1deep      Полная глубокая проверка по ssh (хороший)"),
+	HTESTO(320, "cloud", 'u', 0, "+ : -sha256deep    Run a full deep ssh test  (paranoid)"),
+	HIT(320, 0x8EE3AD5A, "+ : -sha256deep    Prova completa profonda via ssh (paranoico)"),
+	HRU(320, 0x8EE3AD5A, "+ : -sha256deep    Полная глубокая проверка по ssh (параноидальный)"),
+	HTESTO(0, "cloud", 'u', 0, ""),
+	HTESTO(321, "cloud", 'u', 'y', "PRIVACY RISK:"),
+	HIT(321, 0x27DD1370, "RISCHIO PER LA PRIVACY:"),
+	HRU(321, 0x27DD1370, "РИСК ДЛЯ КОНФИДЕНЦИАЛЬНОСТИ:"),
+	HTESTO(322, "cloud", 'u', 0, "cloud ALWAYS lists the names of the changed files (as -stat does)"),
+	HIT(322, 0x51780A93, "cloud elenca SEMPRE i nomi dei file cambiati (come fa -stat)"),
+	HRU(322, 0x51780A93, "cloud ВСЕГДА выводит имена изменённых файлов (как -stat)"),
+	HTESTO(323, "cloud", 'u', 0, "  -mailfull        carries the names: only for the owner of the data"),
+	HIT(323, 0x84025A53, "  -mailfull        porta i nomi: solo per il proprietario dei dati"),
+	HRU(323, 0x84025A53, "  -mailfull        содержит имена: только для владельца данных"),
+	HTESTO(324, "cloud", 'u', 0, "  -mailprivacy     names => ***, totals and results only"),
+	HIT(324, 0xBA0F162C, "  -mailprivacy     nomi => ***, solo totali ed esiti"),
+	HRU(324, 0xBA0F162C, "  -mailprivacy     имена => ***, только итоги и результаты"),
+	HTESTO(325, "cloud", 'u', 0, "                   The purge is best effort: never with -debug"),
+	HIT(325, 0xD9C2EC9B, "                   La pulizia e' fatta al meglio: mai con -debug"),
+	HRU(325, 0xD9C2EC9B, "                   Очистка делается по возможности: никогда с -debug"),
+	HTESTO(0, "cloud", 'u', 0, ""),
+	HTESTO(326, "cloud", 'u', 'c', "EMAIL NOTIFICATIONS:"),
+	HIT(326, 0x8633302F, "NOTIFICHE E-MAIL:"),
+	HRU(326, 0x8633302F, "УВЕДОМЛЕНИЯ ПО E-MAIL:"),
+	HTESTO(327, "cloud", 'u', 0, "+ : -mailfull    H Full report e-mail            (ex. customer@gmail.com)"),
+	HIT(327, 0x27126362, "+ : -mailfull    H e-mail col report completo    (es. customer@gmail.com)"),
+	HRU(327, 0x27126362, "+ : -mailfull    H e-mail с полным отчётом       (напр. customer@gmail.com)"),
+	HTESTO(328, "cloud", 'u', 0, "+ : -mailprivacy I Privacy report e-mail         (ex. provider@gmail.com)"),
+	HIT(328, 0xAF53F26E, "+ : -mailprivacy I e-mail col report privacy     (es. provider@gmail.com)"),
+	HRU(328, 0xAF53F26E, "+ : -mailprivacy I e-mail с приватным отчётом    (напр. provider@gmail.com)"),
+	HTESTO(329, "cloud", 'u', 0, "+ : -mailconfig  J The ONE account that sends    (ex. c:\\zpaqfranz\\mail.conf)"),
+	HIT(329, 0x5F464825, "+ : -mailconfig  J L'UNICO account che manda     (es. c:\\zpaqfranz\\mail.conf)"),
+	HRU(329, 0x5F464825, "+ : -mailconfig  J ЕДИНСТВЕННЫЙ отправитель      (напр. c:\\zpaqfranz\\mail.conf)"),
+	HTESTO(330, "cloud", 'u', 0, "+ : -customer    K Email subject text            (ex. myhomebackup)"),
+	HIT(330, 0xC617CCE0, "+ : -customer    K testo dell'oggetto            (es. myhomebackup)"),
+	HRU(330, 0xC617CCE0, "+ : -customer    K текст темы письма             (напр. myhomebackup)"),
+	HTESTO(331, "cloud", 'u', 0, "                   Sent by zpaqfranz itself (SMTP+TLS): zpaqfranz h mailreport"),
+	HIT(331, 0x269843EF, "                   Mandata da zpaqfranz stesso|                     (SMTP+TLS): zpaqfranz h mailreport"),
+	HRU(331, 0x269843EF, "                   Отправляет сам zpaqfranz (SMTP+TLS): zpaqfranz h mailreport"),
+	HESEMPI("cloud", 'b'),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(332, "cloud", 'e', 'c', "Basic automated backup, hardcoded key:"),
+	HIT(332, 0x450C294C, "Backup automatico di base, chiave scritta nel comando:"),
+	HRU(332, 0x450C294C, "Простой автоматический backup, ключ в команде:"),
+	HTESTO(0, "cloud", 'e', 0, "cloud u:\\backup.zpaq c:\\data\\*.cpp -host backup.company.com -user backupuser"),
+	HTESTO(0, "cloud", 'e', 0, " -password mySFTPpass123 -port 23456 -remote /home/backups/paqqa/ -key pippo"),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(333, "cloud", 'e', 'c', "Secure verified SSH backup, key prompt:"),
+	HIT(333, 0x7F901723, "Backup SSH sicuro e verificato, la chiave viene chiesta:"),
+	HRU(333, 0x7F901723, "Надёжный проверенный backup через SSH, ключ запрашивается:"),
+	HTESTO(0, "cloud", 'e', 0, "cloud u:\\prod.zpaq c:\\server\\*.*  -host secure.example.com -user produser"),
+	HTESTO(0, "cloud", 'e', 0, " -ssh ~/.ssh/prod_key -remote /secure/backups/ -test -verify -bandwidth 1m -key"),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(334, "cloud", 'e', 'c', "Full backup, two e-mails by ONE account (full: customer, filtered: provider):"),
+	HIT(334, 0xB3EE39A0, "Backup completo, due e-mail da UN account|  (completa: cliente, filtrata: fornitore):"),
+	HRU(334, 0xB3EE39A0, "Полный backup, два письма с ОДНОЙ учётной|  записи (полное: клиенту, фильтр: поставщику):"),
+	HTESTO(0, "cloud", 'e', 0, "cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23"),
+	HTESTO(0, "cloud", 'e', 0, " -ssh thekey -remote /home/p/z/ -test -verify -key -mailconfig c:\\zpaqfranz\\mail.conf"),
+	HTESTO(0, "cloud", 'e', 0, " -mailfull customer@user.com -mailprivacy provider@gmail.com -customer zcloud"),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(335, "cloud", 'e', 'c', "The whole C: (image; it asks to be elevated), tested, to the cloud:"),
+	HIT(335, 0x928CDCF4, "Tutto C: (immagine; chiede di essere elevato), provato, nel cloud:"),
+	HRU(335, 0x928CDCF4, "Весь C: (образ; запрашивает повышение прав), проверенный, в облако:"),
+	HTESTO(0, "cloud", 'e', 0, "cloud u:\\c.zpaq c: -image -host theserver.something -user theuser -port 23"),
+	HTESTO(0, "cloud", 'e', 0, " -ssh thekey -remote /home/p/image/ -test -verify -key"),
+	HTESTO(0, "cloud", 'e', 0, " -mailconfig c:\\zpaqfranz\\mail.conf -mailfull customer@user.com"),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(336, "cloud", 'e', 'c', "Resume upload only, no key asked:"),
+	HIT(336, 0x7C3B119F, "Riprende solo l'upload, nessuna chiave chiesta:"),
+	HRU(336, 0x7C3B119F, "Только продолжить выгрузку, ключ не запрашивается:"),
+	HTESTO(0, "cloud", 'e', 0, "cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23"),
+	HTESTO(0, "cloud", 'e', 0, " -ssh thekey -remote /home/p4/franz/ -onlyupload"),
+	HTESTO(0, "cloud", 'e', 0, ""),
+	HTESTO(337, "cloud", 'e', 'c', "E-mail reports (see zpaqfranz h mailreport):"),
+	HIT(337, 0x837D9525, "Report per e-mail (vedi zpaqfranz h mailreport):"),
+	HRU(337, 0x837D9525, "Отчёты по e-mail (см. zpaqfranz h mailreport):"),
+	HTESTO(338, "cloud", 'e', 0, "  -mailfull     Detailed report with filenames        (ex.  personal backups)"),
+	HIT(338, 0x5DD9F7D7, "  -mailfull     Report dettagliato coi nomi dei file  (es.  backup personali)"),
+	HRU(338, 0x5DD9F7D7, "  -mailfull     Подробный отчёт с именами файлов      (напр. личные backup)"),
+	HTESTO(339, "cloud", 'e', 0, "  -mailprivacy  Filtered report with data totals only (ex. for third parties)"),
+	HIT(339, 0x527964A9, "  -mailprivacy  Report filtrato, solo i totali        (es. per terze parti)"),
+	HRU(339, 0x527964A9, "  -mailprivacy  Отчёт только с итогами                (напр. для третьих лиц)"),
+	HTESTO(340, "cloud", 'e', 0, "  -mailconfig   The account (a file) that sends them: ONE, for both"),
+	HIT(340, 0x7E9F4D4F, "  -mailconfig   L'account (un file) che li manda: UNO, per entrambi"),
+	HRU(340, 0x7E9F4D4F, "  -mailconfig   Учётная запись (файл), которая их отправляет: ОДНА на оба"),
+	HTESTO(341, "cloud", 'e', 0, "Scenario:   One mailbox sends: full log to the client (w/files), filtered to the admin"),
+	HIT(341, 0xCA40E74C, "Scenario: Una casella manda: log completo al|  cliente (coi file), filtrato all'amministratore"),
+	HRU(341, 0xCA40E74C, "Сценарий: Один ящик отправляет: полный журнал|  клиенту (с файлами), фильтр администратору"),
+	HBREVE(342, "cloud", "Upload .zpaq (via SFTP)"),
+	HIT(342, 0xF149BE42, "Upload di un .zpaq (via SFTP)"),
+	HRU(342, 0xF149BE42, "Выгрузка .zpaq (через SFTP)"),
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #endif /// NOSFTPEND
-string help_comparehex(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD comparehex", "Compare HEX substs from two files");
-		scrivi_riga("First file  ", "Name of first  text file");
-		scrivi_riga("Second file ", "Name of second text file");
-		scrivi_riga("Haystack    ", "The string to be searched");
-		scrivi_riga("Expected len", "Size of the hash");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Quick check local backup", "comparehex z:\\1.txt z:\\2.txt \"GLOBAL SHA256:\" 64");
-	}
-	return ("Compare hex substrings in two files");
-}
-string help_count(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD count", "Count strings inside files (just like grep)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("I expect 3 all OK in logfiles", "count z:\\*.txt 3 \"all OK\"");
-		scrivi_esempio("I expect 10 BIG OK in logfiles", "count z:\\*.txt 10");
-	}
-	return ("Count substrings in file(s)");
-}
-
-string help_consolidatebackup(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD consolidate", "Merge multipart-managed backup in one");
-		scrivi_riga(" ", "or convert a standard .zpaq to backup");
-		scrivi_riga("-to", "something New backup file");
-		scrivi_riga("-destination X", "Copy-rename to X");
-		scrivi_riga("-recover", "Rebuild backup's metafile");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Convert archive to backup", "consolidate z:\\foo.zpaq -to k:\\newbackup -key pippo");
-		scrivi_esempio("Rename a backup", "consolidate z:\\oldname -destination z:\\newname");
-		scrivi_esempio("Copy-Rename a backup", "consolidate z:\\oldname -destination j:\\output\\newname");
-		scrivi_esempio("Rebuild .index and .txt", "consolidate z:\\uno -xxh3 -force -recover");
-	}
-	return ("Manage multipart backup");
-}
-
+	/// comparehex
+	HU(343, "comparehex", "CMD comparehex", "Compare HEX substs from two files"),
+	HIT(343, 0x6B3B35A2, "Confronta sottostringhe HEX di due file"),
+	HRU(343, 0x6B3B35A2, "Сравнить HEX-подстроки двух файлов"),
+	HU(344, "comparehex", "First file  ", "Name of first  text file"),
+	HIT(344, 0x6C1DED3C, "Nome del primo   file di testo"),
+	HRU(344, 0x6C1DED3C, "Имя первого текстового файла"),
+	HU(345, "comparehex", "Second file ", "Name of second text file"),
+	HIT(345, 0x8C06499A, "Nome del secondo file di testo"),
+	HRU(345, 0x8C06499A, "Имя второго текстового файла"),
+	HU(346, "comparehex", "Haystack    ", "The string to be searched"),
+	HIT(346, 0x9B9B426C, "La stringa da cercare"),
+	HRU(346, 0x9B9B426C, "Искомая строка"),
+	HU(347, "comparehex", "Expected len", "Size of the hash"),
+	HIT(347, 0x6921A3F2, "Dimensione dell'hash"),
+	HRU(347, 0x6921A3F2, "Размер хеша"),
+	HESEMPI("comparehex", 'b'),
+	HE(348, "comparehex", "Quick check local backup", "comparehex z:\\1.txt z:\\2.txt \"GLOBAL SHA256:\" 64"),
+	HIT(348, 0x74CF5497, "Controllo rapido di un backup locale"),
+	HRU(348, 0x74CF5497, "Быстрая проверка локального backup"),
+	HBREVE(349, "comparehex", "Compare hex substrings in two files"),
+	HIT(349, 0xBF7E790B, "Confronta sottostringhe esadecimali in due file"),
+	HRU(349, 0xBF7E790B, "Сравнить шестнадцатеричные подстроки в двух файлах"),
+	/// count
+	HU(350, "count", "CMD count", "Count strings inside files (just like grep)"),
+	HIT(350, 0x2AEEAE0D, "Conta stringhe dentro i file (come grep)"),
+	HRU(350, 0x2AEEAE0D, "Подсчитать строки в файлах (как grep)"),
+	HESEMPI("count", 'b'),
+	HE(351, "count", "I expect 3 all OK in logfiles", "count z:\\*.txt 3 \"all OK\""),
+	HIT(351, 0xC8FEC3AF, "Mi aspetto 3 all OK nei log"),
+	HRU(351, 0xC8FEC3AF, "Ожидаю 3 all OK в журналах"),
+	HE(352, "count", "I expect 10 BIG OK in logfiles", "count z:\\*.txt 10"),
+	HIT(352, 0x56AE740E, "Mi aspetto 10 BIG OK nei log"),
+	HRU(352, 0x56AE740E, "Ожидаю 10 BIG OK в журналах"),
+	HBREVE(353, "count", "Count substrings in file(s)"),
+	HIT(353, 0x9BBF1E21, "Conta sottostringhe nei file"),
+	HRU(353, 0x9BBF1E21, "Подсчёт подстрок в файлах"),
+	/// consolidatebackup
+	HU(354, "consolidatebackup", "CMD consolidate", "Merge multipart-managed backup in one|or convert a standard .zpaq to backup"),
+	HIT(354, 0x395D282B, "Unisce un backup multiparte gestito in uno solo|oppure converte un .zpaq normale in backup"),
+	HRU(354, 0x395D282B, "Объединить управляемый многотомный backup в один|или преобразовать обычный .zpaq в backup"),
+	HU(355, "consolidatebackup", "-to", "something New backup file"),
+	HIT(355, 0xF0F631B9, "something Nuovo file di backup"),
+	HRU(355, 0xF0F631B9, "something Новый файл backup"),
+	HU(356, "consolidatebackup", "-destination X", "Copy-rename to X"),
+	HIT(356, 0x52B38F06, "Copia-rinomina in X"),
+	HRU(356, 0x52B38F06, "Копировать-переименовать в X"),
+	HU(357, "consolidatebackup", "-recover", "Rebuild backup's metafile"),
+	HIT(357, 0x9954765B, "Ricostruisce il metafile del backup"),
+	HRU(357, 0x9954765B, "Перестроить метафайл backup"),
+	HESEMPI("consolidatebackup", 'b'),
+	HE(358, "consolidatebackup", "Convert archive to backup", "consolidate z:\\foo.zpaq -to k:\\newbackup -key pippo"),
+	HIT(358, 0x6BCD95FF, "Converte un archivio in backup"),
+	HRU(358, 0x6BCD95FF, "Преобразовать архив в backup"),
+	HE(359, "consolidatebackup", "Rename a backup", "consolidate z:\\oldname -destination z:\\newname"),
+	HIT(359, 0x301B1386, "Rinomina un backup"),
+	HRU(359, 0x301B1386, "Переименовать backup"),
+	HE(360, "consolidatebackup", "Copy-Rename a backup", "consolidate z:\\oldname -destination j:\\output\\newname"),
+	HIT(360, 0xD91B2564, "Copia-rinomina un backup"),
+	HRU(360, 0xD91B2564, "Копировать-переименовать backup"),
+	HE(361, "consolidatebackup", "Rebuild .index and .txt", "consolidate z:\\uno -xxh3 -force -recover"),
+	HIT(361, 0xCB547D77, "Ricostruisce .index e .txt"),
+	HRU(361, 0xCB547D77, "Перестроить .index и .txt"),
+	HBREVE(362, "consolidatebackup", "Manage multipart backup"),
+	HIT(362, 0x53E8E5AC, "Gestisce un backup multiparte"),
+	HRU(362, 0x53E8E5AC, "Управление многотомным backup"),
 #ifdef ZPAQMOUNT ///NOSFTPSTART
-/// lo spiegone, ancora da mettere a punto
-string help_mount(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD mount", "Mount an archive read-only (FUSE / WinFsp): the LAST version");
-		scrivi_riga(" ", "The mountpoint IS that version: its files and folders are right there");
-		scrivi_riga(" ", "With -all every version becomes a top level folder instead:");
-		scrivi_riga(" ", "mountpoint/VER00000000 = state after the 1st add, VER00000001 after");
-		scrivi_riga(" ", "the 2nd, and so on (cumulative state, a snapshot, not a diff)");
-		scrivi_riga(" ", "Windows: mountpoint is a drive letter (Z:) or a not-yet-existing folder;");
-		scrivi_riga(" ", "         omit it to get the first free letter and an Explorer window");
-		scrivi_riga(" ", "Unix: mountpoint is an empty directory; stays in foreground, Ctrl+C unmounts");
-		scrivi_riga(" ", "macOS: needs FUSE-T (no kernel extension) or macFUSE installed;");
-		scrivi_riga(" ", "       omit the mountpoint and one is made (/Volumes if root, else the");
-		scrivi_riga(" ", "       temp folder), the Finder opens on it, removed when unmounted");
-		scrivi_riga("-all", "Mount every version (VER00000000, VER00000001 ...), not just the last");
-		scrivi_riga(" ", "  slower to mount: one directory tree has to be built per version");
-		scrivi_riga("-until N", "Version N (or a date) becomes the last one, and that is what is");
-		scrivi_riga(" ", "  mounted; with -all, the versions after N are not shown either");
-		scrivi_riga("-range A:B", "Versions A..B only, one folder each, holding ONLY the files that");
-		scrivi_riga(" ", "  version added or updated (a diff, as l/x -range: not a snapshot)");
-		scrivi_riga("-threads N", "Threads for read-ahead/decompression (default: 4)");
-		scrivi_riga("-backend X", "Engine: auto (default) | jidac");
-		scrivi_riga(" ", "  jidac: native zpaqfranz I/O, reads -key (AES-256) and Franzen archives");
-		scrivi_riga(" ", "  auto : the very same: jidac is the only engine left");
-		/// the 'core' mmap engine is commented out (franzmount, Backend "core" (DISABLED))
-		///	scrivi_riga(" ", "  core : self-contained mmap scanner, plain (unencrypted) archives only");
-		scrivi_riga("-fuseopt a,b", "Extra options passed to FUSE/WinFsp as -o a,b");
-		scrivi_riga(" ", "  Windows: VolumePrefix=\\zpaqfuse\\name (network drive, tames the AV),");
-		scrivi_riga(" ", "  FileSystemName=NTFS (run .exe from the mount)");
-		scrivi_riga(" ", "  macOS: volname=Name (shown by the Finder; default: the archive name)");
-		scrivi_riga("-noeta", "No progress line while the index is being scanned");
-		scrivi_riga("-test", "Mount, check every file THROUGH the mountpoint, unmount:");
-		scrivi_riga(" ", "  size, date, stored hash, random-offset reads; exit code 0 if OK");
-		scrivi_riga(" ", "  (the list comes from the index read as x does, not from the mount)");
-		scrivi_riga("-debug", "Also enable FUSE/WinFsp debug output (-d)");
+	/// lo spiegone, ancora da mettere a punto
+	/// mount
+	HU(363, "mount", "CMD mount", "Mount an archive read-only (FUSE / WinFsp): the LAST version|The mountpoint IS that version: its files and folders are right there|With -all every version becomes a top level folder instead:|mountpoint/VER00000000 = state after the 1st add, VER00000001 after|the 2nd, and so on (cumulative state, a snapshot, not a diff)|Windows: mountpoint is a drive letter (Z:) or a not-yet-existing folder;|         omit it to get the first free letter and an Explorer window|Unix: mountpoint is an empty directory; stays in foreground, Ctrl+C unmounts|macOS: needs FUSE-T (no kernel extension) or macFUSE installed;|       omit the mountpoint and one is made (/Volumes if root, else the|       temp folder), the Finder opens on it, removed when unmounted"),
+	HIT(363, 0x3C952EEC, "Monta un archivio in sola lettura (FUSE / WinFsp): l'ULTIMA versione|Il punto di mount E' quella versione: i suoi file e cartelle sono li'|Con -all invece ogni versione diventa una cartella di primo livello:|mountpoint/VER00000000 = lo stato dopo il 1o add, VER00000001 dopo|il 2o, e cosi' via (stato cumulativo, uno snapshot, non una differenza)|Windows: il punto di mount e' una lettera (Z:) o una|         cartella che non esiste ancora; senza, prende|         la prima lettera libera e apre Esplora risorse|Unix: il punto di mount e' una cartella vuota; resta in primo|piano, Ctrl+C smonta macOS: serve FUSE-T (senza estensioni|del kernel) o macFUSE installato; senza punto di mount ne|viene creato uno (/Volumes se root, altrimenti la cartella|temporanea), il Finder lo apre, tolto quando si smonta"),
+	HRU(363, 0x3C952EEC, "Смонтировать архив только для чтения (FUSE / WinFsp): ПОСЛЕДНЯЯ версия|Точка монтирования И ЕСТЬ эта версия: её файлы и папки прямо там|С -all каждая версия становится папкой верхнего уровня:|mountpoint/VER00000000 = состояние после 1-го add, VER00000001 после|2-го и т.д. (накопленное состояние, снимок, а не разница)|Windows: точка монтирования - буква диска (Z:) или ещё|         не существующая папка; без неё берётся первая|         свободная буква и открывается Проводник|Unix: точка монтирования - пустая папка; работает на переднем плане, Ctrl+C|размонтирует macOS: нужен FUSE-T (без расширения ядра) или установленный|macFUSE; без точки монтирования она создаётся (/Volumes для root, иначе|временная папка), открывается Finder, удаляется при размонтировании"),
+	HU(364, "mount", "-all", "Mount every version (VER00000000, VER00000001 ...), not just the last|  slower to mount: one directory tree has to be built per version"),
+	HIT(364, 0xCEAF7A4D, "Monta ogni versione (VER00000000, VER00000001|  ...), non solo l'ultima piu' lento da montare:|  va costruito un albero di cartelle per versione"),
+	HRU(364, 0xCEAF7A4D, "Смонтировать все версии (VER00000000, VER00000001|  ...), а не только последнюю монтируется медленнее:|  дерево папок строится для каждой версии"),
+	HU(365, "mount", "-until N", "Version N (or a date) becomes the last one, and that is what is|  mounted; with -all, the versions after N are not shown either"),
+	HIT(365, 0x6AB74857, "La versione N (o una data) diventa l'ultima,|  ed e' quella che viene montata; con -all,|  anche le versioni dopo N non si vedono"),
+	HRU(365, 0x6AB74857, "Версия N (или дата) становится последней, и именно она|  монтируется; с -all версии после N тоже не показываются"),
+	HU(366, "mount", "-range A:B", "Versions A..B only, one folder each, holding ONLY the files that|  version added or updated (a diff, as l/x -range: not a snapshot)"),
+	HIT(366, 0x9CF4BB1A, "Solo le versioni A..B, una cartella ciascuna, con SOLO|  i file che quella versione ha aggiunto o aggiornato|  (una differenza, come l/x -range: non uno snapshot)"),
+	HRU(366, 0x9CF4BB1A, "Только версии A..B, по папке на каждую, ТОЛЬКО|  с файлами, которые эта версия добавила или|  обновила (разница, как l/x -range: не снимок)"),
+	HU(367, "mount", "-threads N", "Threads for read-ahead/decompression (default: 4)"),
+	HIT(367, 0x159D1E69, "Thread per lettura anticipata/decompressione (default: 4)"),
+	HRU(367, 0x159D1E69, "Потоки упреждающего чтения/распаковки (по умолчанию: 4)"),
+	HU(368, "mount", "-backend X", "Engine: auto (default) || jidac|  jidac: native zpaqfranz I/O, reads -key (AES-256) and Franzen archives|  auto : the very same: jidac is the only engine left"),
+	HIT(368, 0xA1580427, "Motore: auto (default) || jidac|  jidac: I/O nativo di zpaqfranz, legge archivi -key (AES-256) e Franzen|  auto : la stessa cosa: jidac e' l'unico motore rimasto"),
+	HRU(368, 0xA1580427, "Движок: auto (по умолчанию) || jidac jidac: собственный|  ввод-вывод zpaqfranz, читает архивы -key (AES-256) и Franzen|  auto : то же самое: jidac - единственный оставшийся движок"),
+	/// the 'core' mmap engine is commented out (franzmount, Backend "core" (DISABLED))
+	///	scrivi_riga(" ", "  core : self-contained mmap scanner, plain (unencrypted) archives only");
+	HU(369, "mount", "-fuseopt a,b", "Extra options passed to FUSE/WinFsp as -o a,b|  Windows: VolumePrefix=\\zpaqfuse\\name (network drive, tames the AV),|  FileSystemName=NTFS (run .exe from the mount)|  macOS: volname=Name (shown by the Finder; default: the archive name)"),
+	HIT(369, 0x3F3DAD20, "Opzioni in piu' passate a FUSE/WinFsp come -o a,b|  Windows: VolumePrefix=\\zpaqfuse\\name|  (unita' di rete, calma l'antivirus),|  FileSystemName=NTFS (esegue .exe dal mount) macOS: volname=Nome|  (mostrato dal Finder; default: il nome dell'archivio)"),
+	HRU(369, 0x3F3DAD20, "Дополнительные опции для FUSE/WinFsp в виде -o a,b|  Windows: VolumePrefix=\\zpaqfuse\\name|  (сетевой диск, успокаивает антивирус),|  FileSystemName=NTFS (запуск .exe из точки монтирования)|  macOS: volname=Имя (показывается в Finder; по умолчанию: имя архива)"),
+	HU(370, "mount", "-noeta", "No progress line while the index is being scanned"),
+	HIT(370, 0xE2ADFA92, "Nessuna riga di avanzamento mentre si legge l'indice"),
+	HRU(370, 0xE2ADFA92, "Без строки прогресса во время чтения индекса"),
+	HU(371, "mount", "-test", "Mount, check every file THROUGH the mountpoint, unmount:|  size, date, stored hash, random-offset reads; exit code 0 if OK|  (the list comes from the index read as x does, not from the mount)"),
+	HIT(371, 0x8D73A521, "Monta, controlla ogni file ATTRAVERSO il punto di mount,|  smonta: dimensione, data, hash salvato, letture a|  offset casuali; codice di uscita 0 se OK (l'elenco|  viene dall'indice letto come fa x, non dal mount)"),
+	HRU(371, 0x8D73A521, "Смонтировать, проверить каждый файл ЧЕРЕЗ точку монтирования,|  размонтировать: размер, дата, сохранённый хеш, чтение со|  случайных смещений; код выхода 0 если OK (список берётся из|  индекса, прочитанного как в x, а не из точки монтирования)"),
+	HU(372, "mount", "-debug", "Also enable FUSE/WinFsp debug output (-d)"),
+	HIT(372, 0x35714FB4, "Attiva anche l'output di debug di FUSE/WinFsp (-d)"),
+	HRU(372, 0x35714FB4, "Включить также отладочный вывод FUSE/WinFsp (-d)"),
 #ifdef _WIN32
-		scrivi_riga(" ", "Windows: a .vhd .vhdx .iso is attached by Windows itself, READ-ONLY (no WinFsp):");
-		scrivi_riga(" ", "  mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated");
-		scrivi_riga(" ", "  window; a key or Ctrl+C unmounts; -test: attach, read every root, detach");
+	HU(373, "mount", " ", "Windows: a .vhd .vhdx .iso is attached by Windows itself, READ-ONLY (no WinFsp):"),
+	HIT(373, 0x207D6BA1, "Windows: un .vhd .vhdx .iso lo collega Windows|  stesso, in SOLA LETTURA (niente WinFsp):"),
+	HRU(373, 0x207D6BA1, "Windows: .vhd .vhdx .iso подключает сама|  Windows, ТОЛЬКО ДЛЯ ЧТЕНИЯ (без WinFsp):"),
+	HU(374, "mount", " ", "  mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated"),
+	HIT(374, 0xE25F7284, "  punto di mount = una lettera (o quella che|    da' Windows); non amministratore: una nuova"),
+	HRU(374, 0xE25F7284, "  точка монтирования = буква диска (или та,|    что даст Windows); не администратор: новое"),
+	HU(375, "mount", " ", "  window; a key or Ctrl+C unmounts; -test: attach, read every root, detach"),
+	HIT(375, 0x0B52306A, "  finestra elevata; un tasto o Ctrl+C smonta;|    -test: collega, legge ogni radice, scollega"),
+	HRU(375, 0x0B52306A, "  окно с повышенными правами; клавиша или Ctrl+C отключает;|    -test: подключить, прочитать каждый корень, отключить"),
 #endif
-		scrivi_riga(" ", "Env: ZPAQFUSE_CACHE_MB (256) ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS");
-		scrivi_riga(" ", "     ZPAQFUSE_WINNAMES ZPAQFUSE_CASEFOLD ZPAQFUSE_CASE_INSENSITIVE (Windows)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Last version, first free drive letter (Windows)", "mount z:\\1.zpaq");
-		scrivi_esempio("Mount a multipart archive on Z:", "mount z:\\part_???.zpaq Z:");
-		scrivi_esempio("Every version, one folder each", "mount z:\\1.zpaq Z: -all");
-		scrivi_esempio("Mount as a network drive (Windows)", "mount z:\\1.zpaq Z: -fuseopt VolumePrefix=\\zpaqfuse\\1");
-		scrivi_esempio("Mount on a directory (Unix)", "mount /tmp/1.zpaq /mnt/zpaq");
-		scrivi_esempio("Mount with a Finder name (macOS)", "mount ~/1.zpaq ~/mnt -fuseopt volname=Backup");
-		scrivi_esempio("Make the mountpoint, open the Finder (macOS)", "mount ~/1.zpaq");
-		scrivi_esempio("Version 3 instead of the last one", "mount z:\\1.zpaq Z: -until 3");
-		scrivi_esempio("The first 3 versions, one folder each", "mount z:\\1.zpaq Z: -all -until 3");
-		scrivi_esempio("Mount an encrypted archive", "mount z:\\enc.zpaq Z: -key mypassword");
-		scrivi_esempio("Name the engine (jidac, the only one)", "mount z:\\1.zpaq Z: -backend jidac");
-		scrivi_esempio("Does the mount work here? (and unmount)", "mount z:\\1.zpaq z:\\mnt -test");
+	HU(376, "mount", " ", "Env: ZPAQFUSE_CACHE_MB (256) ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS"),
+	HIT(376, 0xBDCBA754, "Variabili: ZPAQFUSE_CACHE_MB (256)|  ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS"),
+	HRU(376, 0xBDCBA754, "Переменные: ZPAQFUSE_CACHE_MB (256)|  ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS"),
+	HU(0, "mount", " ", "     ZPAQFUSE_WINNAMES ZPAQFUSE_CASEFOLD ZPAQFUSE_CASE_INSENSITIVE (Windows)"),
+	HESEMPI("mount", 'b'),
+	HE(377, "mount", "Last version, first free drive letter (Windows)", "mount z:\\1.zpaq"),
+	HIT(377, 0x6456BFB3, "Ultima versione, prima lettera libera (Windows)"),
+	HRU(377, 0x6456BFB3, "Последняя версия, первая свободная буква (Windows)"),
+	HE(378, "mount", "Mount a multipart archive on Z:", "mount z:\\part_???.zpaq Z:"),
+	HIT(378, 0x7EDAFD44, "Monta un archivio multiparte su Z:"),
+	HRU(378, 0x7EDAFD44, "Смонтировать многотомный архив на Z:"),
+	HE(379, "mount", "Every version, one folder each", "mount z:\\1.zpaq Z: -all"),
+	HIT(379, 0xC6E9230D, "Ogni versione, una cartella ciascuna"),
+	HRU(379, 0xC6E9230D, "Все версии, по папке на каждую"),
+	HE(380, "mount", "Mount as a network drive (Windows)", "mount z:\\1.zpaq Z: -fuseopt VolumePrefix=\\zpaqfuse\\1"),
+	HIT(380, 0xC4CFB867, "Monta come unita' di rete (Windows)"),
+	HRU(380, 0xC4CFB867, "Смонтировать как сетевой диск (Windows)"),
+	HE(381, "mount", "Mount on a directory (Unix)", "mount /tmp/1.zpaq /mnt/zpaq"),
+	HIT(381, 0xF8A2E8E0, "Monta su una cartella (Unix)"),
+	HRU(381, 0xF8A2E8E0, "Смонтировать в папку (Unix)"),
+	HE(382, "mount", "Mount with a Finder name (macOS)", "mount ~/1.zpaq ~/mnt -fuseopt volname=Backup"),
+	HIT(382, 0x0DD7BBEA, "Monta con un nome per il Finder (macOS)"),
+	HRU(382, 0x0DD7BBEA, "Смонтировать с именем для Finder (macOS)"),
+	HE(383, "mount", "Make the mountpoint, open the Finder (macOS)", "mount ~/1.zpaq"),
+	HIT(383, 0xB3623F0A, "Crea il punto di mount, apre il Finder (macOS)"),
+	HRU(383, 0xB3623F0A, "Создать точку монтирования, открыть Finder (macOS)"),
+	HE(384, "mount", "Version 3 instead of the last one", "mount z:\\1.zpaq Z: -until 3"),
+	HIT(384, 0x699AB69E, "La versione 3 invece dell'ultima"),
+	HRU(384, 0x699AB69E, "Версия 3 вместо последней"),
+	HE(385, "mount", "The first 3 versions, one folder each", "mount z:\\1.zpaq Z: -all -until 3"),
+	HIT(385, 0x1E5328D1, "Le prime 3 versioni, una cartella ciascuna"),
+	HRU(385, 0x1E5328D1, "Первые 3 версии, по папке на каждую"),
+	HE(386, "mount", "Mount an encrypted archive", "mount z:\\enc.zpaq Z: -key mypassword"),
+	HIT(386, 0xC6845B0B, "Monta un archivio cifrato"),
+	HRU(386, 0xC6845B0B, "Смонтировать зашифрованный архив"),
+	HE(387, "mount", "Name the engine (jidac, the only one)", "mount z:\\1.zpaq Z: -backend jidac"),
+	HIT(387, 0x323FBF0A, "Indica il motore (jidac, l'unico)"),
+	HRU(387, 0x323FBF0A, "Указать движок (jidac, единственный)"),
+	HE(388, "mount", "Does the mount work here? (and unmount)", "mount z:\\1.zpaq z:\\mnt -test"),
+	HIT(388, 0xD7A8EB1C, "Il mount funziona qui? (e smonta)"),
+	HRU(388, 0xD7A8EB1C, "Работает ли здесь mount? (и размонтировать)"),
 #ifdef _WIN32
-		scrivi_esempio("A .vhd, read-only, by Windows", "mount z:\\e.vhd");
-		scrivi_esempio("A .vhd on drive Y:", "mount z:\\e.vhd Y:");
+	HE(389, "mount", "A .vhd, read-only, by Windows", "mount z:\\e.vhd"),
+	HIT(389, 0xBED27ACD, "Un .vhd, in sola lettura, da Windows"),
+	HRU(389, 0xBED27ACD, ".vhd только для чтения средствами Windows"),
+	HE(390, "mount", "A .vhd on drive Y:", "mount z:\\e.vhd Y:"),
+	HIT(390, 0x27321D70, "Un .vhd sull'unita' Y:"),
+	HRU(390, 0x27321D70, ".vhd на диске Y:"),
 #endif
-	}
-	return ("Mount an archive read-only (FUSE/WinFsp)");
-}
+	HBREVE(391, "mount", "Mount an archive read-only (FUSE/WinFsp)"),
+	HIT(391, 0x4910F82A, "Monta un archivio in sola lettura (FUSE/WinFsp)"),
+	HRU(391, 0x4910F82A, "Смонтировать архив только для чтения (FUSE/WinFsp)"),
 #endif // ZPAQMOUNT ///NOSFTPEND
 #if defined(_WIN32) && !defined(ZPAQMOUNT)
-string help_montadisco(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD mount", "Attach a .vhd .vhdx .iso READ-ONLY with Windows itself (no WinFsp)");
-		scrivi_riga(" ", "mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated");
-		scrivi_riga(" ", "window; a key or Ctrl+C unmounts. Archives (.zpaq) need a build with -DZPAQMOUNT");
-		scrivi_riga("-test", "Attach, read the root of every volume, detach");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("A .vhd, read-only, by Windows", "mount z:\\e.vhd");
-		scrivi_esempio("A .vhd on drive Y:", "mount z:\\e.vhd Y:");
-	}
-	return ("Mount a virtual disk read-only (Windows)");
-}
+	/// montadisco
+	HU(392, "montadisco", "CMD mount", "Attach a .vhd .vhdx .iso READ-ONLY with Windows itself (no WinFsp)|mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated|window; a key or Ctrl+C unmounts. Archives (.zpaq) need a build with -DZPAQMOUNT"),
+	HIT(392, 0x665C2828, "Collega un .vhd .vhdx .iso in SOLA LETTURA con Windows stesso (niente|WinFsp) punto di mount = una lettera (o quella che da' Windows); non|amministratore: una nuova finestra elevata; un tasto o Ctrl+C smonta.|Gli archivi (.zpaq) vogliono una build con -DZPAQMOUNT"),
+	HRU(392, 0x665C2828, "Подключить .vhd .vhdx .iso ТОЛЬКО ДЛЯ ЧТЕНИЯ средствами Windows (без|WinFsp) точка монтирования = буква диска (или та, что даст Windows);|не администратор: новое окно с повышенными правами; клавиша или|Ctrl+C отключает. Архивам (.zpaq) нужна сборка с -DZPAQMOUNT"),
+	HU(393, "montadisco", "-test", "Attach, read the root of every volume, detach"),
+	HIT(393, 0x0888450A, "Collega, legge la radice di ogni volume, scollega"),
+	HRU(393, 0x0888450A, "Подключить, прочитать корень каждого тома, отключить"),
+	HESEMPI("montadisco", 'b'),
+	HE(394, "montadisco", "A .vhd, read-only, by Windows", "mount z:\\e.vhd"),
+	HIT(394, 0xBED27ACD, "Un .vhd, in sola lettura, da Windows"),
+	HRU(394, 0xBED27ACD, ".vhd только для чтения средствами Windows"),
+	HE(395, "montadisco", "A .vhd on drive Y:", "mount z:\\e.vhd Y:"),
+	HIT(395, 0x27321D70, "Un .vhd sull'unita' Y:"),
+	HRU(395, 0x27321D70, ".vhd на диске Y:"),
+	HBREVE(396, "montadisco", "Mount a virtual disk read-only (Windows)"),
+	HIT(396, 0x66645A0E, "Monta un disco virtuale in sola lettura (Windows)"),
+	HRU(396, 0x66645A0E, "Смонтировать виртуальный диск только для чтения (Windows)"),
 #endif
-string help_last2(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD last2", "Compare last 2 rows of a textfile, hash filename");
-		scrivi_riga(" ", "Usually n-1 row the remote md5sum, last the local");
-		scrivi_riga(" ", "zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt");
-		scrivi_riga(" ", "(some kind of rsync-rclone to remote)");
-		scrivi_riga(" ", "(some kind of md5sum from remote) >z:\\r.txt");
-		scrivi_riga(" ", "grep \"final MD5:\" z:\\l.txt >>z:\r.txt");
-		scrivi_riga(" ", "zpaqfranz last2 z:\\r.txt -big");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Compare md5 hashes", "last2 c:\\stor\\confronto.txt -big");
-	}
-	return ("Compare last two lines in file");
-}
-
-string help_last(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD last", "Get last of multipart filename, usually for");
-		scrivi_riga(" ", "scripting. Backups use 8 (eight) ? in filename");
-		moreprint(" ");
-		moreprint("Windows' example (script use %%, direct only %)");
-		moreprint(" ");
-		moreprint("FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO ");
-		moreprint("ssh -i thekey user@theserver.com md5sum '/home/franco/%%G' >remote.txt");
-		moreprint(" ");
-		moreprint("FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO ");
-		moreprint("zpaqfranz sum k:/%%G -md5 -pakka -noeta -stdout >>remote.txt");
-		moreprint(" ");
-		moreprint("zpaqfranz last2 remote.txt -big");
-		moreprint(" ");
-	}
-
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Get the last partname", "last z:\\prova_????????");
-	}
-	return ("Get latest multipart filename");
-}
-
-string help_pause(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD pause", "Get a key from stdin (like pause on DOS)");
-		scrivi_riga("-n X", "Wait X seconds, then proceed");
-		scrivi_riga("-pakka", "Write less");
-		scrivi_riga("-silent", "Write way less");
-		scrivi_riga("-find x", "Way for key x");
-		scrivi_riga("-comment y", "Change the prompt");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Wait for any key", "pause");
-		scrivi_esempio("Wait for key z", "pause -find z");
-		scrivi_esempio("Wait for 5 seconds (or key)", "pause -n 5");
-		scrivi_esempio("Wait 5 seconds (or key) small output", "pause -n 5 -pakka");
-		scrivi_esempio("Wait 5 seconds (or key) NO output", "pause -n 5 -pakka -silent");
-		scrivi_esempio("Italian", "pause -comment \"Premi un tasto\" -terse");
-	}
-	return ("Pause script until timeout or keypress");
-}
-
-string help_setpassword(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD password", "Change/remove password of single archive (no multipart)");
-		scrivi_riga(" ", "The source is not touched: the output is a new archive");
-		scrivi_riga("-force", "Overwrite output if exists");
-		scrivi_riga("-space", "Do not check for free space");
-		scrivi_riga("-key2 X", "Use X as new password");
-		scrivi_riga("-key2 .", "No password in the output (remove it)");
-		scrivi_riga("-franzen X", "A Franzen archive: -key2 changes the AES key, the Franzen password stays");
-		scrivi_riga("-franzen2 Y", "New Franzen password Y (-franzen X the old one; one change at a time)");
-		scrivi_riga("-verify", "With -franzen2: the output read back and compared");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Change pass from X to Y", "password z:\\x.zpaq z:\\y.zpaq -key X -key2 Y");
-		scrivi_esempio("Add password X to NON encrypted", "password z:\\nocrypt.zpaq z:\\yescrypt.zpaq -key2 X");
-		scrivi_esempio("Remove password X from encrypted", "password z:\\crypt.zpaq z:\\nocrypt.zpaq -key X -key2 .");
-		scrivi_esempio("Franzen password from X to Y", "password z:\\f.zpaq z:\\g.zpaq -franzen X -franzen2 Y -verify");
-	}
-	return ("Change/remove password of single archive (no multipart)");
-}
-string help_trim(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD trim", "Trim incomplete .zpaq file");
-		scrivi_riga(" ", "By default DRY RUN (only test)");
-		scrivi_riga("-kill", "Do a 'wet' (effective) in-place run");
-		scrivi_riga("-to", "tiny.zpaq Trim on tiny.zpaq");
-		scrivi_riga("-verify", "Check the copy before trim");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Trim file (dry run)", "trim z:\\1.zpaq");
-		scrivi_esempio("Trim file IN PLACE (wet run)", "trim z:\\1.zpaq -kill");
-		scrivi_esempio("Trim file on other (safer)", "trim z:\\1.zpaq -to d:\\small.zpaq");
-		scrivi_esempio("Trim file w/verify", "trim z:\\1.zpaq -to d:\\small.zpaq -verify");
-		scrivi_esempio("Trim a multipart NON encrypted", "trim z:\\uno_???? -kill");
-	}
-	return ("Remove incomplete transactions from .zpaq");
-}
-string help_crop(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD crop", "Discard latest version(s)");
-		scrivi_riga(" ", "Permanently deletes recent versions from an archive,");
-		scrivi_riga(" ", "keeping only those up to a specified version number (-until)");
-		scrivi_riga(" ", "By default DRY RUN (only test)");
-		scrivi_riga("-kill", "Perform the actual crop operation (the default is a dry run)");
-		scrivi_riga("-to tiny.zpaq", "Reduce to tiny.zpaq (safer)");
-		scrivi_riga("-until X", "Discard every versions >X");
-		scrivi_riga("-maxsize X", "Manually cut at X (RISKY)");
-		scrivi_riga("-force", "Crop in-place, without -to (no backup: VERY RISKY!)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Reduce file (dry run, just infos)", "crop z:\\1.zpaq");
-		scrivi_esempio("Reduce up to version 100", "crop z:\\1.zpaq -to d:\\2.zpaq -until 100 -kill");
-		scrivi_esempio("Reduce to first 100.000", "crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill");
-		scrivi_esempio("Crop in place (NO BACKUP! RISKY!)", "crop z:\\1.zpaq -until 2 -kill -force");
-	}
-	return ("Discard the latest version(s) of .zpaq (reduce size)");
-}
-void print_sub()
-{
-	scrivi_riga(" ", "Substitute %hour %min %sec %weekday %year %month %day");
-	scrivi_riga(" ", "%week %date %time %datetime %timestamp (or $hour...)");
-}
-void print_doublequote()
-{
+	/// last2
+	HU(397, "last2", "CMD last2", "Compare last 2 rows of a textfile, hash filename|Usually n-1 row the remote md5sum, last the local|zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt|(some kind of rsync-rclone to remote)|(some kind of md5sum from remote) >z:\\r.txt|grep \"final MD5:\" z:\\l.txt >>z:\r.txt|zpaqfranz last2 z:\\r.txt -big"),
+	HIT(397, 0x95DD744F, "Confronta le ultime 2 righe di|un file di testo, hash e nome|Di solito la riga n-1 e' l'md5sum remoto, l'ultima il|locale zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta|>z:\\l.txt (qualche specie di rsync-rclone verso il remoto)|(qualche specie di md5sum dal remoto) >z:\\r.txt grep \"final|MD5:\" z:\\l.txt >>z:\r.txt zpaqfranz last2 z:\\r.txt -big"),
+	HRU(397, 0x95DD744F, "Сравнить последние 2 строки текстового файла, хеш и имя|Обычно строка n-1 - удалённый md5sum, последняя - локальный|zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt|(какой-нибудь rsync-rclone на удалённую сторону)|(какой-нибудь md5sum с удалённой стороны) >z:\\r.txt|grep \"final MD5:\" z:\\l.txt >>z:\r.txt|zpaqfranz last2 z:\\r.txt -big"),
+	HESEMPI("last2", 'b'),
+	HE(398, "last2", "Compare md5 hashes", "last2 c:\\stor\\confronto.txt -big"),
+	HIT(398, 0x5A59B384, "Confronta gli hash md5"),
+	HRU(398, 0x5A59B384, "Сравнить хеши md5"),
+	HBREVE(399, "last2", "Compare last two lines in file"),
+	HIT(399, 0x357B8DE6, "Confronta le ultime due righe di un file"),
+	HRU(399, 0x357B8DE6, "Сравнить последние две строки файла"),
+	/// last
+	HU(400, "last", "CMD last", "Get last of multipart filename, usually for|scripting. Backups use 8 (eight) ? in filename"),
+	HIT(400, 0x5967282F, "L'ultimo nome di un multiparte, di solito per|gli script. I backup usano 8 (otto) ? nel nome"),
+	HRU(400, 0x5967282F, "Последнее имя многотомного архива, обычно для|скриптов. Backup используют 8 (восемь) ? в имени"),
+	HTESTO(0, "last", 'u', 0, " "),
+	HTESTO(401, "last", 'u', 0, "Windows' example (script use %%, direct only %)"),
+	HIT(401, 0xE23938B4, "Esempio per Windows (negli script %%, diretto solo %)"),
+	HRU(401, 0xE23938B4, "Пример для Windows (в скриптах %%, напрямую только %)"),
+	HTESTO(0, "last", 'u', 0, " "),
+	HTESTO(0, "last", 'u', 0, "FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO "),
+	HTESTO(0, "last", 'u', 0, "ssh -i thekey user@theserver.com md5sum '/home/franco/%%G' >remote.txt"),
+	HTESTO(0, "last", 'u', 0, " "),
+	HTESTO(0, "last", 'u', 0, "FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO "),
+	HTESTO(0, "last", 'u', 0, "zpaqfranz sum k:/%%G -md5 -pakka -noeta -stdout >>remote.txt"),
+	HTESTO(0, "last", 'u', 0, " "),
+	HTESTO(0, "last", 'u', 0, "zpaqfranz last2 remote.txt -big"),
+	HTESTO(0, "last", 'u', 0, " "),
+	HESEMPI("last", 'b'),
+	HE(402, "last", "Get the last partname", "last z:\\prova_????????"),
+	HIT(402, 0xE71B81E2, "L'ultimo nome di parte"),
+	HRU(402, 0xE71B81E2, "Получить имя последней части"),
+	HBREVE(403, "last", "Get latest multipart filename"),
+	HIT(403, 0xE7B20AF7, "L'ultimo nome di un multiparte"),
+	HRU(403, 0xE7B20AF7, "Получить последнее имя многотомного архива"),
+	/// pause
+	HU(404, "pause", "CMD pause", "Get a key from stdin (like pause on DOS)"),
+	HIT(404, 0xB5DC9EC0, "Legge un tasto da stdin (come pause in DOS)"),
+	HRU(404, 0xB5DC9EC0, "Ждать клавишу из stdin (как pause в DOS)"),
+	HU(405, "pause", "-n X", "Wait X seconds, then proceed"),
+	HIT(405, 0x685BC52C, "Aspetta X secondi, poi prosegue"),
+	HRU(405, 0x685BC52C, "Ждать X секунд, затем продолжить"),
+	HU(406, "pause", "-pakka", "Write less"),
+	HIT(406, 0xF862C6ED, "Scrive meno"),
+	HRU(406, 0xF862C6ED, "Писать меньше"),
+	HU(407, "pause", "-silent", "Write way less"),
+	HIT(407, 0xF6B0500C, "Scrive molto meno"),
+	HRU(407, 0xF6B0500C, "Писать гораздо меньше"),
+	HU(408, "pause", "-find x", "Way for key x"),
+	HIT(408, 0x92E82078, "Aspetta il tasto x"),
+	HRU(408, 0x92E82078, "Ждать клавишу x"),
+	HU(409, "pause", "-comment y", "Change the prompt"),
+	HIT(409, 0x816E854C, "Cambia il prompt"),
+	HRU(409, 0x816E854C, "Изменить приглашение"),
+	HESEMPI("pause", 'b'),
+	HE(410, "pause", "Wait for any key", "pause"),
+	HIT(410, 0xCFE63BB6, "Aspetta un tasto qualsiasi"),
+	HRU(410, 0xCFE63BB6, "Ждать любую клавишу"),
+	HE(411, "pause", "Wait for key z", "pause -find z"),
+	HIT(411, 0x0DBCC932, "Aspetta il tasto z"),
+	HRU(411, 0x0DBCC932, "Ждать клавишу z"),
+	HE(412, "pause", "Wait for 5 seconds (or key)", "pause -n 5"),
+	HIT(412, 0xA5E75D76, "Aspetta 5 secondi (o un tasto)"),
+	HRU(412, 0xA5E75D76, "Ждать 5 секунд (или клавишу)"),
+	HE(413, "pause", "Wait 5 seconds (or key) small output", "pause -n 5 -pakka"),
+	HIT(413, 0x2ED9B791, "Aspetta 5 secondi (o un tasto) con poco output"),
+	HRU(413, 0x2ED9B791, "Ждать 5 секунд (или клавишу), краткий вывод"),
+	HE(414, "pause", "Wait 5 seconds (or key) NO output", "pause -n 5 -pakka -silent"),
+	HIT(414, 0x895BCD8F, "Aspetta 5 secondi (o un tasto) SENZA output"),
+	HRU(414, 0x895BCD8F, "Ждать 5 секунд (или клавишу) БЕЗ вывода"),
+	HE(415, "pause", "Italian", "pause -comment \"Premi un tasto\" -terse"),
+	HIT(415, 0xF039952B, "Italiano"),
+	HRU(415, 0xF039952B, "Итальянский"),
+	HBREVE(416, "pause", "Pause script until timeout or keypress"),
+	HIT(416, 0x5352EDDE, "Ferma lo script fino al timeout o a un tasto"),
+	HRU(416, 0x5352EDDE, "Приостановить скрипт до тайм-аута или нажатия клавиши"),
+	/// setpassword
+	HU(417, "setpassword", "CMD password", "Change/remove password of single archive (no multipart)|The source is not touched: the output is a new archive"),
+	HIT(417, 0xC2FCF6B4, "Cambia/toglie la password di un|singolo archivio (non multiparte)|La sorgente non viene toccata:|l'output e' un nuovo archivio"),
+	HRU(417, 0xC2FCF6B4, "Сменить/удалить пароль одиночного архива (не многотомного)|Исходный файл не трогается: результат - новый архив"),
+	HU(418, "setpassword", "-force", "Overwrite output if exists"),
+	HIT(418, 0x807072A2, "Sovrascrive l'output se esiste"),
+	HRU(418, 0x807072A2, "Перезаписать результат, если существует"),
+	HU(419, "setpassword", "-space", "Do not check for free space"),
+	HIT(419, 0x5C6FDDD6, "Non controlla lo spazio libero"),
+	HRU(419, 0x5C6FDDD6, "Не проверять свободное место"),
+	HU(420, "setpassword", "-key2 X", "Use X as new password"),
+	HIT(420, 0x6B2026A3, "Usa X come nuova password"),
+	HRU(420, 0x6B2026A3, "Использовать X как новый пароль"),
+	HU(421, "setpassword", "-key2 .", "No password in the output (remove it)"),
+	HIT(421, 0x668F1A8A, "Nessuna password nell'output (la toglie)"),
+	HRU(421, 0x668F1A8A, "Без пароля в результате (удалить его)"),
+	HU(422, "setpassword", "-franzen X", "A Franzen archive: -key2 changes the AES key, the Franzen password stays"),
+	HIT(422, 0xE516D304, "Un archivio Franzen: -key2 cambia la|  chiave AES, la password Franzen resta"),
+	HRU(422, 0xE516D304, "Архив Franzen: -key2 меняет ключ AES, пароль Franzen остаётся"),
+	HU(423, "setpassword", "-franzen2 Y", "New Franzen password Y (-franzen X the old one; one change at a time)"),
+	HIT(423, 0xC1002F7D, "Nuova password Franzen Y (-franzen X|  la vecchia; un cambio alla volta)"),
+	HRU(423, 0xC1002F7D, "Новый пароль Franzen Y (-franzen X - старый; по одной смене за раз)"),
+	HU(424, "setpassword", "-verify", "With -franzen2: the output read back and compared"),
+	HIT(424, 0xC4F36019, "Con -franzen2: l'output viene riletto e confrontato"),
+	HRU(424, 0xC4F36019, "С -franzen2: результат перечитывается и сравнивается"),
+	HESEMPI("setpassword", 'b'),
+	HE(425, "setpassword", "Change pass from X to Y", "password z:\\x.zpaq z:\\y.zpaq -key X -key2 Y"),
+	HIT(425, 0xB42A82C8, "Cambia la password da X a Y"),
+	HRU(425, 0xB42A82C8, "Сменить пароль с X на Y"),
+	HE(426, "setpassword", "Add password X to NON encrypted", "password z:\\nocrypt.zpaq z:\\yescrypt.zpaq -key2 X"),
+	HIT(426, 0x4B4399C9, "Aggiunge la password X a un archivio NON cifrato"),
+	HRU(426, 0x4B4399C9, "Добавить пароль X к НЕзашифрованному"),
+	HE(427, "setpassword", "Remove password X from encrypted", "password z:\\crypt.zpaq z:\\nocrypt.zpaq -key X -key2 ."),
+	HIT(427, 0x3BFB34EA, "Toglie la password X da un archivio cifrato"),
+	HRU(427, 0x3BFB34EA, "Удалить пароль X из зашифрованного"),
+	HE(428, "setpassword", "Franzen password from X to Y", "password z:\\f.zpaq z:\\g.zpaq -franzen X -franzen2 Y -verify"),
+	HIT(428, 0x02C63F2A, "Password Franzen da X a Y"),
+	HRU(428, 0x02C63F2A, "Пароль Franzen с X на Y"),
+	HBREVE(429, "setpassword", "Change/remove password of single archive (no multipart)"),
+	HIT(429, 0xFC396244, "Cambia/toglie la password di un archivio (non multiparte)"),
+	HRU(429, 0xFC396244, "Сменить/удалить пароль одиночного архива (не многотомного)"),
+	/// trim
+	HU(430, "trim", "CMD trim", "Trim incomplete .zpaq file|By default DRY RUN (only test)"),
+	HIT(430, 0x94A095DA, "Tronca un file .zpaq incompleto|Di default PROVA A SECCO (solo test)"),
+	HRU(430, 0x94A095DA, "Обрезать незавершённый файл .zpaq|По умолчанию ПРОБНЫЙ ПРОГОН (только тест)"),
+	HU(431, "trim", "-kill", "Do a 'wet' (effective) in-place run"),
+	HIT(431, 0xA95C26D1, "Esecuzione 'vera' (effettiva) sul posto"),
+	HRU(431, 0xA95C26D1, "Выполнить 'по-настоящему' (на месте)"),
+	HU(432, "trim", "-to", "tiny.zpaq Trim on tiny.zpaq"),
+	HIT(432, 0x56B1163A, "tiny.zpaq Tronca su tiny.zpaq"),
+	HRU(432, 0x56B1163A, "tiny.zpaq Обрезать в tiny.zpaq"),
+	HU(433, "trim", "-verify", "Check the copy before trim"),
+	HIT(433, 0x5E3EDE78, "Controlla la copia prima di troncare"),
+	HRU(433, 0x5E3EDE78, "Проверить копию перед обрезкой"),
+	HESEMPI("trim", 'b'),
+	HE(434, "trim", "Trim file (dry run)", "trim z:\\1.zpaq"),
+	HIT(434, 0x07643126, "Tronca il file (prova a secco)"),
+	HRU(434, 0x07643126, "Обрезать файл (пробный прогон)"),
+	HE(435, "trim", "Trim file IN PLACE (wet run)", "trim z:\\1.zpaq -kill"),
+	HIT(435, 0xFC6C6657, "Tronca il file SUL POSTO (esecuzione vera)"),
+	HRU(435, 0xFC6C6657, "Обрезать файл НА МЕСТЕ (по-настоящему)"),
+	HE(436, "trim", "Trim file on other (safer)", "trim z:\\1.zpaq -to d:\\small.zpaq"),
+	HIT(436, 0x3D3BE1D0, "Tronca il file su un altro (piu' sicuro)"),
+	HRU(436, 0x3D3BE1D0, "Обрезать файл в другой (безопаснее)"),
+	HE(437, "trim", "Trim file w/verify", "trim z:\\1.zpaq -to d:\\small.zpaq -verify"),
+	HIT(437, 0xA9386014, "Tronca il file con verifica"),
+	HRU(437, 0xA9386014, "Обрезать файл с проверкой"),
+	HE(438, "trim", "Trim a multipart NON encrypted", "trim z:\\uno_???? -kill"),
+	HIT(438, 0xE4333E9D, "Tronca un multiparte NON cifrato"),
+	HRU(438, 0xE4333E9D, "Обрезать многотомный НЕзашифрованный"),
+	HBREVE(439, "trim", "Remove incomplete transactions from .zpaq"),
+	HIT(439, 0x52BEA72A, "Toglie le transazioni incomplete da un .zpaq"),
+	HRU(439, 0x52BEA72A, "Удалить незавершённые транзакции из .zpaq"),
+	/// crop
+	HU(440, "crop", "CMD crop", "Discard latest version(s)|Permanently deletes recent versions from an archive,|keeping only those up to a specified version number (-until)|By default DRY RUN (only test)"),
+	HIT(440, 0x25864DF3, "Scarta l'ultima versione (o le ultime)|Cancella per sempre le versioni recenti di un archivio,|tenendo solo quelle fino a un numero di versione (-until)|Di default PROVA A SECCO (solo test)"),
+	HRU(440, 0x25864DF3, "Отбросить последнюю версию (или версии)|Навсегда удаляет недавние версии из архива,|оставляя только версии до указанного номера (-until)|По умолчанию ПРОБНЫЙ ПРОГОН (только тест)"),
+	HU(441, "crop", "-kill", "Perform the actual crop operation (the default is a dry run)"),
+	HIT(441, 0x8C4EE888, "Esegue davvero il crop (il default e' una prova a secco)"),
+	HRU(441, 0x8C4EE888, "Выполнить обрезку на деле (по умолчанию - пробный прогон)"),
+	HU(442, "crop", "-to tiny.zpaq", "Reduce to tiny.zpaq (safer)"),
+	HIT(442, 0xA24FBF00, "Riduce in tiny.zpaq (piu' sicuro)"),
+	HRU(442, 0xA24FBF00, "Сократить в tiny.zpaq (безопаснее)"),
+	HU(443, "crop", "-until X", "Discard every versions >X"),
+	HIT(443, 0x74896F9B, "Scarta tutte le versioni >X"),
+	HRU(443, 0x74896F9B, "Отбросить все версии >X"),
+	HU(444, "crop", "-maxsize X", "Manually cut at X (RISKY)"),
+	HIT(444, 0x6BE7F96C, "Taglio manuale a X (RISCHIOSO)"),
+	HRU(444, 0x6BE7F96C, "Ручная обрезка на X (РИСКОВАННО)"),
+	HU(445, "crop", "-force", "Crop in-place, without -to (no backup: VERY RISKY!)"),
+	HIT(445, 0x4AE7BC2B, "Crop sul posto, senza -to (niente copia: MOLTO RISCHIOSO!)"),
+	HRU(445, 0x4AE7BC2B, "Обрезка на месте, без -to (без|  резервной копии: ОЧЕНЬ РИСКОВАННО!)"),
+	HESEMPI("crop", 'b'),
+	HE(446, "crop", "Reduce file (dry run, just infos)", "crop z:\\1.zpaq"),
+	HIT(446, 0xEC92C8A1, "Riduce il file (prova a secco, solo informazioni)"),
+	HRU(446, 0xEC92C8A1, "Сократить файл (пробный прогон, только сведения)"),
+	HE(447, "crop", "Reduce up to version 100", "crop z:\\1.zpaq -to d:\\2.zpaq -until 100 -kill"),
+	HIT(447, 0xF9A680BA, "Riduce fino alla versione 100"),
+	HRU(447, 0xF9A680BA, "Сократить до версии 100"),
+	HE(448, "crop", "Reduce to first 100.000", "crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill"),
+	HIT(448, 0x88FBC173, "Riduce ai primi 100.000"),
+	HRU(448, 0x88FBC173, "Сократить до первых 100.000"),
+	HE(449, "crop", "Crop in place (NO BACKUP! RISKY!)", "crop z:\\1.zpaq -until 2 -kill -force"),
+	HIT(449, 0xD10B37A7, "Crop sul posto (NIENTE COPIA! RISCHIOSO!)"),
+	HRU(449, 0xD10B37A7, "Обрезка на месте (БЕЗ КОПИИ! РИСКОВАННО!)"),
+	HBREVE(450, "crop", "Discard the latest version(s) of .zpaq (reduce size)"),
+	HIT(450, 0x3BC26004, "Scarta le ultime versioni di un .zpaq (riduce la dimensione)"),
+	HRU(450, 0x3BC26004, "Отбросить последние версии .zpaq (уменьшить размер)"),
+	/// @sub
+	HRIGA(451, "@sub", 'a', " ", "Substitute %hour %min %sec %weekday %year %month %day"),
+	HIT(451, 0x838E0F16, "Sostituisce %hour %min %sec %weekday %year %month %day"),
+	HRU(451, 0x838E0F16, "Подставляет %hour %min %sec %weekday %year %month %day"),
+	HRIGA(452, "@sub", 'a', " ", "%week %date %time %datetime %timestamp (or $hour...)"),
+	HIT(452, 0x45A1541A, "%week %date %time %datetime %timestamp (o $hour...)"),
+	HRU(452, 0x45A1541A, "%week %date %time %datetime %timestamp (или $hour...)"),
+	/// @doublequote
 #ifndef _WIN32
-	color_yellow();
-	moreprint("REMEMBER: wildcards require double quotes. E.g., \"*.cpp\", \"test_???.zpaq\"");
-	color_restore();
+	HTESTO(453, "@doublequote", 'a', 'y', "REMEMBER: wildcards require double quotes. E.g., \"*.cpp\", \"test_???.zpaq\""),
+	HIT(453, 0x9453FB99, "RICORDA: i caratteri jolly vogliono le virgolette. Es. \"*.cpp\", \"test_???.zpaq\""),
+	HRU(453, 0x9453FB99, "ПОМНИТЕ: шаблоны нужно брать в двойные кавычки. Напр. \"*.cpp\", \"test_???.zpaq\""),
 #endif
-}
-string help_a(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD a", "(add) / append (ransomware)");
-		scrivi_riga(" ", "zpaqfranz stores an extra checksum (CRC-32/XXH64) for each file");
-		scrivi_riga(" ", "to detect potential SHA-1 collisions, a feature zpaq lacks.");
-		scrivi_riga(" ", "This may cause a slowdown of ~10% on modern CPUs and can be");
-		scrivi_riga(" ", "disabled with -nochecksum or -715");
-		print_sub();
-		scrivi_riga(" ", "By default do NOT store ADSs on Windows (essentially useless).");
-		scrivi_riga(" ", "By default, .XLS files are forcibly re-added to every backup, as older");
-		scrivi_riga(" ", "Excel often modify metafiles without changing content. -xls to disable");
-		scrivi_riga("-verbose", "Verbose output");
-		scrivi_riga("-n X", "Show X files to be added, before and after sort");
-		scrivi_riga("-debug", "Show debugging information");
-		scrivi_riga("-debug2", "Show detailed information");
-		scrivi_riga("-debug3", "Show VERY detailed debugging information");
-		scrivi_riga("-summary", "Be brief");
-		scrivi_riga("-noeta", "Do not show ETA, nor the -image map (redirect output to log file)");
-		scrivi_riga("-pakka", "New-style output (by chunks)");
-		scrivi_riga("-forcewindows", "Store ADS stuff                (default: NO)");
-		scrivi_riga("-xls", "Do NOT force adding of XLS/PPT (default: NO)");
-		scrivi_riga("-forcezfs", "Do NOT ignore .zfs             (default: YES)");
-		scrivi_riga("-715", "Runs just about like 7.15 (-m1, no -turbo, no -fast)");
-		scrivi_riga("-debug -zero", "Add files but zero-filled (debugging)");
-		scrivi_riga("-debug -zero -kill", "Add 0-byte long file (debugging)");
-		scrivi_riga("-nochecksum", "Disable extra checksums (faster, but less reliable)");
-		scrivi_riga("-nodedup", "Turn off deduplicator");
-		scrivi_riga("-store", "Store mode: no deduplication, no compression");
-		scrivi_riga("-touch", "Re-hash unchanged files without a usable hash (7.15, other algo)");
-		scrivi_riga("-norecursion", "Do not recurse into folders (default: YES)");
+	/// a
+	HU(454, "a", "CMD a", "(add) / append (ransomware)|zpaqfranz stores an extra checksum (CRC-32/XXH64) for each file|to detect potential SHA-1 collisions, a feature zpaq lacks.|This may cause a slowdown of ~10% on modern CPUs and can be|disabled with -nochecksum or -715"),
+	HIT(454, 0x10FEF989, "(add) / accoda (ransomware) zpaqfranz salva un checksum|in piu' (CRC-32/XXH64) per ogni file per scoprire|possibili collisioni SHA-1, cosa che zpaq non fa.|Puo' rallentare di ~10% sulle CPU moderne e si puo'|disattivare con -nochecksum o -715"),
+	HRU(454, 0x10FEF989, "(add) / дописывание (ransomware) zpaqfranz хранит|дополнительную контрольную сумму (CRC-32/XXH64)|для каждого файла, чтобы обнаружить возможные|коллизии SHA-1, чего нет в zpaq.|Это может замедлить работу на ~10% на современных|CPU, и это можно отключить с -nochecksum или -715"),
+	HINCLUDI("a", 'u', "@sub", 'b'),
+	HU(455, "a", " ", "By default do NOT store ADSs on Windows (essentially useless)."),
+	HIT(455, 0x892BF33B, "Di default NON salva gli ADS su|  Windows (sostanzialmente inutili)."),
+	HRU(455, 0x892BF33B, "По умолчанию НЕ сохраняет ADS в Windows (по сути бесполезны)."),
+	HU(456, "a", " ", "By default, .XLS files are forcibly re-added to every backup, as older"),
+	HIT(456, 0x4B1C729B, "Di default i file .XLS vengono riaggiunti|  a forza in ogni backup, perche' i vecchi"),
+	HRU(456, 0x4B1C729B, "По умолчанию файлы .XLS принудительно|  добавляются в каждый backup, так как старые"),
+	HU(457, "a", " ", "Excel often modify metafiles without changing content. -xls to disable"),
+	HIT(457, 0x9E40A667, "Excel cambiano spesso i metadati senza|  cambiare il contenuto. -xls per disattivare"),
+	HRU(457, 0x9E40A667, "версии Excel часто меняют метаданные,|  не меняя содержимое. -xls отключает"),
+	HU(458, "a", "-verbose", "Verbose output"),
+	HIT(458, 0xEB4C712A, "Output dettagliato"),
+	HRU(458, 0xEB4C712A, "Подробный вывод"),
+	HU(459, "a", "-n X", "Show X files to be added, before and after sort"),
+	HIT(459, 0x5A0FFF19, "Mostra X file da aggiungere, prima e dopo l'ordinamento"),
+	HRU(459, 0x5A0FFF19, "Показать X добавляемых файлов до и после сортировки"),
+	HU(460, "a", "-debug", "Show debugging information"),
+	HIT(460, 0x4203DDC2, "Mostra informazioni di debug"),
+	HRU(460, 0x4203DDC2, "Показать отладочную информацию"),
+	HU(461, "a", "-debug2", "Show detailed information"),
+	HIT(461, 0xB3D64972, "Mostra informazioni dettagliate"),
+	HRU(461, 0xB3D64972, "Показать подробную информацию"),
+	HU(462, "a", "-debug3", "Show VERY detailed debugging information"),
+	HIT(462, 0x19AC3D26, "Mostra informazioni di debug MOLTO dettagliate"),
+	HRU(462, 0x19AC3D26, "Показать ОЧЕНЬ подробную отладочную информацию"),
+	HU(463, "a", "-summary", "Be brief"),
+	HIT(463, 0xFCB30C08, "Sii breve"),
+	HRU(463, 0xFCB30C08, "Кратко"),
+	HU(464, "a", "-noeta", "Do not show ETA, nor the -image map (redirect output to log file)"),
+	HIT(464, 0x80B4230D, "Non mostra l'ETA ne' la mappa di -image|  (per l'output rediretto su un log)"),
+	HRU(464, 0x80B4230D, "Не показывать ETA и карту -image (при выводе в файл журнала)"),
+	HU(465, "a", "-pakka", "New-style output (by chunks)"),
+	HIT(465, 0xD47A8DBE, "Output nuovo stile (a blocchi)"),
+	HRU(465, 0xD47A8DBE, "Вывод в новом стиле (по блокам)"),
+	HU(466, "a", "-forcewindows", "Store ADS stuff                (default: NO)"),
+	HIT(466, 0x7976BB29, "Salva gli ADS                  (default: NO)"),
+	HRU(466, 0x7976BB29, "Сохранять ADS                  (по умолчанию: NO)"),
+	HU(467, "a", "-xls", "Do NOT force adding of XLS/PPT (default: NO)"),
+	HIT(467, 0xB270ED09, "NON forza l'aggiunta di XLS/PPT (default: NO)"),
+	HRU(467, 0xB270ED09, "НЕ добавлять XLS/PPT принудительно (по умолчанию: NO)"),
+	HU(468, "a", "-forcezfs", "Do NOT ignore .zfs             (default: YES)"),
+	HIT(468, 0x0875FE4D, "NON ignora .zfs                (default: YES)"),
+	HRU(468, 0x0875FE4D, "НЕ игнорировать .zfs           (по умолчанию: YES)"),
+	HU(469, "a", "-715", "Runs just about like 7.15 (-m1, no -turbo, no -fast)"),
+	HIT(469, 0x41990C38, "Funziona quasi come la 7.15 (-m1,|  niente -turbo, niente -fast)"),
+	HRU(469, 0x41990C38, "Работает почти как 7.15 (-m1, без -turbo, без -fast)"),
+	HU(470, "a", "-debug -zero", "Add files but zero-filled (debugging)"),
+	HIT(470, 0xF7DB98D2, "Aggiunge i file ma pieni di zeri (debug)"),
+	HRU(470, 0xF7DB98D2, "Добавить файлы, но заполненные нулями (отладка)"),
+	HU(471, "a", "-debug -zero -kill", "Add 0-byte long file (debugging)"),
+	HIT(471, 0x05E092C2, "Aggiunge file lunghi 0 byte (debug)"),
+	HRU(471, 0x05E092C2, "Добавить файлы длиной 0 байт (отладка)"),
+	HU(472, "a", "-nochecksum", "Disable extra checksums (faster, but less reliable)"),
+	HIT(472, 0xF7162885, "Disattiva i checksum in piu' (piu'|  veloce, ma meno affidabile)"),
+	HRU(472, 0xF7162885, "Отключить дополнительные контрольные|  суммы (быстрее, но менее надёжно)"),
+	HU(473, "a", "-nodedup", "Turn off deduplicator"),
+	HIT(473, 0x7AAD774D, "Spegne il deduplicatore"),
+	HRU(473, 0x7AAD774D, "Отключить дедупликацию"),
+	HU(474, "a", "-store", "Store mode: no deduplication, no compression"),
+	HIT(474, 0x7DFC4D30, "Modalita' store: niente deduplica, niente compressione"),
+	HRU(474, 0x7DFC4D30, "Режим store: без дедупликации, без сжатия"),
+	HU(475, "a", "-touch", "Re-hash unchanged files without a usable hash (7.15, other algo)"),
+	HIT(475, 0xC35E8E67, "Ricalcola l'hash dei file invariati senza|  un hash utile (7.15, altro algoritmo)"),
+	HRU(475, 0xC35E8E67, "Пересчитать хеш неизменённых файлов без|  пригодного хеша (7.15, другой алгоритм)"),
+	HS("a", "-norecursion"),
 #ifdef _WIN32
-		scrivi_riga("-findzpaq", "On Windows search the archive in every drive letter (USB device)");
+	HU(476, "a", "-findzpaq", "On Windows search the archive in every drive letter (USB device)"),
+	HIT(476, 0x63370BCD, "Su Windows cerca l'archivio in ogni|  lettera di unita' (dispositivo USB)"),
+	HRU(476, 0x63370BCD, "В Windows искать архив на всех буквах дисков (USB-устройство)"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_riga("-append", "Append-only (antiransomware): two passes, the output is written only forward");
-		scrivi_riga(" ", "  (never a seek back to fix the header). The passes must add the same number of");
-		scrivi_riga(" ", "  files, folders and bytes, else nothing is kept and the exit code is 2. A check");
-		scrivi_riga(" ", "  by quantity: a file replaced by one of the SAME size, in between, is not seen.");
-		scrivi_riga(" ", "  -stdin is refused (it cannot be read twice). No -fast (the next plain a stores it)");
-		scrivi_riga("-append -stdout", "The archive on the command line is only READ, the new data go to stdout:");
-		scrivi_riga(" ", "  a complete archive if it does not exist, else ONLY the new version, a delta to be");
-		scrivi_riga(" ", "  glued after it (cat a.zpaq delta >b.zpaq, same -key and salt). Only archive bytes");
-		scrivi_riga(" ", "  on stdout: CHECK THE EXIT CODE, a stream with code <> 0 is not valid");
-		help_printhash(true);
-		scrivi_riga("-test", "Do a post-add test (doveryay, no proveryay).");
-		scrivi_riga("-verify", "Verify hashes against filesystem");
-		scrivi_riga("-verify -ssd", "Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)");
-		scrivi_riga("-paranoid", "Test for file with same size and timestamp, but !=hash (-ssd multithread)");
-		scrivi_riga("-vss", "Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
-		scrivi_riga("-timestamp X", "Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots");
-		scrivi_riga(" ", "Must be monotonic. increasing (v[i+1].date>v[i]+date)");
-		help_date();
-		scrivi_riga("-comment", "foo  Add a version with ASCII text 'foo' (unique, case does not matter)");
-		scrivi_riga(" ", "  %date %time %datetime %year %month %day %hour %min %sec %week %weekday");
-		scrivi_riga(" ", "  (or $date...) are replaced: -comment \"daily %date\"");
+	HU(477, "a", "-append", "Append-only (antiransomware): two passes, the output is written only forward|  (never a seek back to fix the header). The passes must add the same number of|  files, folders and bytes, else nothing is kept and the exit code is 2. A check|  by quantity: a file replaced by one of the SAME size, in between, is not seen.|  -stdin is refused (it cannot be read twice). No -fast (the next plain a stores it)"),
+	HIT(477, 0x67CEAB19, "Solo accodamento (antiransomware): due passate, l'output si scrive solo in|  avanti (mai un ritorno indietro per sistemare l'header). Le passate devono|  aggiungere lo stesso numero di file, cartelle e byte, altrimenti non si|  tiene nulla e il codice di uscita e' 2. Un controllo per quantita': un file|  sostituito, nel frattempo, da uno della STESSA dimensione non si vede.|  -stdin e' rifiutato (non si puo' leggere due volte).|  Niente -fast (la salva il prossimo a normale)"),
+	HRU(477, 0x67CEAB19, "Только дописывание (antiransomware): два прохода, вывод пишется только|  вперёд (никогда не возвращается назад, чтобы исправить заголовок).|  Проходы должны добавить одинаковое число файлов, папок и байт, иначе|  ничего не сохраняется и код выхода 2. Проверка по количеству: файл,|  заменённый в промежутке файлом ТОГО ЖЕ размера, не замечается.|  -stdin отвергается (его нельзя прочитать дважды).|  Без -fast (её сохранит следующий обычный a)"),
+	HU(478, "a", "-append -stdout", "The archive on the command line is only READ, the new data go to stdout:|  a complete archive if it does not exist, else ONLY the new version, a delta to be|  glued after it (cat a.zpaq delta >b.zpaq, same -key and salt). Only archive bytes|  on stdout: CHECK THE EXIT CODE, a stream with code <> 0 is not valid"),
+	HIT(478, 0x5AA41CD7, "L'archivio sulla riga di comando viene solo LETTO, i dati nuovi vanno|  su stdout: un archivio completo se non esiste, altrimenti SOLO la|  nuova versione, un delta da incollare dopo (cat a.zpaq delta >b.zpaq,|  stessa -key e sale). Solo byte d'archivio su stdout: CONTROLLARE IL|  CODICE DI USCITA, un flusso con codice <> 0 non e' valido"),
+	HRU(478, 0x5AA41CD7, "Архив из командной строки только ЧИТАЕТСЯ, новые данные идут в stdout: полный|  архив, если его нет, иначе ТОЛЬКО новая версия, дельта, которую приклеивают|  после него (cat a.zpaq delta >b.zpaq, те же -key и соль). В stdout только|  байты архива: ПРОВЕРЯЙТЕ КОД ВЫХОДА, поток с кодом <> 0 недействителен"),
+	HGENERA(0, "a", 'u', 'H', "", ""),
+	HU(479, "a", "-test", "Do a post-add test (doveryay, no proveryay)."),
+	HIT(479, 0x90874BB9, "Test dopo l'add (doveryay, no proveryay)."),
+	HRU(479, 0x90874BB9, "Тест после add (доверяй, но проверяй)."),
+	HU(480, "a", "-verify", "Verify hashes against filesystem"),
+	HIT(480, 0x0BB24CFE, "Verifica gli hash sul filesystem"),
+	HRU(480, 0x0BB24CFE, "Сверить хеши с файловой системой"),
+	HU(481, "a", "-verify -ssd", "Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)"),
+	HIT(481, 0xF920ECC5, "Verifica gli hash sul filesystem in|  MULTITHREAD (NON usare su dischi meccanici)"),
+	HRU(481, 0xF920ECC5, "Сверить хеши с файловой системой МНОГОПОТОЧНО (НЕ использовать на HDD)"),
+	HU(482, "a", "-paranoid", "Test for file with same size and timestamp, but !=hash (-ssd multithread)"),
+	HIT(482, 0xE80089EE, "Cerca file con stessa dimensione e data, ma hash != (-ssd multithread)"),
+	HRU(482, 0xE80089EE, "Поиск файлов с тем же размером и датой,|  но другим хешем (-ssd многопоточно)"),
+	HU(483, "a", "-vss", "Volume Shadow Copies (Win with admin rights) to backup files from %users%."),
+	HIT(483, 0x19B91165, "Copie shadow del volume (Win con diritti di|  amministratore) per salvare i file di %users%."),
+	HRU(483, 0x19B91165, "Теневые копии тома (Win с правами|  администратора) для backup файлов из %users%."),
+	HU(484, "a", "-timestamp X", "Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots|Must be monotonic. increasing (v[i+1].date>v[i]+date)"),
+	HIT(484, 0x9296AB76, "Data e ora della versione @X, es.|2021-12-30_01:03:04, per congelare snapshot zfs|Deve essere monotona crescente (v[i+1].date>v[i]+date)"),
+	HRU(484, 0x9296AB76, "Дата и время версии @X, напр. 2021-12-30_01:03:04,|чтобы зафиксировать снапшоты zfs|Должна монотонно возрастать (v[i+1].date>v[i]+date)"),
+	HINCLUDI("a", 'u', "@date", 'b'),
+	HU(485, "a", "-comment", "foo  Add a version with ASCII text 'foo' (unique, case does not matter)|  %date %time %datetime %year %month %day %hour %min %sec %week %weekday|  (or $date...) are replaced: -comment \"daily %date\""),
+	HIT(485, 0xC7677281, "foo Aggiunge una versione col testo ASCII 'foo' (unico,|  maiuscole/minuscole uguali) %date %time %datetime|  %year %month %day %hour %min %sec %week %weekday (o|  $date...) vengono sostituiti: -comment \"daily %date\""),
+	HRU(485, 0xC7677281, "foo Добавить версию с ASCII-текстом 'foo' (уникальным, регистр не|  важен) %date %time %datetime %year %month %day %hour %min %sec|  %week %weekday (или $date...) подставляются: -comment \"daily %date\""),
 #ifdef ANCIENT
-		scrivi_riga("-fast", "Store the history inside, for a fast l (then automatic)");
+	HU(486, "a", "-fast", "Store the history inside, for a fast l (then automatic)"),
+	HIT(486, 0x804FBB48, "Salva la storia dentro, per un l veloce (poi automatico)"),
+	HRU(486, 0x804FBB48, "Хранить историю внутри для быстрого l (затем автоматически)"),
 #else
-		scrivi_riga("-fast", "Store the history inside, for a fast l (default)");
+	HU(487, "a", "-fast", "Store the history inside, for a fast l (default)"),
+	HIT(487, 0x9C05A881, "Salva la storia dentro, per un l veloce (default)"),
+	HRU(487, 0x9C05A881, "Хранить историю внутри для быстрого l (по умолчанию)"),
 #endif
-		scrivi_riga("-nofast", "Do not store the history (-fast)");
-		scrivi_riga(" ", "With the history, a VFILE-info record too: what the version is and did");
-		scrivi_riga(" ", "  (zpaqfranz, system, method, time, files, bytes). i -verbose shows them, t checks them");
-		scrivi_riga("-fastadd", "Store the state of the archive: the next add -fastadd reads only the last version");
-		scrivi_riga(" ", "  (much faster on a big archive; some tens of KB each version; with -fast only)");
-		scrivi_riga("-copy", "z:\\two  Make a 2nd copy of the written data into another folder");
+	HU(488, "a", "-nofast", "Do not store the history (-fast)|With the history, a VFILE-info record too: what the version is and did|  (zpaqfranz, system, method, time, files, bytes). i -verbose shows them, t checks them"),
+	HIT(488, 0xA6FE9112, "Non salva la storia (-fast)|Con la storia anche un record VFILE-info: cos'e' e cosa ha fatto la versione|  (zpaqfranz, sistema, metodo, tempo, file, byte). i -verbose li mostra, t li controlla"),
+	HRU(488, 0xA6FE9112, "Не хранить историю (-fast)|С историей также запись VFILE-info: что это за версия и что она сделала|  (zpaqfranz, система, метод, время, файлы, байты). i -verbose показывает, t проверяет"),
+	HU(489, "a", "-fastadd", "Store the state of the archive: the next add -fastadd reads only the last version|  (much faster on a big archive; some tens of KB each version; with -fast only)"),
+	HIT(489, 0x92732D76, "Salva lo stato dell'archivio: il prossimo add -fastadd legge|  solo l'ultima versione (molto piu' veloce su un archivio|  grande; qualche decina di KB per versione; solo con -fast)"),
+	HRU(489, 0x92732D76, "Хранить состояние архива: следующий add -fastadd читает|  только последнюю версию (гораздо быстрее на большом|  архиве; несколько десятков KB на версию; только с -fast)"),
+	HU(490, "a", "-copy", "z:\\two  Make a 2nd copy of the written data into another folder"),
+	HIT(490, 0xA1D2996F, "z:\\two  Fa una 2a copia dei dati scritti in un'altra cartella"),
+	HRU(490, 0xA1D2996F, "z:\\two  Сделать 2-ю копию записанных данных в другой папке"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_riga("-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
+	HU(491, "a", "-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter"),
+	HIT(491, 0x091F36E0, "p.sh Esegue p.sh se finisce bene, passandogli il nome dell'archivio"),
+	HRU(491, 0x091F36E0, "p.sh Выполнить p.sh при успешном завершении, передав имя архива параметром"),
 #endif /// NOSFTPEND
-		scrivi_riga("-freeze kajo", "Archive (all its files) bigger than -freezesize: moved into a new");
-		scrivi_riga(" ", "folder of kajo (named by date and time), then a new one is started");
-		scrivi_riga("-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB");
-		scrivi_riga("-stdin",             "Input data from stdin (pipe)");
-		scrivi_riga("-stdinsize X",       "Hint: uncompressed size of stdin data (enables % progress)");
-		scrivi_riga("-stdout", "Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)");
-		scrivi_riga("-checktxt", "kaj Write out MD5 on kaj. For rsync/rclone sync");
-		scrivi_riga("-checktxt", "Write out MD5 on archivename.txt");
-		scrivi_riga("-buffer X", "Use a input buffer of X bytes (default: 4KB)");
-		scrivi_riga("-hashdeep", "Add the hashdeep MD5 VFILE (-ssd for multithread)");
-		scrivi_riga("-fasttxt", "Write out CRC32 on archivename_crc32.txt");
-		scrivi_riga("-fasttxt -verify", "Post-check of crc32.txt");
-		scrivi_riga("-home", "Create one archive for folder (-not -only)");
-		scrivi_riga("-collision", "Double check for SHA-1 collisions");
-		scrivi_riga("-chunk X", "No part bigger than X (a multipart name, with ?)");
+	HU(492, "a", "-freeze kajo", "Archive (all its files) bigger than -freezesize: moved into a new|folder of kajo (named by date and time), then a new one is started"),
+	HIT(492, 0xAFBF25F0, "Archivio (tutti i suoi file) piu' grande di|-freezesize: spostato in una nuova cartella di kajo|(col nome di data e ora), poi se ne comincia uno nuovo"),
+	HRU(492, 0xAFBF25F0, "Архив (все его файлы) больше -freezesize: переносится в новую|папку в kajo (с именем по дате и времени), затем начинается новый"),
+	HU(493, "a", "-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB"),
+	HIT(493, 0x19EE6B36, "La dimensione per -freeze. Usare K, M, G, T e KB,MB,GB,TB"),
+	HRU(493, 0x19EE6B36, "Размер для -freeze. Используйте K, M, G, T и KB,MB,GB,TB"),
+	HU(494, "a", "-stdin", "Input data from stdin (pipe)"),
+	HIT(494, 0x26A63E50, "Dati in ingresso da stdin (pipe)"),
+	HRU(494, 0x26A63E50, "Входные данные из stdin (pipe)"),
+	HU(495, "a", "-stdinsize X", "Hint: uncompressed size of stdin data (enables % progress)"),
+	HIT(495, 0x5F8F9E71, "Suggerimento: dimensione non compressa|  dei dati di stdin (attiva il %)"),
+	HRU(495, 0x5F8F9E71, "Подсказка: несжатый размер данных|  из stdin (включает прогресс в %)"),
+	HU(496, "a", "-stdout", "Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)"),
+	HIT(496, 0x23E5C806, "Forza un file NON DEDUPLICATO pronto|  per stdout (pipe in uscita)"),
+	HRU(496, 0x23E5C806, "Принудительно НЕДЕДУПЛИЦИРОВАННЫЙ|  файл для stdout (pipe на выход)"),
+	HU(497, "a", "-checktxt", "kaj Write out MD5 on kaj. For rsync/rclone sync"),
+	HIT(497, 0xF2082566, "kaj Scrive gli MD5 su kaj. Per|  sincronizzare con rsync/rclone"),
+	HRU(497, 0xF2082566, "kaj Записать MD5 в kaj. Для синхронизации rsync/rclone"),
+	HU(498, "a", "-checktxt", "Write out MD5 on archivename.txt"),
+	HIT(498, 0xB24885F2, "Scrive gli MD5 su nomearchivio.txt"),
+	HRU(498, 0xB24885F2, "Записать MD5 в имяархива.txt"),
+	HU(499, "a", "-buffer X", "Use a input buffer of X bytes (default: 4KB)"),
+	HIT(499, 0x80A253B2, "Buffer di input di X byte (default: 4KB)"),
+	HRU(499, 0x80A253B2, "Входной буфер X байт (по умолчанию: 4KB)"),
+	HU(500, "a", "-hashdeep", "Add the hashdeep MD5 VFILE (-ssd for multithread)"),
+	HIT(500, 0xBAA11F8D, "Aggiunge il VFILE MD5 di hashdeep (-ssd per il multithread)"),
+	HRU(500, 0xBAA11F8D, "Добавить VFILE с MD5 в стиле hashdeep|  (-ssd для многопоточности)"),
+	HU(501, "a", "-fasttxt", "Write out CRC32 on archivename_crc32.txt"),
+	HIT(501, 0x34A8DB83, "Scrive i CRC32 su nomearchivio_crc32.txt"),
+	HRU(501, 0x34A8DB83, "Записать CRC32 в имяархива_crc32.txt"),
+	HU(502, "a", "-fasttxt -verify", "Post-check of crc32.txt"),
+	HIT(502, 0x8B7968CE, "Controllo successivo di crc32.txt"),
+	HRU(502, 0x8B7968CE, "Последующая проверка crc32.txt"),
+	HU(503, "a", "-home", "Create one archive for folder (-not -only)"),
+	HIT(503, 0x78BEF594, "Un archivio per ogni cartella (-not -only)"),
+	HRU(503, 0x78BEF594, "Отдельный архив для каждой папки (-not -only)"),
+	HU(504, "a", "-collision", "Double check for SHA-1 collisions"),
+	HIT(504, 0x56903F98, "Doppio controllo delle collisioni SHA-1"),
+	HRU(504, 0x56903F98, "Двойная проверка коллизий SHA-1"),
+	HU(505, "a", "-chunk X", "No part bigger than X (a multipart name, with ?)"),
+	HIT(505, 0x420520B2, "Nessuna parte piu' grande di X (un nome multiparte, con ?)"),
+	HRU(505, 0x420520B2, "Ни одна часть не больше X (многотомное имя, с ?)"),
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef unix
-		scrivi_riga("-dataset", "x    Add changes on zfs dataset x");
+	HU(506, "a", "-dataset", "x    Add changes on zfs dataset x"),
+	HIT(506, 0xFB28CD55, "x    Aggiunge le modifiche del dataset zfs x"),
+	HRU(506, 0xFB28CD55, "x    Добавить изменения набора данных zfs x"),
 #endif // corresponds to #ifdef (#ifdef unix)
 #endif /// NOSFTPEND
-		help_orderby();
+	HINCLUDI("a", 'u', "@orderby", 'b'),
 #if defined(_WIN32)
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_riga("-sfx autoz", "Make SFX autoz.exe (on Win)");
-		scrivi_riga("-sfxto foldr", "Set -to into the SFX module");
-		scrivi_riga("-sfxforce", "Set -force into the SFX module");
-		scrivi_riga("-sfxnot", "Like -not for SFX");
-		scrivi_riga("-sfxonly", "Like -only for SFX");
-		scrivi_riga("-sfxuntil", "Like -until for SFX");
+	HU(507, "a", "-sfx autoz", "Make SFX autoz.exe (on Win)"),
+	HIT(507, 0x8CD555ED, "Crea l'SFX autoz.exe (su Win)"),
+	HRU(507, 0x8CD555ED, "Создать SFX autoz.exe (в Win)"),
+	HU(508, "a", "-sfxto foldr", "Set -to into the SFX module"),
+	HIT(508, 0xA9005A87, "Mette -to nel modulo SFX"),
+	HRU(508, 0xA9005A87, "Задать -to в модуле SFX"),
+	HU(509, "a", "-sfxforce", "Set -force into the SFX module"),
+	HIT(509, 0xB1F345C5, "Mette -force nel modulo SFX"),
+	HRU(509, 0xB1F345C5, "Задать -force в модуле SFX"),
+	HU(510, "a", "-sfxnot", "Like -not for SFX"),
+	HIT(510, 0x00E8BC52, "Come -not per l'SFX"),
+	HRU(510, 0x00E8BC52, "Как -not для SFX"),
+	HU(511, "a", "-sfxonly", "Like -only for SFX"),
+	HIT(511, 0x53639517, "Come -only per l'SFX"),
+	HRU(511, 0x53639517, "Как -only для SFX"),
+	HU(512, "a", "-sfxuntil", "Like -until for SFX"),
+	HIT(512, 0xC8F2062F, "Come -until per l'SFX"),
+	HRU(512, 0xC8F2062F, "Как -until для SFX"),
 #endif /// NOSFTPEND
-		scrivi_riga("-longpath", "Enable support for Windows paths longer than 255 characters");
-		scrivi_riga("-windate", "Store file creation date");
-		scrivi_riga("-open", "Early fail if archive is already open");
-		scrivi_riga("-ads", "Store CRC-32 (-fasttxt) in NTFS' ADS (Alternate Data Stream)");
+	HU(513, "a", "-longpath", "Enable support for Windows paths longer than 255 characters"),
+	HIT(513, 0x4DEB46ED, "Supporto per percorsi Windows piu' lunghi di 255 caratteri"),
+	HRU(513, 0x4DEB46ED, "Поддержка путей Windows длиннее 255 символов"),
+	HU(514, "a", "-windate", "Store file creation date"),
+	HIT(514, 0x999667A3, "Salva la data di creazione dei file"),
+	HRU(514, 0x999667A3, "Сохранять дату создания файлов"),
+	HU(515, "a", "-open", "Early fail if archive is already open"),
+	HIT(515, 0x74C99355, "Esce subito se l'archivio e' gia' aperto"),
+	HRU(515, 0x74C99355, "Сразу завершиться, если архив уже открыт"),
+	HU(516, "a", "-ads", "Store CRC-32 (-fasttxt) in NTFS' ADS (Alternate Data Stream)"),
+	HIT(516, 0x6061DC66, "Salva il CRC-32 (-fasttxt) negli ADS|  di NTFS (Alternate Data Stream)"),
+	HRU(516, 0x6061DC66, "Хранить CRC-32 (-fasttxt) в ADS NTFS (Alternate Data Stream)"),
 #endif // corresponds to #if (#if defined(_WIN32))
 #ifdef _WIN32
-		scrivi_riga("-image", "Image of a drive (Administrator): it chooses by itself. NTFS: the used clusters,");
-		scrivi_riga(" ", "  C: with VSS (none: without, told), any other drive locked (VSS there: add -vss);");
-		scrivi_riga(" ", "  FAT12/16/32, exFAT: the used clusters, the drive locked; else (ReFS, not");
-		scrivi_riga(" ", "  formatted...), or when it cannot, the whole partition.");
-		scrivi_riga(" ", "  A disk (3:): all of it. NTFS: without the swap files (pagefile, swapfile, hiberfil)");
-		scrivi_riga(" ", "  The used clusters only: the free ones are zeros in the image (deleted data is not");
-		scrivi_riga(" ", "  stored), when the drive cannot change meanwhile (VSS, or locked). The files are the same");
-		scrivi_riga(" ", "  Over 2 TB too: such an image restores to a .vhdx, a .vmdk, a disk or a raw file");
-		scrivi_riga("-raw", "Image of the whole partition (or disk), byte by byte: no choice (no -image needed)");
-		scrivi_riga("-vss", "-image: a shadow copy that must be there (by itself: C: only, tried). With -raw: tried");
-		scrivi_riga("-novss", "-image: no VSS, not even tried (the drive is locked, when it can be)");
-		scrivi_riga(" ", "  No VSS and not locked (the drive of Windows...): a warning, exit code 1");
-		scrivi_riga("-nofrugal", "-image: the swap files too");
+	HU(517, "a", "-image", "Image of a drive (Administrator): it chooses by itself. NTFS: the used clusters,|  C: with VSS (none: without, told), any other drive locked (VSS there: add -vss);|  FAT12/16/32, exFAT: the used clusters, the drive locked; else (ReFS, not|  formatted...), or when it cannot, the whole partition.|  A disk (3:): all of it. NTFS: without the swap files (pagefile, swapfile, hiberfil)|  The used clusters only: the free ones are zeros in the image (deleted data is not|  stored), when the drive cannot change meanwhile (VSS, or locked). The files are the same|  Over 2 TB too: such an image restores to a .vhdx, a .vmdk, a disk or a raw file"),
+	HIT(517, 0xB50A5233, "Immagine di un'unita' (amministratore): sceglie da solo. NTFS: i cluster usati,|  C: con VSS (senza: senza, e lo dice), ogni altra|  unita' bloccata (li' VSS: aggiungere -vss);|  FAT12/16/32, exFAT: i cluster usati, l'unita' bloccata; altrimenti (ReFS, non|  formattata...), o quando non puo', l'intera partizione.|  Un disco (3:): tutto. NTFS: senza i file di swap (pagefile, swapfile, hiberfil)|  Solo i cluster usati: quelli liberi sono zeri nell'immagine (i|  dati cancellati non vengono salvati), quando l'unita' non puo'|  cambiare nel frattempo (VSS, o bloccata). I file sono gli stessi|  Anche oltre 2 TB: un'immagine cosi' si ripristina|  in un .vhdx, un .vmdk, un disco o un file raw"),
+	HRU(517, 0xB50A5233, "Образ диска (администратор): выбирает сам. NTFS: используемые кластеры,|  C: через VSS (без него: без, с сообщением), любой|  другой диск блокируется (там VSS: добавьте -vss);|  FAT12/16/32, exFAT: используемые кластеры, диск блокируется; иначе (ReFS, не|  отформатированный...) или когда не получается - весь раздел.|  Диск (3:): целиком. NTFS: без файлов подкачки (pagefile, swapfile, hiberfil)|  Только используемые кластеры: свободные в образе - нули|  (удалённые данные не сохраняются), когда диск не может|  измениться в процессе (VSS или блокировка). Файлы те же|  Также больше 2 TB: такой образ восстанавливается в .vhdx, .vmdk, на диск или в raw-файл"),
+	HU(518, "a", "-raw", "Image of the whole partition (or disk), byte by byte: no choice (no -image needed)"),
+	HIT(518, 0x8CC93A9E, "Immagine dell'intera partizione (o disco), byte|  per byte: nessuna scelta (non serve -image)"),
+	HRU(518, 0x8CC93A9E, "Образ всего раздела (или диска) побайтно: без выбора (-image не нужен)"),
+	HU(519, "a", "-vss", "-image: a shadow copy that must be there (by itself: C: only, tried). With -raw: tried"),
+	HIT(519, 0xBB892519, "-image: una copia shadow che deve esserci (da|  solo: solo C:, tentata). Con -raw: tentata"),
+	HRU(519, 0xBB892519, "-image: теневая копия, которая обязана быть (сам|  по себе: только C:, попытка). С -raw: попытка"),
+	HU(520, "a", "-novss", "-image: no VSS, not even tried (the drive is locked, when it can be)|  No VSS and not locked (the drive of Windows...): a warning, exit code 1"),
+	HIT(520, 0x340247FD, "-image: niente VSS, neanche tentato|  (l'unita' viene bloccata, quando si puo')|  Niente VSS e non bloccata (l'unita' di|  Windows...): un avviso, codice di uscita 1"),
+	HRU(520, 0x340247FD, "-image: без VSS, даже без попытки (диск блокируется, когда возможно)|  Без VSS и без блокировки (диск|  Windows...): предупреждение, код выхода 1"),
+	HU(521, "a", "-nofrugal", "-image: the swap files too"),
+	HIT(521, 0x7BA8EA84, "-image: anche i file di swap"),
+	HRU(521, 0x7BA8EA84, "-image: также файлы подкачки"),
 #else
-		scrivi_riga("-image", "Create a raw image of a drive/partition (root rights required)");
-		scrivi_riga("-raw", "The very same of -image");
+	HU(522, "a", "-image", "Create a raw image of a drive/partition (root rights required)"),
+	HIT(522, 0xB1211023, "Crea un'immagine raw di un'unita'/partizione|  (servono i diritti di root)"),
+	HRU(522, 0xB1211023, "Создать raw-образ диска/раздела (нужны права root)"),
+	HU(523, "a", "-raw", "The very same of -image"),
+	HIT(523, 0x6A28EAF9, "Esattamente come -image"),
+	HRU(523, 0x6A28EAF9, "То же самое, что -image"),
 #endif
-		scrivi_riga("-image", "Unreadable sectors: zeros, the image goes on; a giant READ ERROR at the end, exit code 2");
-		scrivi_riga(" ", "  Every sector of a zone with errors is tried (once): nothing readable is lost.");
-		scrivi_riga(" ", "  Good for a healthy disk with a few bad sectors, endless on a dying one: see -rescue");
-		scrivi_riga("-rescue [N]", "The image (-image is implied) of a DYING disk: once, all that reads at once.");
-		scrivi_riga(" ", "  A read that fails is not insisted on (no retry, no sector by sector inside a bad");
-		scrivi_riga(" ", "  zone). zpaqfranz jumps ahead: 64 KB, then twice as far each time, up to N MB");
-		scrivi_riga(" ", "  (default 16), until a read works; then it comes back from there towards the");
-		scrivi_riga(" ", "  trouble, up to the first read that fails. Both edges of a bad zone are taken to");
-		scrivi_riga(" ", "  the last good sector; what is in between is NOT tried: ZEROS in the image.");
-		scrivi_riga(" ", "  WHY: a failed read costs seconds (the disk insists by itself, 7..60 s on a bad");
-		scrivi_riga(" ", "  sector) and a dying disk may not have many reads left. A dead zone of 20 MB:");
-		scrivi_riga(" ", "  more than 2.000 failed reads without -rescue (hours), about 15 with it.");
-		scrivi_riga(" ", "  THE PRICE: where the bad sectors are close (less than 64 KB from each other)");
-		scrivi_riga(" ", "  the good ones among them are lost too. And the longer a bad zone, the bigger a");
-		scrivi_riga(" ", "  good stretch right after it must be, to be found (up to N MB).");
-		scrivi_riga(" ", "  An isolated bad sector costs the same as without, and only that sector is lost.");
-		scrivi_riga(" ", "  A bigger N: fewer reads in huge dead zones, more good data lost around them.");
-		scrivi_riga(" ", "  At the end: how many reads failed, how many bytes were jumped over (not tried).");
+	HU(524, "a", "-image", "Unreadable sectors: zeros, the image goes on; a giant READ ERROR at the end, exit code 2|  Every sector of a zone with errors is tried (once): nothing readable is lost.|  Good for a healthy disk with a few bad sectors, endless on a dying one: see -rescue"),
+	HIT(524, 0xD4D017CD, "Settori illeggibili: zeri, l'immagine prosegue; un|  READ ERROR gigante alla fine, codice di uscita 2|  Ogni settore di una zona con errori viene provato|  (una volta): nulla di leggibile va perso.|  Va bene per un disco sano con pochi settori|  danneggiati, infinito su uno morente: vedi -rescue"),
+	HRU(524, 0xD4D017CD, "Нечитаемые секторы: нули, образ продолжается; огромный READ ERROR в конце, код выхода 2|  Каждый сектор зоны с ошибками пробуется (один раз): ничего читаемого не теряется.|  Подходит для здорового диска с несколькими плохими|  секторами, бесконечно на умирающем: см. -rescue"),
+	HU(525, "a", "-rescue [N]", "The image (-image is implied) of a DYING disk: once, all that reads at once.|  A read that fails is not insisted on (no retry, no sector by sector inside a bad|  zone). zpaqfranz jumps ahead: 64 KB, then twice as far each time, up to N MB|  (default 16), until a read works; then it comes back from there towards the|  trouble, up to the first read that fails. Both edges of a bad zone are taken to|  the last good sector; what is in between is NOT tried: ZEROS in the image.|  WHY: a failed read costs seconds (the disk insists by itself, 7..60 s on a bad|  sector) and a dying disk may not have many reads left. A dead zone of 20 MB:|  more than 2.000 failed reads without -rescue (hours), about 15 with it.|  THE PRICE: where the bad sectors are close (less than 64 KB from each other)|  the good ones among them are lost too. And the longer a bad zone, the bigger a|  good stretch right after it must be, to be found (up to N MB).|  An isolated bad sector costs the same as without, and only that sector is lost.|  A bigger N: fewer reads in huge dead zones, more good data lost around them.|  At the end: how many reads failed, how many bytes were jumped over (not tried)."),
+	HIT(525, 0xB3F74581, "L'immagine (-image e' implicito) di un disco MORENTE:|  una volta, tutto cio' che si legge subito.|  Una lettura che fallisce non viene ripetuta (niente retry, niente settore per|  settore dentro una zona rovinata). zpaqfranz salta avanti: 64 KB, poi ogni|  volta il doppio, fino a N MB (default 16), finche' una lettura funziona; poi|  torna indietro da li' verso il guaio, fino alla prima lettura che fallisce.|  Entrambi i bordi di una zona rovinata sono presi fino all'ultimo settore|  buono; quello che c'e' in mezzo NON viene provato: ZERI nell'immagine.|  PERCHE': una lettura fallita costa secondi (il disco insiste da|  solo, 7..60 s su un settore rovinato) e a un disco morente|  potrebbero restare poche letture. Una zona morta di 20 MB: piu'|  di 2.000 letture fallite senza -rescue (ore), circa 15 con.|  IL PREZZO: dove i settori rovinati sono vicini (a meno di 64|  KB l'uno dall'altro) si perdono anche quelli buoni in mezzo.|  E piu' e' lunga una zona rovinata, piu' grande deve essere un|  tratto buono subito dopo, per essere trovato (fino a N MB).|  Un settore rovinato isolato costa come senza, e si perde solo quel settore.|  Un N piu' grande: meno letture nelle zone|  morte enormi, piu' dati buoni persi intorno.|  Alla fine: quante letture sono fallite,|  quanti byte sono stati saltati (non provati)."),
+	HRU(525, 0xB3F74581, "Образ (-image подразумевается) УМИРАЮЩЕГО|  диска: один раз, всё, что читается сразу.|  Неудачное чтение не повторяется (без повторов, без чтения посекторно внутри|  плохой зоны). zpaqfranz прыгает вперёд: 64 KB, затем каждый раз вдвое дальше,|  до N MB (по умолчанию 16), пока чтение не удастся; затем возвращается оттуда|  назад к проблеме, до первого неудачного чтения. Оба края плохой зоны берутся до|  последнего хорошего сектора; то, что между ними, НЕ пробуется: НУЛИ в образе.|  ПОЧЕМУ: неудачное чтение стоит секунд (диск сам настаивает, 7..60 с на плохом|  секторе), а у умирающего диска может остаться мало чтений. Мёртвая зона 20 MB:|  больше 2.000 неудачных чтений без -rescue (часы), около 15 с ним.|  ЦЕНА: где плохие секторы близко (меньше 64 KB друг от друга),|  теряются и хорошие между ними. И чем длиннее плохая зона, тем больше должен быть|  хороший участок сразу после неё, чтобы его найти (до N MB).|  Одиночный плохой сектор стоит столько же, сколько без, и теряется только он.|  Больший N: меньше чтений в огромных мёртвых|  зонах, больше потерь хороших данных вокруг.|  В конце: сколько чтений не удалось, сколько байт перепрыгнуто (не пробовалось)."),
 #ifdef _WIN32
-		scrivi_riga(" ", "  No shadow copy is made (nothing must be written on that disk): as -novss");
+	HU(526, "a", " ", "  No shadow copy is made (nothing must be written on that disk): as -novss"),
+	HIT(526, 0x97096E5A, "  Non si fa nessuna copia shadow (su quel disco|    non si deve scrivere nulla): come -novss"),
+	HRU(526, 0x97096E5A, "  Теневая копия не делается (на этот диск|    ничего нельзя писать): как -novss"),
 #else
-		scrivi_riga(" ", "  The device is read without the cache of the system (O_DIRECT), where it can be");
+	HU(527, "a", " ", "  The device is read without the cache of the system (O_DIRECT), where it can be"),
+	HIT(527, 0xFE1F0FAD, "  Il dispositivo si legge senza la cache del sistema (O_DIRECT), dove si puo'"),
+	HRU(527, 0xFE1F0FAD, "  Устройство читается без системного кеша (O_DIRECT), где это возможно"),
 #endif
-		scrivi_riga("-rescuetime S", "With -rescue: a read that takes more than S seconds (default 2) is a sick");
-		scrivi_riga(" ", "  zone too: its data is kept, then the jump out of the slow zone (what is slow");
-		scrivi_riga(" ", "  is not read). 0: only the errors count, a slow zone is read to the end.");
-		scrivi_riga(" ", "  It cannot stop the disk: while it insists on a sector nothing else is served.");
-		scrivi_riga(" ", "  If the disk can, shorten that first: smartctl -l scterc,20,20 /dev/sdX (2 s);");
-		scrivi_riga(" ", "  on Linux also /sys/block/sdX/device/timeout");
-		scrivi_riga("-dashboard", "With -image: a live map of the source (new, deduplicated, slow, unreadable), default");
-		scrivi_riga(" ", "  off with -nodashboard, -noeta, -verbose and -debug");
-		scrivi_riga("-nodashboard", "With -image: no live map, the classic progress line");
-		scrivi_riga("-ignore", "Do not show file access error");
-		scrivi_riga("-pause", "Wait for key press after run");
-		scrivi_riga("-ifexist X", "Abort if X folder does not exist");
+	HU(528, "a", "-rescuetime S", "With -rescue: a read that takes more than S seconds (default 2) is a sick|  zone too: its data is kept, then the jump out of the slow zone (what is slow|  is not read). 0: only the errors count, a slow zone is read to the end.|  It cannot stop the disk: while it insists on a sector nothing else is served.|  If the disk can, shorten that first: smartctl -l scterc,20,20 /dev/sdX (2 s);|  on Linux also /sys/block/sdX/device/timeout"),
+	HIT(528, 0x2BBB77FC, "Con -rescue: una lettura che dura piu' di S secondi (default 2) e'|  anche lei una zona malata: i suoi dati si tengono, poi il salto|  fuori dalla zona lenta (cio' che e' lento non si legge). 0:|  contano solo gli errori, una zona lenta si legge fino in fondo.|  Non puo' fermare il disco: mentre insiste|  su un settore non serve nient'altro.|  Se il disco lo permette, prima accorciarlo: smartctl -l scterc,20,20|  /dev/sdX (2 s); su Linux anche /sys/block/sdX/device/timeout"),
+	HRU(528, 0x2BBB77FC, "С -rescue: чтение дольше S секунд (по умолчанию 2) - тоже больная|  зона: её данные сохраняются, затем прыжок из медленной зоны (медленное|  не читается). 0: учитываются только ошибки, медленная зона читается до конца.|  Остановить диск нельзя: пока он настаивает|  на секторе, ничего другого не обслуживается.|  Если диск умеет, сначала сократите это: smartctl -l scterc,20,20|  /dev/sdX (2 с); в Linux также /sys/block/sdX/device/timeout"),
+	HU(529, "a", "-dashboard", "With -image: a live map of the source (new, deduplicated, slow, unreadable), default|  off with -nodashboard, -noeta, -verbose and -debug"),
+	HIT(529, 0x00EAD2A0, "Con -image: una mappa dal vivo della sorgente (nuovo, deduplicato, lento,|  illeggibile), di default spenta con -nodashboard, -noeta, -verbose e -debug"),
+	HRU(529, 0x00EAD2A0, "С -image: живая карта источника (новое, дедуплицированное, медленное,|  нечитаемое), по умолчанию выключена с -nodashboard, -noeta, -verbose и -debug"),
+	HU(530, "a", "-nodashboard", "With -image: no live map, the classic progress line"),
+	HIT(530, 0xB59F35CE, "Con -image: niente mappa dal vivo,|  la classica riga di avanzamento"),
+	HRU(530, 0xB59F35CE, "С -image: без живой карты, классическая строка прогресса"),
+	HU(531, "a", "-ignore", "Do not show file access error"),
+	HIT(531, 0xF7AFAB48, "Non mostra gli errori di accesso ai file"),
+	HRU(531, 0xF7AFAB48, "Не показывать ошибки доступа к файлам"),
+	HU(532, "a", "-pause", "Wait for key press after run"),
+	HIT(532, 0xAC657CD0, "Aspetta un tasto alla fine"),
+	HRU(532, 0xAC657CD0, "Ждать нажатия клавиши в конце"),
+	HU(533, "a", "-ifexist X", "Abort if X folder does not exist"),
+	HIT(533, 0x5D1D1A67, "Esce se la cartella X non esiste"),
+	HRU(533, 0x5D1D1A67, "Прервать, если папки X не существует"),
 #if defined(_WIN32)
-		scrivi_riga("-thunderbird", "Take appdata local\\roaming thunderbird");
+	HU(534, "a", "-thunderbird", "Take appdata local\\roaming thunderbird"),
+	HIT(534, 0x5E0C4474, "Prende appdata local\\roaming di thunderbird"),
+	HRU(534, 0x5E0C4474, "Брать appdata local\\roaming thunderbird"),
 #endif // corresponds to #if (#if defined(_WIN32))
-		scrivi_riga("-date", "Store creation date (slower)");
-		scrivi_riga("-frugal", "Use less RAM, but CANNOT WORK with mixed hashes");
-		scrivi_riga("-stat", "Show external files added/updated");
-		scrivi_riga("-external X", "Run X before add (replace %files or $files)");
-		scrivi_riga("-touch X", "Change every filedate to be stored to X");
-		scrivi_riga("-input X", "Load the X file as files to be added");
-		scrivi_riga("-exclude X", "Load the X file as notfiles");
-		scrivi_riga("-destination X ", "Load the X file as -to");
-		scrivi_riga("-errorlog X", "Write the errors on the X file");
-		scrivi_riga("-ht", "Enable HyperThread (if any)");
-		scrivi_riga("-notrim", "DISABLE autotrim of incomplete transaction (not with -chunk)");
+	HU(535, "a", "-date", "Store creation date (slower)"),
+	HIT(535, 0xC6D16A3A, "Salva la data di creazione (piu' lento)"),
+	HRU(535, 0xC6D16A3A, "Сохранять дату создания (медленнее)"),
+	HU(536, "a", "-frugal", "Use less RAM, but CANNOT WORK with mixed hashes"),
+	HIT(536, 0xA5F90DB5, "Usa meno RAM, ma NON FUNZIONA con hash misti"),
+	HRU(536, 0xA5F90DB5, "Меньше RAM, но НЕ РАБОТАЕТ со смешанными хешами"),
+	HU(537, "a", "-stat", "Show external files added/updated"),
+	HIT(537, 0xF90D184A, "Mostra i file esterni aggiunti/aggiornati"),
+	HRU(537, 0xF90D184A, "Показать добавленные/обновлённые внешние файлы"),
+	HU(538, "a", "-external X", "Run X before add (replace %files or $files)"),
+	HIT(538, 0x762A1AA3, "Esegue X prima di add (sostituisce %files o $files)"),
+	HRU(538, 0x762A1AA3, "Выполнить X перед add (подставляет %files или $files)"),
+	HU(539, "a", "-touch X", "Change every filedate to be stored to X"),
+	HIT(539, 0x404C894A, "Cambia in X la data di ogni file da salvare"),
+	HRU(539, 0x404C894A, "Заменить дату каждого сохраняемого файла на X"),
+	HU(540, "a", "-input X", "Load the X file as files to be added"),
+	HIT(540, 0xDDEAF2F7, "Carica dal file X i file da aggiungere"),
+	HRU(540, 0xDDEAF2F7, "Загрузить из файла X список добавляемых файлов"),
+	HU(541, "a", "-exclude X", "Load the X file as notfiles"),
+	HIT(541, 0xCBD30120, "Carica dal file X i notfiles"),
+	HRU(541, 0xCBD30120, "Загрузить из файла X список notfiles"),
+	HU(542, "a", "-destination X ", "Load the X file as -to"),
+	HIT(542, 0x54AF2386, "Carica dal file X il -to"),
+	HRU(542, 0x54AF2386, "Загрузить из файла X значение -to"),
+	HU(543, "a", "-errorlog X", "Write the errors on the X file"),
+	HIT(543, 0xB0738A1E, "Scrive gli errori sul file X"),
+	HRU(543, 0xB0738A1E, "Записывать ошибки в файл X"),
+	HU(544, "a", "-ht", "Enable HyperThread (if any)"),
+	HIT(544, 0x7D053DE0, "Attiva l'HyperThread (se c'e')"),
+	HRU(544, 0x7D053DE0, "Включить HyperThread (если есть)"),
+	HU(545, "a", "-notrim", "DISABLE autotrim of incomplete transaction (not with -chunk)"),
+	HIT(545, 0x09BEA821, "DISATTIVA l'autotrim delle transazioni|  incomplete (non con -chunk)"),
+	HRU(545, 0x09BEA821, "ОТКЛЮЧИТЬ autotrim незавершённой транзакции (не с -chunk)"),
 #ifdef _WIN32
-		scrivi_riga("-noonedrive", "Do NOT add onedrive placeholders");
-		scrivi_riga("-monitor", "Turn off the monitor (Windows)");
+	HU(546, "a", "-onedrive", "Do NOT add onedrive placeholders"), /// 65.14b: it was -noonedrive, the switch is -onedrive (-helpcheck)
+	HIT(546, 0xA716AA70, "NON aggiunge i segnaposto di onedrive"),
+	HRU(546, 0xA716AA70, "НЕ добавлять заполнители onedrive"),
+	HU(547, "a", "-monitor", "Turn off the monitor (Windows)"),
+	HIT(547, 0xC7441FEE, "Spegne il monitor (Windows)"),
+	HRU(547, 0xC7441FEE, "Выключить монитор (Windows)"),
 #endif
-		scrivi_riga("-slow", "Reduce CPU power (experimental on Linux)");
-		scrivi_riga("-shutdown", "Attempt to shut down the computer upon completion");
+	HU(548, "a", "-slow", "Reduce CPU power (experimental on Linux)"),
+	HIT(548, 0x36D43EE4, "Riduce la potenza della CPU (sperimentale su Linux)"),
+	HRU(548, 0x36D43EE4, "Снизить мощность CPU (экспериментально в Linux)"),
+	HU(549, "a", "-shutdown", "Attempt to shut down the computer upon completion"),
+	HIT(549, 0xCB6A7421, "Prova a spegnere il computer alla fine"),
+	HRU(549, 0xCB6A7421, "Попытаться выключить компьютер по завершении"),
 #ifdef unix
-		scrivi_riga("-tar", "Store *nix metadata, as tar: owner, mode, ns times, symlinks, hard links, FIFO, devices");
+	HU(550, "a", "-tar", "Store *nix metadata, as tar: owner, mode, ns times, symlinks, hard links, FIFO, devices"),
+	HIT(550, 0x6B17ABB3, "Salva i metadati *nix, come tar: proprietario, permessi,|  tempi in ns, symlink, hard link, FIFO, dispositivi"),
+	HRU(550, 0x6B17ABB3, "Хранить метаданные *nix, как tar: владелец, права,|  время в нс, symlink, hard link, FIFO, устройства"),
 #endif
 #ifdef _WIN32
-		scrivi_riga("-ntfs", "Scan reading the $MFT of the volume, not folder by folder (if no -image): the same list,");
-		scrivi_riga(" ", "  faster. By itself when every source is a whole NTFS drive (a z:\\1.zpaq c:\\ e:\\) and an");
-		scrivi_riga(" ", "  administrator runs; -ntfs asks for it on a folder too. No administrator: the normal scan");
-		scrivi_riga("-nontfs", "Never scan from the $MFT by itself: folder by folder, as always");
+	HU(551, "a", "-ntfs", "Scan reading the $MFT of the volume, not folder by folder (if no -image): the same list,|  faster. By itself when every source is a whole NTFS drive (a z:\\1.zpaq c:\\ e:\\) and an|  administrator runs; -ntfs asks for it on a folder too. No administrator: the normal scan"),
+	HIT(551, 0xE24A04D6, "Scansione leggendo la $MFT del volume, non cartella per cartella (se non|  -image): lo stesso elenco, piu' veloce. Da solo quando ogni sorgente e'|  un'intera unita' NTFS (a z:\\1.zpaq c:\\ e:\\) e lancia un amministratore; -ntfs|  la chiede anche su una cartella. Non amministratore: la scansione normale"),
+	HRU(551, 0xE24A04D6, "Сканирование чтением $MFT тома, а не папка за папкой (если не -image):|  тот же список, быстрее. Само собой, когда каждый источник - целый|  диск NTFS (a z:\\1.zpaq c:\\ e:\\) и запускает администратор; -ntfs|  запрашивает это и для папки. Не администратор: обычное сканирование"),
+	HU(552, "a", "-nontfs", "Never scan from the $MFT by itself: folder by folder, as always"),
+	HIT(552, 0xD3CDE4B0, "Mai scansione dalla $MFT da sola:|  cartella per cartella, come sempre"),
+	HRU(552, 0xD3CDE4B0, "Никогда не сканировать $MFT само: папка за папкой, как всегда"),
 #endif
-		scrivi_riga("-appendoutput", "Append to the output file specified by -out instead of overwriting it");
-		scrivi_riga("-writeonconsole", "Write to stderr too");
-		scrivi_riga("-checksize X", "Check if enoungh free space (or fail)");
-		scrivi_riga("-nodelete", "Store all files togheter. WARNING: you must handle name collisions!");
-		scrivi_riga("-franzen X", "EXPERIMENTAL: create .franzen file too with key X");
-		scrivi_riga("-turbo", "Faster add (default, not in ESX/NAS): files >= 4 MB are cut into");
-		scrivi_riga(" ", "  fragments and hashed by several threads. The archive is the same, to the byte");
-		scrivi_riga("-turbo N", "The same, with N threads for that (default: as -t, up to 32)");
-		scrivi_riga("-noturbo", "Plain add: one thread cuts the fragments (as zpaq 7.15)");
-	}
+	HU(553, "a", "-appendoutput", "Append to the output file specified by -out instead of overwriting it"),
+	HIT(553, 0x5A3DB07A, "Accoda al file di output dato con -out invece di sovrascriverlo"),
+	HRU(553, 0x5A3DB07A, "Дописывать в файл вывода, заданный -out, вместо перезаписи"),
+	HU(554, "a", "-writeonconsole", "Write to stderr too"),
+	HIT(554, 0x7E10C9E5, "Scrive anche su stderr"),
+	HRU(554, 0x7E10C9E5, "Писать также в stderr"),
+	HU(555, "a", "-checksize X", "Check if enoungh free space (or fail)"),
+	HIT(555, 0x43363D00, "Controlla se c'e' abbastanza spazio libero (o fallisce)"),
+	HRU(555, 0x43363D00, "Проверить, достаточно ли места (или ошибка)"),
+	HU(556, "a", "-nodelete", "Store all files togheter. WARNING: you must handle name collisions!"),
+	HIT(556, 0x1D0A6573, "Salva tutti i file insieme. ATTENZIONE:|  le collisioni di nomi sono affar tuo!"),
+	HRU(556, 0x1D0A6573, "Хранить все файлы вместе. ВНИМАНИЕ: коллизии имён - ваша забота!"),
+	HU(557, "a", "-franzen X", "EXPERIMENTAL: create .franzen file too with key X"),
+	HIT(557, 0x4E880FE2, "SPERIMENTALE: crea anche il file .franzen con la chiave X"),
+	HRU(557, 0x4E880FE2, "ЭКСПЕРИМЕНТАЛЬНО: создать также файл .franzen с ключом X"),
+	HU(558, "a", "-turbo", "Faster add (default, not in ESX/NAS): files >= 4 MB are cut into|  fragments and hashed by several threads. The archive is the same, to the byte"),
+	HIT(558, 0x95920F88, "add piu' veloce (default, non in ESX/NAS): i file >= 4 MB vengono tagliati in|  frammenti e passati all'hash da piu' thread. L'archivio e' lo stesso, al byte"),
+	HRU(558, 0x95920F88, "Ускоренный add (по умолчанию, не в ESX/NAS): файлы >= 4 MB режутся на|  фрагменты и хешируются в несколько потоков. Архив тот же, побайтно"),
+	HU(559, "a", "-turbo N", "The same, with N threads for that (default: as -t, up to 32)"),
+	HIT(559, 0x62F58E5B, "Lo stesso, con N thread per quello|  (default: come -t, fino a 32)"),
+	HRU(559, 0x62F58E5B, "То же, с N потоками для этого (по умолчанию: как -t, до 32)"),
+	HU(560, "a", "-noturbo", "Plain add: one thread cuts the fragments (as zpaq 7.15)"),
+	HIT(560, 0xE3CF92C5, "add semplice: un solo thread taglia|  i frammenti (come zpaq 7.15)"),
+	HRU(560, 0xE3CF92C5, "Обычный add: фрагменты режет один поток (как zpaq 7.15)"),
 	/*
 	fdisk -l image.img
 losetup -fP _dev_sda.img
@@ -154052,1791 +155360,2603 @@ mount /dev/loop0p1 /ripristinato
 umount /ripristinato
 losetup -d /dev/loop0
 */
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Add two folders to archive", "a z:\\1.zpaq c:\\data\\* d:\\pippo\\*");
-		scrivi_esempio("Add folder, storing full hash SHA3", "a z:\\2.zpaq c:\\nz\\ -sha3");
-		scrivi_esempio("Add folder, then verification", "a z:\\3.zpaq c:\\nz\\ -test");
-		scrivi_esempio("Add two files", "a z:\\4.zpaq.zpaq c:\\vecchio.sql r:\\1.txt");
-		scrivi_esempio("Add as zpaq 7.15 (no checksum)", "a z:\\5.zpaq c:\\audio -715");
-		scrivi_esempio("Add and mark version", "a z:\\6.zpaq c:\\data\\* -comment first_copy");
+	HESEMPI("a", 'b'),
+	HE(561, "a", "Add two folders to archive", "a z:\\1.zpaq c:\\data\\* d:\\pippo\\*"),
+	HIT(561, 0x78A651EE, "Aggiunge due cartelle all'archivio"),
+	HRU(561, 0x78A651EE, "Добавить две папки в архив"),
+	HE(562, "a", "Add folder, storing full hash SHA3", "a z:\\2.zpaq c:\\nz\\ -sha3"),
+	HIT(562, 0xDFC831E4, "Aggiunge una cartella, salvando l'hash completo SHA3"),
+	HRU(562, 0xDFC831E4, "Добавить папку, сохранив полный хеш SHA3"),
+	HE(563, "a", "Add folder, then verification", "a z:\\3.zpaq c:\\nz\\ -test"),
+	HIT(563, 0x9DE0658A, "Aggiunge una cartella, poi verifica"),
+	HRU(563, 0x9DE0658A, "Добавить папку, затем проверить"),
+	HE(564, "a", "Add two files", "a z:\\4.zpaq.zpaq c:\\vecchio.sql r:\\1.txt"),
+	HIT(564, 0x34897175, "Aggiunge due file"),
+	HRU(564, 0x34897175, "Добавить два файла"),
+	HE(565, "a", "Add as zpaq 7.15 (no checksum)", "a z:\\5.zpaq c:\\audio -715"),
+	HIT(565, 0xF4F56C56, "Aggiunge come zpaq 7.15 (senza checksum)"),
+	HRU(565, 0xF4F56C56, "Добавить как zpaq 7.15 (без контрольных сумм)"),
+	HE(566, "a", "Add and mark version", "a z:\\6.zpaq c:\\data\\* -comment first_copy"),
+	HIT(566, 0xA80904DA, "Aggiunge e marca la versione"),
+	HRU(566, 0xA80904DA, "Добавить и пометить версию"),
 #if defined(_WIN32) || defined(_WIN64)
-		scrivi_esempio("Add by a VSS (Windows admin)", "a z:\\7.zpaq c:\\users\\utente\\* -vss");
-		scrivi_esempio("Image of a DYING disk (admin)", "a z:\\rescue.zpaq 3: -image -rescue");
-		scrivi_esempio("The same, jumps up to 256 MB", "a z:\\rescue.zpaq f: -image -rescue 256 -rescuetime 5");
+	HE(567, "a", "Add by a VSS (Windows admin)", "a z:\\7.zpaq c:\\users\\utente\\* -vss"),
+	HIT(567, 0x063B61DF, "Aggiunge da una VSS (amministratore Windows)"),
+	HRU(567, 0x063B61DF, "Добавить через VSS (администратор Windows)"),
+	HE(568, "a", "Image of a DYING disk (admin)", "a z:\\rescue.zpaq 3: -image -rescue"),
+	HIT(568, 0x958BE874, "Immagine di un disco MORENTE (amministratore)"),
+	HRU(568, 0x958BE874, "Образ УМИРАЮЩЕГО диска (администратор)"),
+	HE(569, "a", "The same, jumps up to 256 MB", "a z:\\rescue.zpaq f: -image -rescue 256 -rescuetime 5"),
+	HIT(569, 0xCD1D394B, "Lo stesso, salti fino a 256 MB"),
+	HRU(569, 0xCD1D394B, "То же, прыжки до 256 MB"),
 #else
-		scrivi_esempio("Image of a DYING disk (root)", "a /mnt/save/rescue.zpaq /dev/sdb -image -rescue");
-		scrivi_esempio("The same, jumps up to 256 MB", "a /mnt/save/rescue.zpaq /dev/sdb -image -rescue 256 -rescuetime 5");
+	HE(570, "a", "Image of a DYING disk (root)", "a /mnt/save/rescue.zpaq /dev/sdb -image -rescue"),
+	HIT(570, 0xA1D3CD11, "Immagine di un disco MORENTE (root)"),
+	HRU(570, 0xA1D3CD11, "Образ УМИРАЮЩЕГО диска (root)"),
+	HE(571, "a", "The same, jumps up to 256 MB", "a /mnt/save/rescue.zpaq /dev/sdb -image -rescue 256 -rescuetime 5"),
+	HIT(571, 0xCD1D394B, "Lo stesso, salti fino a 256 MB"),
+	HRU(571, 0xCD1D394B, "То же, прыжки до 256 MB"),
 #endif // corresponds to #if (#if defined(_WIN32) || defined(_WIN64))
-		scrivi_esempio("Add folder with timestamping (zfs)", "a z:\\8.zpaq c:\\data\\* -timestamp 2021-12-30_01:03:04");
-		scrivi_esempio("Create multipart archive", "a \"z:\\9_????.zpaq\" c:\\data\\");
-		scrivi_esempio("Create indexed multipart archive", "a \"z:\\a_???.zpaq\" c:\\data\\ -index z:\\a_000.zpaq");
-		scrivi_esempio("Add folder, with encryption", "a z:\\b.zpaq c:\\nz\\ -key mygoodpassword");
-		scrivi_esempio("Add folder, maximum compress", "a z:\\c.zpaq c:\\nz\\ -m5");
-		scrivi_esempio("Do not store the history (for l)", "a z:\\d.zpaq c:\\nz\\ -nofast");
-		scrivi_esempio("Add WITHOUT CRC-32/hash (like 715)", "a z:\\e.zpaq c:\\nz\\ -nochecksum");
-		scrivi_esempio("Add 2nd copy to USB drive (U)", "a \"z:\\f_???.zpaq\" c:\\nz\\ -copy u:\\usb");
+	HE(572, "a", "Add folder with timestamping (zfs)", "a z:\\8.zpaq c:\\data\\* -timestamp 2021-12-30_01:03:04"),
+	HIT(572, 0x0BE40518, "Aggiunge una cartella con data fissata (zfs)"),
+	HRU(572, 0x0BE40518, "Добавить папку с заданной меткой времени (zfs)"),
+	HE(573, "a", "Create multipart archive", "a \"z:\\9_????.zpaq\" c:\\data\\"),
+	HIT(573, 0xBD7253BF, "Crea un archivio multiparte"),
+	HRU(573, 0xBD7253BF, "Создать многотомный архив"),
+	HE(574, "a", "Create indexed multipart archive", "a \"z:\\a_???.zpaq\" c:\\data\\ -index z:\\a_000.zpaq"),
+	HIT(574, 0x7DEB620E, "Crea un archivio multiparte indicizzato"),
+	HRU(574, 0x7DEB620E, "Создать индексированный многотомный архив"),
+	HE(575, "a", "Add folder, with encryption", "a z:\\b.zpaq c:\\nz\\ -key mygoodpassword"),
+	HIT(575, 0x45693505, "Aggiunge una cartella, con cifratura"),
+	HRU(575, 0x45693505, "Добавить папку с шифрованием"),
+	HE(576, "a", "Add folder, maximum compress", "a z:\\c.zpaq c:\\nz\\ -m5"),
+	HIT(576, 0xF4518D86, "Aggiunge una cartella, compressione massima"),
+	HRU(576, 0xF4518D86, "Добавить папку, максимальное сжатие"),
+	HE(577, "a", "Do not store the history (for l)", "a z:\\d.zpaq c:\\nz\\ -nofast"),
+	HIT(577, 0x3F293A69, "Non salva la storia (per l)"),
+	HRU(577, 0x3F293A69, "Не хранить историю (для l)"),
+	HE(578, "a", "Add WITHOUT CRC-32/hash (like 715)", "a z:\\e.zpaq c:\\nz\\ -nochecksum"),
+	HIT(578, 0xA7CB10A4, "Aggiunge SENZA CRC-32/hash (come la 715)"),
+	HRU(578, 0xA7CB10A4, "Добавить БЕЗ CRC-32/хеша (как 715)"),
+	HE(579, "a", "Add 2nd copy to USB drive (U)", "a \"z:\\f_???.zpaq\" c:\\nz\\ -copy u:\\usb"),
+	HIT(579, 0xB5B333CE, "Aggiunge una 2a copia su un disco USB (U)"),
+	HRU(579, 0xB5B333CE, "Добавить 2-ю копию на USB-диск (U)"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_esempio("Launch pippo.bat after OK", "a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat");
+	HE(580, "a", "Launch pippo.bat after OK", "a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat"),
+	HIT(580, 0x46CE3129, "Lancia pippo.bat se tutto OK"),
+	HRU(580, 0x46CE3129, "Запустить pippo.bat при успехе"),
 #endif /// NOSFTPEND
-		scrivi_esempio("Archive file if bigger of 10GB", "a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -freezesize 10GB");
+	HE(581, "a", "Archive file if bigger of 10GB", "a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -freezesize 10GB"),
+	HIT(581, 0xD8F2D777, "Archivia il file se piu' grande di 10GB"),
+	HRU(581, 0xD8F2D777, "Архивировать файл, если больше 10GB"),
 #ifdef ZPAQFULL /// NOSFTPSTART
 #if defined(_WIN32)
-		scrivi_esempio("Make z:\\2.exe from z:\\1.zpaq", "a z:\\1.zpaq *.cpp -sfx z:\\2.exe");
-		scrivi_esempio("2.exe extract/overwrite into z:\\kom", "a z:\\1.zpaq *.cpp -sfx z:\\2.exe -sfxto z:\\kom -sfxforce");
+	HE(582, "a", "Make z:\\2.exe from z:\\1.zpaq", "a z:\\1.zpaq *.cpp -sfx z:\\2.exe"),
+	HIT(582, 0x2BE14174, "Crea z:\\2.exe da z:\\1.zpaq"),
+	HRU(582, 0x2BE14174, "Создать z:\\2.exe из z:\\1.zpaq"),
+	HE(583, "a", "2.exe extract/overwrite into z:\\kom", "a z:\\1.zpaq *.cpp -sfx z:\\2.exe -sfxto z:\\kom -sfxforce"),
+	HIT(583, 0xD051CC57, "2.exe estrae/sovrascrive in z:\\kom"),
+	HRU(583, 0xD051CC57, "2.exe извлекает/перезаписывает в z:\\kom"),
 #endif // corresponds to #if (#if defined(_WIN32))
 #endif /// NOSFTPEND
-		scrivi_esempio("Prepare a debug archive...for me", "a z:\\1.zpaq c:\\nz\\ -debug -zero");
-		scrivi_esempio("In-place 7.15 to zpaqfranz", "a z:\\1.zpaq c:\\nz\\ -touch");
-		scrivi_esempio("Store SHA-256 of unchanged files", "a z:\\1.zpaq c:\\nz\\ -touch -sha256");
-		scrivi_esempio("Hard-check of files", "a z:\\1.zpaq c:\\nz\\ -paranoid");
-		scrivi_esempio("Hard-check of files multithread", "a z:\\1.zpaq c:\\nz\\ -paranoid -ssd");
-		scrivi_esempio("Faster add, 8 threads to cut and hash", "a z:\\1.zpaq c:\\vm\\ -turbo 8");
-		scrivi_esempio("Add as before 65.6a", "a z:\\1.zpaq *.cpp -m1 -noturbo -nofast");
-		scrivi_esempio("Archive, without recursion", "a z:\\1.zpaq f:\\zarc\\*.* -norecursion");
-		scrivi_esempio("Archive mysqldump", "a z:\\1.zpaq mydump.sql -stdin");
-		scrivi_esempio("Stdin with % progress bar", "a z:\\1.zpaq dump.sql -stdin -stdinsize 2GB");
-		scrivi_esempio("MD5 quick check", "a z:\\knb.zpaq c:\\nz\\ -checktxt z:\\pippo.txt");
-		scrivi_esempio("Write MD5 on z:\\knb.txt", "a z:\\knb.zpaq c:\\nz\\ -checktxt");
-		scrivi_esempio("Write CRC32 on z:\\1_crc32.txt", "a z:\\1.zpaq c:\\nz\\ -fasttxt");
+	HE(584, "a", "Prepare a debug archive...for me", "a z:\\1.zpaq c:\\nz\\ -debug -zero"),
+	HIT(584, 0xD636753B, "Prepara un archivio di debug... per me"),
+	HRU(584, 0xD636753B, "Подготовить отладочный архив... для меня"),
+	HE(585, "a", "In-place 7.15 to zpaqfranz", "a z:\\1.zpaq c:\\nz\\ -touch"),
+	HIT(585, 0x9B3D88EB, "Da 7.15 a zpaqfranz sul posto"),
+	HRU(585, 0x9B3D88EB, "Из 7.15 в zpaqfranz на месте"),
+	HE(586, "a", "Store SHA-256 of unchanged files", "a z:\\1.zpaq c:\\nz\\ -touch -sha256"),
+	HIT(586, 0xEC31409F, "Salva lo SHA-256 dei file invariati"),
+	HRU(586, 0xEC31409F, "Сохранить SHA-256 неизменённых файлов"),
+	HE(587, "a", "Hard-check of files", "a z:\\1.zpaq c:\\nz\\ -paranoid"),
+	HIT(587, 0x2A07C1C9, "Controllo duro dei file"),
+	HRU(587, 0x2A07C1C9, "Жёсткая проверка файлов"),
+	HE(588, "a", "Hard-check of files multithread", "a z:\\1.zpaq c:\\nz\\ -paranoid -ssd"),
+	HIT(588, 0xFB520C94, "Controllo duro dei file in multithread"),
+	HRU(588, 0xFB520C94, "Жёсткая проверка файлов многопоточно"),
+	HE(589, "a", "Faster add, 8 threads to cut and hash", "a z:\\1.zpaq c:\\vm\\ -turbo 8"),
+	HIT(589, 0x0032FDAC, "add piu' veloce, 8 thread per tagliare e fare l'hash"),
+	HRU(589, 0x0032FDAC, "Ускоренный add, 8 потоков для нарезки и хеша"),
+	HE(590, "a", "Add as before 65.6a", "a z:\\1.zpaq *.cpp -m1 -noturbo -nofast"),
+	HIT(590, 0x5E5CF323, "Aggiunge come prima della 65.6a"),
+	HRU(590, 0x5E5CF323, "Добавить как до 65.6a"),
+	HE(591, "a", "Archive, without recursion", "a z:\\1.zpaq f:\\zarc\\*.* -norecursion"),
+	HIT(591, 0x45DB790F, "Archivia, senza ricorsione"),
+	HRU(591, 0x45DB790F, "Архивировать без рекурсии"),
+	HE(592, "a", "Archive mysqldump", "a z:\\1.zpaq mydump.sql -stdin"),
+	HIT(592, 0xC6F40531, "Archivia un mysqldump"),
+	HRU(592, 0xC6F40531, "Архивировать mysqldump"),
+	HE(593, "a", "Stdin with % progress bar", "a z:\\1.zpaq dump.sql -stdin -stdinsize 2GB"),
+	HIT(593, 0x1F2BFBBE, "Stdin con barra di avanzamento in %"),
+	HRU(593, 0x1F2BFBBE, "Stdin с индикатором прогресса в %"),
+	HE(594, "a", "MD5 quick check", "a z:\\knb.zpaq c:\\nz\\ -checktxt z:\\pippo.txt"),
+	HIT(594, 0x39D82818, "Controllo rapido MD5"),
+	HRU(594, 0x39D82818, "Быстрая проверка MD5"),
+	HE(595, "a", "Write MD5 on z:\\knb.txt", "a z:\\knb.zpaq c:\\nz\\ -checktxt"),
+	HIT(595, 0x939FFA24, "Scrive gli MD5 su z:\\knb.txt"),
+	HRU(595, 0x939FFA24, "Записать MD5 в z:\\knb.txt"),
+	HE(596, "a", "Write CRC32 on z:\\1_crc32.txt", "a z:\\1.zpaq c:\\nz\\ -fasttxt"),
+	HIT(596, 0xAD2B1909, "Scrive i CRC32 su z:\\1_crc32.txt"),
+	HRU(596, 0xAD2B1909, "Записать CRC32 в z:\\1_crc32.txt"),
 #ifdef _WIN32
-		scrivi_esempio("Find file /prova/ci.zpaq on drives", "a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq");
-		scrivi_esempio("Abort if file already open", "a z:\\2.zpaq c:\\nz\\* -open");
-		scrivi_esempio("Imaging drive E (it chooses how)", "a z:\\2.zpaq e: -image");
-		scrivi_esempio("Imaging C with pwd and big buffer", "a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
-		scrivi_esempio("Create VFILE-l-hashdeep.txt w/md5", "a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
+	HE(597, "a", "Find file /prova/ci.zpaq on drives", "a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq"),
+	HIT(597, 0x6194085E, "Cerca il file /prova/ci.zpaq sulle unita'"),
+	HRU(597, 0x6194085E, "Найти файл /prova/ci.zpaq на дисках"),
+	HE(598, "a", "Abort if file already open", "a z:\\2.zpaq c:\\nz\\* -open"),
+	HIT(598, 0xA50C9252, "Esce se il file e' gia' aperto"),
+	HRU(598, 0xA50C9252, "Прервать, если файл уже открыт"),
+	HE(599, "a", "Imaging drive E (it chooses how)", "a z:\\2.zpaq e: -image"),
+	HIT(599, 0x2BBCE3BE, "Immagine dell'unita' E (sceglie lui come)"),
+	HRU(599, 0x2BBCE3BE, "Образ диска E (способ выбирается сам)"),
+	HE(600, "a", "Imaging C with pwd and big buffer", "a z:\\2.zpaq c: -image -buffer 1MB -key pippo"),
+	HIT(600, 0x38F1479E, "Immagine di C con password e buffer grande"),
+	HRU(600, 0x38F1479E, "Образ C с паролем и большим буфером"),
+	HE(601, "a", "Create VFILE-l-hashdeep.txt w/md5", "a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd"),
+	HIT(601, 0x586C9929, "Crea VFILE-l-hashdeep.txt con md5"),
+	HRU(601, 0x586C9929, "Создать VFILE-l-hashdeep.txt с md5"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_esempio("Multiple z:\\utenti_something.zpaq", "a z:\\utenti.zpaq c:\\users -home");
-		scrivi_esempio("All users, but not franco", "a /temp/test1 /home -home -not franco");
-		scrivi_esempio("Only SARA and NERI folders", "a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
-		scrivi_esempio("Sort (orderby) before add", "a z:\\test.txt c:\\dropbox -orderby ext;name");
-		scrivi_esempio("Sorting files from largest", "a z:\\test.txt c:\\dropbox -orderby size -desc");
-		scrivi_esempio("Manage SHA-1 collisions", "a z:\\1.zpaq messageA messageB -collision");
+	HE(602, "a", "Multiple z:\\utenti_something.zpaq", "a z:\\utenti.zpaq c:\\users -home"),
+	HIT(602, 0x491ED587, "Piu' z:\\utenti_qualcosa.zpaq"),
+	HRU(602, 0x491ED587, "Несколько z:\\utenti_something.zpaq"),
+	HE(603, "a", "All users, but not franco", "a /temp/test1 /home -home -not franco"),
+	HIT(603, 0x5B5EF19B, "Tutti gli utenti, tranne franco"),
+	HRU(603, 0x5B5EF19B, "Все пользователи, кроме franco"),
+	HE(604, "a", "Only SARA and NERI folders", "a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\""),
+	HIT(604, 0x75A60B5A, "Solo le cartelle SARA e NERI"),
+	HRU(604, 0x75A60B5A, "Только папки SARA и NERI"),
+	HE(605, "a", "Sort (orderby) before add", "a z:\\test.txt c:\\dropbox -orderby ext;name"),
+	HIT(605, 0x646FC41B, "Ordina (orderby) prima di add"),
+	HRU(605, 0x646FC41B, "Сортировать (orderby) перед add"),
+	HE(606, "a", "Sorting files from largest", "a z:\\test.txt c:\\dropbox -orderby size -desc"),
+	HIT(606, 0xE87684E8, "Ordina i file dal piu' grande"),
+	HRU(606, 0xE87684E8, "Сортировка файлов от самого большого"),
+	HE(607, "a", "Manage SHA-1 collisions", "a z:\\1.zpaq messageA messageB -collision"),
+	HIT(607, 0x3207DC4F, "Gestisce le collisioni SHA-1"),
+	HRU(607, 0x3207DC4F, "Обработка коллизий SHA-1"),
 #ifdef unix
-		scrivi_esempio("Update from tank/d dataset", "a /tmp/test.zpaq * -dataset \"tank/d\"");
+	HE(608, "a", "Update from tank/d dataset", "a /tmp/test.zpaq * -dataset \"tank/d\""),
+	HIT(608, 0x0DA7A893, "Aggiorna dal dataset tank/d"),
+	HRU(608, 0x0DA7A893, "Обновить из набора данных tank/d"),
 #endif // corresponds to #ifdef (#ifdef unix)
 #ifdef _WIN32
-		scrivi_esempio("Store CRC-32 on NTFS ADS", "a z:\\1.zpaq *.cpp -ads");
+	HE(609, "a", "Store CRC-32 on NTFS ADS", "a z:\\1.zpaq *.cpp -ads"),
+	HIT(609, 0x05EC5622, "Salva il CRC-32 negli ADS di NTFS"),
+	HRU(609, 0x05EC5622, "Хранить CRC-32 в ADS NTFS"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_esempio("Split in 1GB chunks", "a z:\\1_????.zpaq c:\\pippo -chunk 1GB");
-		scrivi_esempio("Do not mess output with errors", "a z:\\1.zpaq c:\\users -ignore");
-		scrivi_esempio("Wait for a key press after run", "a z:\\1.zpaq c:\\users -pause");
-		scrivi_esempio("Abort if /monta...rar does not exist", "a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
+	HE(610, "a", "Split in 1GB chunks", "a z:\\1_????.zpaq c:\\pippo -chunk 1GB"),
+	HIT(610, 0x9FF2F656, "Divide in pezzi da 1GB"),
+	HRU(610, 0x9FF2F656, "Разбить на куски по 1GB"),
+	HE(611, "a", "Do not mess output with errors", "a z:\\1.zpaq c:\\users -ignore"),
+	HIT(611, 0xB2BD19F3, "Non sporca l'output con gli errori"),
+	HRU(611, 0xB2BD19F3, "Не засорять вывод ошибками"),
+	HE(612, "a", "Wait for a key press after run", "a z:\\1.zpaq c:\\users -pause"),
+	HIT(612, 0xEDCDE1F7, "Aspetta un tasto alla fine"),
+	HRU(612, 0xEDCDE1F7, "Ждать нажатия клавиши в конце"),
+	HE(613, "a", "Abort if /monta...rar does not exist", "a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar"),
+	HIT(613, 0xF2C10FE0, "Esce se /monta...rar non esiste"),
+	HRU(613, 0xF2C10FE0, "Прервать, если /monta...rar не существует"),
 #ifdef _WIN32
-		scrivi_esempio("Take Thunderbird email of utente", "a z:\\1.zpaq c:\\users\\utente -thunderbird");
-		scrivi_esempio("Close and take Thunderbird email", "a z:\\1.zpaq c:\\users\\utente -thunderbird -kill");
+	HE(614, "a", "Take Thunderbird email of utente", "a z:\\1.zpaq c:\\users\\utente -thunderbird"),
+	HIT(614, 0x0E6BAAB5, "Prende la posta Thunderbird di utente"),
+	HRU(614, 0x0E6BAAB5, "Взять почту Thunderbird пользователя utente"),
+	HE(615, "a", "Close and take Thunderbird email", "a z:\\1.zpaq c:\\users\\utente -thunderbird -kill"),
+	HIT(615, 0x4999053C, "Chiude e prende la posta Thunderbird"),
+	HRU(615, 0x4999053C, "Закрыть и взять почту Thunderbird"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_esempio("Store creation date (slower)", "a z:\\1.zpaq c:\\users\\utente -date");
-		scrivi_esempio("Use less RAM: DO NOT MIX HASHES!", "a z:\\1.zpaq c:\\nz -frugal");
-		scrivi_esempio("Store external VFILE-l-external.txt", "a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
-		scrivi_esempio("Alter the filedate (piped)", "type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
-		scrivi_esempio("Load files from text file", "a z:\\1.zpaq -input z:\\thelist.txt");
-		scrivi_esempio("Write errors", "a z:\\1.zpaq c:\\windows\\system32 -errorlog z:\\errors.txt -silent");
-		scrivi_esempio("Load files/to from text files", "a z:\\1.zpaq -input z:\\input.txt -destination z:\\destination.txt");
+	HE(616, "a", "Store creation date (slower)", "a z:\\1.zpaq c:\\users\\utente -date"),
+	HIT(616, 0xC6D16A3A, "Salva la data di creazione (piu' lento)"),
+	HRU(616, 0xC6D16A3A, "Сохранять дату создания (медленнее)"),
+	HE(617, "a", "Use less RAM: DO NOT MIX HASHES!", "a z:\\1.zpaq c:\\nz -frugal"),
+	HIT(617, 0x4C79B77A, "Usa meno RAM: NON MESCOLARE GLI HASH!"),
+	HRU(617, 0x4C79B77A, "Меньше RAM: НЕ СМЕШИВАЙТЕ ХЕШИ!"),
+	HE(618, "a", "Store external VFILE-l-external.txt", "a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\""),
+	HIT(618, 0xF1CC5432, "Salva il VFILE-l-external.txt esterno"),
+	HRU(618, 0xF1CC5432, "Сохранить внешний VFILE-l-external.txt"),
+	HE(619, "a", "Alter the filedate (piped)", "type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03"),
+	HIT(619, 0x8B7DF635, "Altera la data dei file (in pipe)"),
+	HRU(619, 0x8B7DF635, "Изменить дату файлов (через pipe)"),
+	HE(620, "a", "Load files from text file", "a z:\\1.zpaq -input z:\\thelist.txt"),
+	HIT(620, 0xFB2FF1C1, "Carica i file da un file di testo"),
+	HRU(620, 0xFB2FF1C1, "Загрузить файлы из текстового файла"),
+	HE(621, "a", "Write errors", "a z:\\1.zpaq c:\\windows\\system32 -errorlog z:\\errors.txt -silent"),
+	HIT(621, 0x9DABB183, "Scrive gli errori"),
+	HRU(621, 0x9DABB183, "Записывать ошибки"),
+	HE(622, "a", "Load files/to from text files", "a z:\\1.zpaq -input z:\\input.txt -destination z:\\destination.txt"),
+	HIT(622, 0x7F5C18F6, "Carica file/to da file di testo"),
+	HRU(622, 0x7F5C18F6, "Загрузить файлы/to из текстовых файлов"),
 #ifdef _WIN32
-		scrivi_esempio("Do NOT add onedrive placeholder", "a z:\\1.zpaq c:\\users\\utente\\onedrive -onedrive");
-		scrivi_esempio("Reduce CPU power, turn off", "a z:\\1.zpaq c:\\pippo -slow -monitor -shutdown");
+	HE(623, "a", "Do NOT add onedrive placeholder", "a z:\\1.zpaq c:\\users\\utente\\onedrive -onedrive"),
+	HIT(623, 0x3C3EF1A3, "NON aggiunge i segnaposto di onedrive"),
+	HRU(623, 0x3C3EF1A3, "НЕ добавлять заполнители onedrive"),
+	HE(624, "a", "Reduce CPU power, turn off", "a z:\\1.zpaq c:\\pippo -slow -monitor -shutdown"),
+	HIT(624, 0x5A88C032, "Riduce la potenza della CPU, spegne"),
+	HRU(624, 0x5A88C032, "Снизить мощность CPU, выключить"),
 #endif
 #ifdef unix
-		scrivi_esempio("Store metadata too", "a /tmp/1.zpaq /www -tar -highway64");
+	HE(625, "a", "Store metadata too", "a /tmp/1.zpaq /www -tar -highway64"),
+	HIT(625, 0xAE8BE759, "Salva anche i metadati"),
+	HRU(625, 0xAE8BE759, "Сохранить также метаданные"),
 #endif
 #ifdef _WIN32
-		scrivi_esempio("Whole NTFS drives: fast scan (admin)", "a z:\\1.zpaq c:\\ e:\\");
-		scrivi_esempio("Fast scan of a folder too (admin)", "a z:\\1.zpaq d:\\data -ntfs");
+	HE(626, "a", "Whole NTFS drives: fast scan (admin)", "a z:\\1.zpaq c:\\ e:\\"),
+	HIT(626, 0x2BFD1AB9, "Unita' NTFS intere: scansione veloce (amministratore)"),
+	HRU(626, 0x2BFD1AB9, "Целые диски NTFS: быстрое сканирование (администратор)"),
+	HE(627, "a", "Fast scan of a folder too (admin)", "a z:\\1.zpaq d:\\data -ntfs"),
+	HIT(627, 0x19C6610E, "Scansione veloce anche di una cartella (amministratore)"),
+	HRU(627, 0x19C6610E, "Быстрое сканирование и для папки (администратор)"),
 #endif
 #ifdef unix
-		scrivi_esempio("Raw imaging a device", "a /tmp/bak.zpaq /dev/sdb -image");
-		scrivi_esempio("The same, without the live map", "a /tmp/bak.zpaq /dev/sdb -image -nodashboard");
+	HE(628, "a", "Raw imaging a device", "a /tmp/bak.zpaq /dev/sdb -image"),
+	HIT(628, 0x6357A2C2, "Immagine raw di un dispositivo"),
+	HRU(628, 0x6357A2C2, "Raw-образ устройства"),
+	HE(629, "a", "The same, without the live map", "a /tmp/bak.zpaq /dev/sdb -image -nodashboard"),
+	HIT(629, 0xE6928FFB, "Lo stesso, senza la mappa dal vivo"),
+	HRU(629, 0xE6928FFB, "То же, без живой карты"),
 #endif
-		scrivi_esempio("Append to outputfile", "a /tmp/bak.zpaq etc -out result.txt -appendoutput");
-		scrivi_esempio("Force 10GB+ free space", "a /tmp/bak.zpaq etc -checkspace 10g -exec_err fulldisk.sh");
-		scrivi_esempio("Make franzen file", "a z:\\1.zpaq c:\\nz -franzen pippo -key pluto");
+	HE(630, "a", "Append to outputfile", "a /tmp/bak.zpaq etc -out result.txt -appendoutput"),
+	HIT(630, 0x8915D925, "Accoda al file di output"),
+	HRU(630, 0x8915D925, "Дописывать в файл вывода"),
+	HE(631, "a", "Force 10GB+ free space", "a /tmp/bak.zpaq etc -checksize 10g -exec_err fulldisk.sh"), /// 65.14b: it was -checkspace (-helpcheck)
+	HIT(631, 0xE2A03E13, "Pretende 10GB+ di spazio libero"),
+	HRU(631, 0xE2A03E13, "Требовать 10GB+ свободного места"),
+	HE(632, "a", "Make franzen file", "a z:\\1.zpaq c:\\nz -franzen pippo -key pluto"),
+	HIT(632, 0xE26935C7, "Crea il file franzen"),
+	HRU(632, 0xE26935C7, "Создать файл franzen"),
 #ifdef _WIN32
-		scrivi_esempio("Image of C: (used clusters + VSS)", "a z:\\1.zpaq c: -image");
-		scrivi_esempio("Image of D: with VSS (not by itself)", "a z:\\1.zpaq d: -image -vss");
-		scrivi_esempio("Image of a USB stick (FAT32, exFAT)", "a z:\\1.zpaq f: -image");
-		scrivi_esempio("Get the DRIVE where C: is", "a z:\\1.zpaq C: -image -all");
-		scrivi_esempio("The whole partition, byte by byte", "a z:\\1.zpaq e: -raw");
-		scrivi_esempio("C: without VSS, with the swap files", "a z:\\1.zpaq c: -image -novss -nofrugal");
-		scrivi_esempio("The same, without the live map", "a z:\\1.zpaq c: -image -nodashboard");
+	HE(633, "a", "Image of C: (used clusters + VSS)", "a z:\\1.zpaq c: -image"),
+	HIT(633, 0xA046E1F0, "Immagine di C: (cluster usati + VSS)"),
+	HRU(633, 0xA046E1F0, "Образ C: (используемые кластеры + VSS)"),
+	HE(634, "a", "Image of D: with VSS (not by itself)", "a z:\\1.zpaq d: -image -vss"),
+	HIT(634, 0x52504BE5, "Immagine di D: con VSS (non da solo)"),
+	HRU(634, 0x52504BE5, "Образ D: через VSS (не сам по себе)"),
+	HE(635, "a", "Image of a USB stick (FAT32, exFAT)", "a z:\\1.zpaq f: -image"),
+	HIT(635, 0xDAB8CF57, "Immagine di una chiavetta USB (FAT32, exFAT)"),
+	HRU(635, 0xDAB8CF57, "Образ USB-флешки (FAT32, exFAT)"),
+	HE(636, "a", "Get the DRIVE where C: is", "a z:\\1.zpaq C: -image -all"),
+	HIT(636, 0x25DE8D28, "Il DISCO dove si trova C:"),
+	HRU(636, 0x25DE8D28, "Взять ДИСК, на котором находится C:"),
+	HE(637, "a", "The whole partition, byte by byte", "a z:\\1.zpaq e: -raw"),
+	HIT(637, 0x209DB9C6, "L'intera partizione, byte per byte"),
+	HRU(637, 0x209DB9C6, "Весь раздел, побайтно"),
+	HE(638, "a", "C: without VSS, with the swap files", "a z:\\1.zpaq c: -image -novss -nofrugal"),
+	HIT(638, 0x4FAE6FE1, "C: senza VSS, con i file di swap"),
+	HRU(638, 0x4FAE6FE1, "C: без VSS, с файлами подкачки"),
+	HE(639, "a", "The same, without the live map", "a z:\\1.zpaq c: -image -nodashboard"),
+	HIT(639, 0xE6928FFB, "Lo stesso, senza la mappa dal vivo"),
+	HRU(639, 0xE6928FFB, "То же, без живой карты"),
 #endif
-	}
-	return ("Add/append file(s) to archive");
-}
+	HBREVE(640, "a", "Add/append file(s) to archive"),
+	HIT(640, 0xAD710D76, "Aggiunge/accoda file all'archivio"),
+	HRU(640, 0xAD710D76, "Добавить/дописать файлы в архив"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-string help_update(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD update", "(refresh zpaqfranz from Internet)");
-		scrivi_riga("  ", "Check/download from http://www.francocorbelli.it/zpaqfranz");
+	/// update
+	HU(641, "update", "CMD update", "(refresh zpaqfranz from Internet)|Check/download from http://www.francocorbelli.it/zpaqfranz"),
+	HIT(641, 0x24C3311D, "(aggiorna zpaqfranz da Internet)|Controlla/scarica da http://www.francocorbelli.it/zpaqfranz"),
+	HRU(641, 0x24C3311D, "(обновить zpaqfranz из Интернета)|Проверить/скачать с http://www.francocorbelli.it/zpaqfranz"),
 #ifdef _WIN64
-		scrivi_riga(" ", "or from two user-entered URLs");
-		scrivi_riga("-force", "Wet-run (do the update, default dry-run)");
-		scrivi_riga("-force -kill", "Replace current zpaqfranz from Internet");
-		scrivi_riga("-paranoid", "Show manual p7m verification steps, open AgID website");
-		scrivi_riga("-verbose", "Dump p7m signature details (CF, RSA key, digest chain)");
-		scrivi_riga("  ", "The .sha256 file is always verified against a PKCS#7/CAdES");
-		scrivi_riga("  ", "digital signature (signer CF must be CRBFNC72T25H294X)");
+	HU(642, "update", " ", "or from two user-entered URLs"),
+	HIT(642, 0xE390E7CF, "o da due URL dati dall'utente"),
+	HRU(642, 0xE390E7CF, "или с двух URL, заданных пользователем"),
+	HU(643, "update", "-force", "Wet-run (do the update, default dry-run)"),
+	HIT(643, 0x9643204D, "Esecuzione vera (fa l'aggiornamento,|  di default prova a secco)"),
+	HRU(643, 0x9643204D, "Выполнить по-настоящему (обновить,|  по умолчанию пробный прогон)"),
+	HU(644, "update", "-force -kill", "Replace current zpaqfranz from Internet"),
+	HIT(644, 0xDFA99B4C, "Sostituisce lo zpaqfranz attuale da Internet"),
+	HRU(644, 0xDFA99B4C, "Заменить текущий zpaqfranz из Интернета"),
+	HU(645, "update", "-paranoid", "Show manual p7m verification steps, open AgID website"),
+	HIT(645, 0x4600064A, "Mostra i passi per verificare a|  mano il p7m, apre il sito AgID"),
+	HRU(645, 0x4600064A, "Показать шаги ручной проверки p7m, открыть сайт AgID"),
+	HU(646, "update", "-verbose", "Dump p7m signature details (CF, RSA key, digest chain)|The .sha256 file is always verified against a PKCS#7/CAdES|digital signature (signer CF must be CRBFNC72T25H294X)"),
+	HIT(646, 0xCD31A33F, "Dettagli della firma p7m (CF,|chiave RSA, catena dei digest)|Il file .sha256 viene sempre|verificato con una firma digitale|PKCS#7/CAdES (il CF del firmatario|deve essere CRBFNC72T25H294X)"),
+	HRU(646, 0xCD31A33F, "Подробности подписи p7m (CF, ключ RSA, цепочка дайджестов)|Файл .sha256 всегда проверяется по цифровой подписи|PKCS#7/CAdES (CF подписавшего должен быть CRBFNC72T25H294X)"),
 #endif // corresponds to #ifdef (#ifdef _WIN64)
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Check for updates", "update");
+	HESEMPI("update", 'b'),
+	HE(647, "update", "Check for updates", "update"),
+	HIT(647, 0x70AD7706, "Cerca aggiornamenti"),
+	HRU(647, 0x70AD7706, "Проверить обновления"),
 #ifdef _WIN64
-		scrivi_esempio("Check for updates", "upgrade");
-		scrivi_esempio("Update (if any)", "update -force");
-		scrivi_esempio("Get always from Internet", "update -force -kill");
-		scrivi_esempio("Show p7m signature dump", "update -verbose");
-		scrivi_esempio("Manual signature verify", "update -paranoid");
-		scrivi_esempio("Use specific URLs", "update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
+	HE(648, "update", "Check for updates", "upgrade"),
+	HIT(648, 0x70AD7706, "Cerca aggiornamenti"),
+	HRU(648, 0x70AD7706, "Проверить обновления"),
+	HE(649, "update", "Update (if any)", "update -force"),
+	HIT(649, 0x2D764250, "Aggiorna (se c'e')"),
+	HRU(649, 0x2D764250, "Обновить (если есть)"),
+	HE(650, "update", "Get always from Internet", "update -force -kill"),
+	HIT(650, 0x273BFD09, "Scarica sempre da Internet"),
+	HRU(650, 0x273BFD09, "Всегда брать из Интернета"),
+	HE(651, "update", "Show p7m signature dump", "update -verbose"),
+	HIT(651, 0xEA398BF8, "Mostra i dettagli della firma p7m"),
+	HRU(651, 0xEA398BF8, "Показать дамп подписи p7m"),
+	HE(652, "update", "Manual signature verify", "update -paranoid"),
+	HIT(652, 0x6225048E, "Verifica manuale della firma"),
+	HRU(652, 0x6225048E, "Ручная проверка подписи"),
+	HE(653, "update", "Use specific URLs", "update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe"),
+	HIT(653, 0xC47D3F02, "Usa URL specifici"),
+	HRU(653, 0xC47D3F02, "Использовать указанные URL"),
 #endif // corresponds to #ifdef (#ifdef _WIN64)
-	}
 #ifdef _WIN32
-	return ("Update zpaqfranz (www.francocorbelli.it)");
+	HBREVE(654, "update", "Update zpaqfranz (www.francocorbelli.it)"),
+	HIT(654, 0x443ABE07, "Aggiorna zpaqfranz (www.francocorbelli.it)"),
+	HRU(654, 0x443ABE07, "Обновить zpaqfranz (www.francocorbelli.it)"),
 #else
-	return ("Check for new zpaqfranz version (www.francocorbelli.it)");
+	HBREVE(655, "update", "Check for new zpaqfranz version (www.francocorbelli.it)"),
+	HIT(655, 0x5CCDA2A1, "Cerca una nuova versione di zpaqfranz (www.francocorbelli.it)"),
+	HRU(655, 0x5CCDA2A1, "Проверить новую версию zpaqfranz (www.francocorbelli.it)"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-}
-
 #ifdef _WIN64
-string help_download(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD download", "Get file from Internet");
-		scrivi_riga("-force", "Overwrite output file");
-		scrivi_riga("-space", "Do not check the output path");
-		scrivi_riga("-checktxt", "z   Test hash in z file (len 32=MD5, 40=SHA-1, 64=SHA-256)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Download in ugo.txt", "download https://www.1.it/2.cpp ./2.cpp");
-		scrivi_esempio("Download+check SHA256", "download http://www.1.it/3.cpp z:\\3.cpp -checktxt http://www.1.it/3.sha256");
-		scrivi_esempio("Download+check MD5", "download http://www.1.it/4.cpp z:\\4.cpp -checktxt http://www.1.it/4.md5");
-	}
-	return ("Download file from Internet");
-}
-string help_kickstart(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD kickstart", "Get every external file zpaqfranz can use on Windows: the DLLs (ssh, curl,");
-		scrivi_riga(" ", "sodium), mysql.exe, mysqldump.exe, the WinFsp installer");
-		scrivi_riga(" ", "zpaqfranz-full.exe extracts them from itself, the others download them");
-		scrivi_riga(" ", "The SHA-256 of every file is checked");
-		scrivi_riga("-to folder", "Where to put the files (default: the current folder)");
-		scrivi_riga("-force", "Overwrite a file already there, when it is not the right one");
-		scrivi_riga("-space", "Do not check the output folder");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Into the current folder", "kickstart");
-		scrivi_esempio("Into a folder", "kickstart -to z:\\tools");
-	}
-	return ("Extract (full) or download the external files (DLL, tools)");
-}
+	/// download
+	HU(656, "download", "CMD download", "Get file from Internet"),
+	HIT(656, 0x6778EBCE, "Scarica un file da Internet"),
+	HRU(656, 0x6778EBCE, "Скачать файл из Интернета"),
+	HU(657, "download", "-force", "Overwrite output file"),
+	HIT(657, 0x9B4CFBEB, "Sovrascrive il file di output"),
+	HRU(657, 0x9B4CFBEB, "Перезаписать выходной файл"),
+	HU(658, "download", "-space", "Do not check the output path"),
+	HIT(658, 0xD57CB5FA, "Non controlla il percorso di output"),
+	HRU(658, 0xD57CB5FA, "Не проверять путь вывода"),
+	HU(659, "download", "-checktxt", "z   Test hash in z file (len 32=MD5, 40=SHA-1, 64=SHA-256)"),
+	HIT(659, 0xFB90A844, "z Controlla l'hash nel file z (lungh.|  32=MD5, 40=SHA-1, 64=SHA-256)"),
+	HRU(659, 0xFB90A844, "z Проверить хеш в файле z (длина|  32=MD5, 40=SHA-1, 64=SHA-256)"),
+	HESEMPI("download", 'b'),
+	HE(660, "download", "Download in ugo.txt", "download https://www.1.it/2.cpp ./2.cpp"),
+	HIT(660, 0xBF1B484B, "Scarica in ugo.txt"),
+	HRU(660, 0xBF1B484B, "Скачать в ugo.txt"),
+	HE(661, "download", "Download+check SHA256", "download http://www.1.it/3.cpp z:\\3.cpp -checktxt http://www.1.it/3.sha256"),
+	HIT(661, 0xC26636AD, "Scarica e controlla lo SHA256"),
+	HRU(661, 0xC26636AD, "Скачать и проверить SHA256"),
+	HE(662, "download", "Download+check MD5", "download http://www.1.it/4.cpp z:\\4.cpp -checktxt http://www.1.it/4.md5"),
+	HIT(662, 0x4F5386CA, "Scarica e controlla l'MD5"),
+	HRU(662, 0x4F5386CA, "Скачать и проверить MD5"),
+	HBREVE(663, "download", "Download file from Internet"),
+	HIT(663, 0x0BF406B0, "Scarica un file da Internet"),
+	HRU(663, 0x0BF406B0, "Скачать файл из Интернета"),
+	/// kickstart
+	HU(664, "kickstart", "CMD kickstart", "Get every external file zpaqfranz can use on Windows: the DLLs (ssh, curl,|sodium), mysql.exe, mysqldump.exe, the WinFsp installer|zpaqfranz-full.exe extracts them from itself, the others download them|The SHA-256 of every file is checked"),
+	HIT(664, 0xD2A9C06B, "Prende ogni file esterno che zpaqfranz puo' usare su Windows: le DLL|(ssh, curl, sodium), mysql.exe, mysqldump.exe, l'installatore di|WinFsp zpaqfranz-full.exe li estrae da se', gli altri li scaricano|Lo SHA-256 di ogni file viene controllato"),
+	HRU(664, 0xD2A9C06B, "Получить все внешние файлы, которые zpaqfranz может использовать в|Windows: DLL (ssh, curl, sodium), mysql.exe, mysqldump.exe, установщик|WinFsp zpaqfranz-full.exe извлекает их из себя, остальные скачивают|SHA-256 каждого файла проверяется"),
+	HU(665, "kickstart", "-to folder", "Where to put the files (default: the current folder)"),
+	HIT(665, 0xD5863058, "Dove mettere i file (default: la cartella corrente)"),
+	HRU(665, 0xD5863058, "Куда положить файлы (по умолчанию: текущая папка)"),
+	HU(666, "kickstart", "-force", "Overwrite a file already there, when it is not the right one"),
+	HIT(666, 0xDA4EFF0C, "Sovrascrive un file gia' presente,|  quando non e' quello giusto"),
+	HRU(666, 0xDA4EFF0C, "Перезаписать уже имеющийся файл, если он не тот"),
+	HU(667, "kickstart", "-space", "Do not check the output folder"),
+	HIT(667, 0xEB38A461, "Non controlla la cartella di output"),
+	HRU(667, 0xEB38A461, "Не проверять папку вывода"),
+	HESEMPI("kickstart", 'b'),
+	HE(668, "kickstart", "Into the current folder", "kickstart"),
+	HIT(668, 0x948D7083, "Nella cartella corrente"),
+	HRU(668, 0x948D7083, "В текущую папку"),
+	HE(669, "kickstart", "Into a folder", "kickstart -to z:\\tools"),
+	HIT(669, 0x73576ABC, "In una cartella"),
+	HRU(669, 0x73576ABC, "В папку"),
+	HBREVE(670, "kickstart", "Extract (full) or download the external files (DLL, tools)"),
+	HIT(670, 0x090AF1EC, "Estrae (full) o scarica i file esterni (DLL, strumenti)"),
+	HRU(670, 0x090AF1EC, "Извлечь (full) или скачать внешние файлы (DLL, утилиты)"),
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 #endif /// NOSFTPEND
-
 #ifdef _WIN32
 #ifdef ZPAQFULL /// NOSFTPSTART
-string help_rd(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD rd", "remove directory on Windows");
-		scrivi_riga(" ", "Delete hard-to-remove dir (like rd /s or rm -r)");
-		scrivi_riga(" ", "Paths >255, names ending with a dot or a space, read-only");
-		scrivi_riga(" ", "files: handled by default, -longpath NOT needed");
-		scrivi_riga(" ", "Junctions/symlinks are removed, never followed");
-		scrivi_riga("-kill", "Wet run (default: DRY run)");
-		scrivi_riga("-force", "Remove folder if not-zero files present");
-		scrivi_riga("-space", "Do not check if writeable (ex. 0 bytes free)");
-		scrivi_riga("-verbose", "Show every object that could not be deleted");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-		scrivi_esempio("Remove folder z:\\kajo:", "rd z:\\kajo -force -kill -space");
-	return ("Remove hard-to-delete Windows folder (ex. path >255)");
-}
+	/// rd
+	HU(671, "rd", "CMD rd", "remove directory on Windows|Delete hard-to-remove dir (like rd /s or rm -r)|Paths >255, names ending with a dot or a space, read-only|files: handled by default, -longpath NOT needed|Junctions/symlinks are removed, never followed"),
+	HIT(671, 0x12876114, "rimuove una cartella su Windows|Cancella cartelle difficili da|togliere (come rd /s o rm -r)|Percorsi >255, nomi che finiscono con un|punto o uno spazio, file in sola lettura:|gestiti di default, -longpath NON serve|Junction/symlink vengono tolti, mai seguiti"),
+	HRU(671, 0x12876114, "удаление папки в Windows|Удаляет трудноудаляемые папки (как rd /s или rm -r)|Пути >255, имена с точкой или пробелом в|конце, файлы только для чтения: обрабатываются|по умолчанию, -longpath НЕ нужен|Junction/symlink удаляются, по ним не переходят"),
+	HU(672, "rd", "-kill", "Wet run (default: DRY run)"),
+	HIT(672, 0x9D6CC7FE, "Esecuzione vera (default: prova a SECCO)"),
+	HRU(672, 0x9D6CC7FE, "Выполнить по-настоящему (по умолчанию: ПРОБНЫЙ прогон)"),
+	HU(673, "rd", "-force", "Remove folder if not-zero files present"),
+	HIT(673, 0x5065781C, "Toglie la cartella anche se ci sono file non vuoti"),
+	HRU(673, 0x5065781C, "Удалить папку, даже если есть непустые файлы"),
+	HU(674, "rd", "-space", "Do not check if writeable (ex. 0 bytes free)"),
+	HIT(674, 0x5210E4BA, "Non controlla se si puo' scrivere (es. 0 byte liberi)"),
+	HRU(674, 0x5210E4BA, "Не проверять возможность записи (напр. 0 байт свободно)"),
+	HU(675, "rd", "-verbose", "Show every object that could not be deleted"),
+	HIT(675, 0x59F5250D, "Mostra ogni oggetto che non si e' potuto cancellare"),
+	HRU(675, 0x59F5250D, "Показать каждый объект, который не удалось удалить"),
+	HESEMPI("rd", 'b'),
+	HE(676, "rd", "Remove folder z:\\kajo:", "rd z:\\kajo -force -kill -space"),
+	HIT(676, 0xEF067CA6, "Toglie la cartella z:\\kajo:"),
+	HRU(676, 0xEF067CA6, "Удалить папку z:\\kajo:"),
+	HBREVE(677, "rd", "Remove hard-to-delete Windows folder (ex. path >255)"),
+	HIT(677, 0x527DE47E, "Toglie cartelle Windows ostiche (es. percorso >255)"),
+	HRU(677, 0x527DE47E, "Удалить трудноудаляемую папку Windows (напр. путь >255)"),
 #endif /// NOSFTPEND
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-/// zip and pakka run in every build: their help too (they were inside #ifdef _WIN32)
-string help_zip(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zip", "extract into ONE single ZIP64 file (STORED, or -deflate)");
-		scrivi_riga(" ", "It is the x command: same filters, same -until, same -range,");
-		scrivi_riga(" ", "only the output is a .zip instead of the filesystem");
-		scrivi_riga(" ", "Made for 'universal' restores: the Linux/NAS/Mac filenames that");
-		scrivi_riga(" ", "Windows cannot even create ( : * ? \" < > | , trailing dots and");
-		scrivi_riga(" ", "spaces, CON, LPT1...) are legal INSIDE a zip, so the whole tree");
-		scrivi_riga(" ", "travels on a Windows (or exFAT) disk and is unpacked back *nix side");
-		scrivi_riga(" ", "Nothing is compressed unless -deflate is asked for");
-		scrivi_riga(" ", "Symlinks, *nix permissions and mtime are kept");
-		scrivi_riga("-to X.zip", "the file to be created. WITHOUT -to the .zip is");
-		scrivi_riga(" ", "born beside the archive, same name, .zip extension");
-		scrivi_riga(" ", "(zip z:\\pippo.zpaq => z:\\pippo.zip) and, in this case,");
-		scrivi_riga(" ", "must NOT exist yet (or -force to overwrite it)");
-		scrivi_riga("-all", "Every version, as the mount command shows them: one");
-		scrivi_riga(" ", "  VER00000000, VER00000001... folder per version, each one");
-		scrivi_riga(" ", "  the FULL tree at that point (a snapshot, not a delta)");
-		scrivi_riga(" ", "  Careful: a zip does not deduplicate and nothing is packed,");
-		scrivi_riga(" ", "  so an unchanged file is written again in every folder.");
-		scrivi_riga(" ", "  The size is printed before anything is created");
-		scrivi_riga("-range X:Y", "With -all, write only the version folders from X to Y");
-		scrivi_riga(" ", "  (the versions before X are read anyway: a snapshot is made");
-		scrivi_riga(" ", "  of everything that happened before it)");
-		scrivi_riga(" ", "  Only the files a version added/updated (a diff): x -all -range, or mount -range");
-		scrivi_riga("-deflate", "Compress (method 8) instead of storing. Same .zip, readable");
-		scrivi_riga(" ", "  everywhere, ~3x smaller on sources and text, ~100 MB/s.");
-		scrivi_riga(" ", "  Folders, symlinks, files under 64 bytes and things that are");
-		scrivi_riga(" ", "  compressed already (jpg, mp4, zip, docx...) stay STORED");
-		scrivi_riga(" ", "  -zip is an alias of -deflate");
-		scrivi_riga("-force", "Overwrite the default .zip, if already there");
-		scrivi_riga(" ", "  With -all: go on even beyond 5.000.000 entries");
-		scrivi_riga("-space", "Do not check the free space");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Everything into z:\\nas.zip:", "zip z:\\nas.zpaq");
-		scrivi_esempio("The same, overwriting it:", "zip z:\\nas.zpaq -force");
-		scrivi_esempio("Everything into a single zip:", "zip z:\\nas.zpaq -to z:\\restore.zip");
-		scrivi_esempio("Only one folder, last version:", "zip z:\\nas.zpaq /share/PUBLIC -to z:\\public.zip");
-		scrivi_esempio("A specific version:", "zip z:\\nas.zpaq -until 100 -to z:\\v100.zip");
-		scrivi_esempio("Every version, mount-style folders:", "zip z:\\nas.zpaq -all -to z:\\every.zip");
-		scrivi_esempio("The snapshots of versions 10 to 20:", "zip z:\\nas.zpaq -all -range 10:20 -to z:\\10_20.zip");
-		scrivi_esempio("Compressed (sources, text):", "zip z:\\src.zpaq -deflate -to z:\\src.zip");
-	}
-	return ("Extract into a single ZIP64 file (universal restore)");
-}
-string help_pakka(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD pakka", "create zpaqlist-compatible output");
-		scrivi_riga("-all", "All version(s)");
-		scrivi_riga("-distinct", "Do not deduplicate output");
-		scrivi_riga("-until X", "Choose version X");
-		scrivi_riga("-out", "thefile  Write output on thefile");
-		scrivi_riga("-catpaqmode", "Generate catpaq output");
-		scrivi_riga("-key X", "The password of an encrypted (AES) archive");
-		scrivi_riga("-franzen X", "The one of a Franzen archive (.zpaq.franzen), with or without AES");
-		scrivi_riga(" ", "Never a question on the console for a Franzen archive: a password");
-		scrivi_riga(" ", "that is missing or wrong is one line (zpaqlist:...) and exit code 1");
-		
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("List to file", "pakka h:\\zarc\\1.zpaq -out z:\\default.txt");
-		scrivi_esempio("Disable de-duplicator", "pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt");
-		scrivi_esempio("Get version 10", "pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt");
-		scrivi_esempio("List to catpaq", "pakka h:\\zarc\\1.zpaq -catpaqmode");
-		scrivi_esempio("A Franzen archive", "pakka h:\\zarc\\1.zpaq.franzen -all -catpaqmode -franzen pippo");
-
-	}
-	return ("Output for third-party extractors");
-}
-string help_fzf(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD fzf", "List archive content 'plain-and-dirty'");
-		scrivi_riga("-all", "Show all version");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("List filenames", "fzf z:\\kajo.zpaq");
-		scrivi_esempio("List filenames/pipe in fzf", "fzf z:\\kajo.zpaq|fzf");
-	}
-	return ("List archive filenames (raw output)");
-}
-string help_collision(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD collision", "Inspect for SHA-1 collisions");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Inspect file", "collision z:\\kajo.zpaq");
-	}
-	return ("Inspect archive for SHA-1 collisions");
-}
-string help_dump(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD dump", "Display technical archive information");
-		scrivi_riga("BTW", "will show archive compatibility level");
-		scrivi_riga(" ", "715  = plain zpaq 7.15 (or zpaqfranz -715)");
-		scrivi_riga(" ", "60+  = 7.15 + extensions of zpaqfranz v60+ ~jul 2024");
-		scrivi_riga(" ", "<60  = 7.15 + extensions of zpaqfranz up to v59.x");
-		scrivi_riga(" ", "the file: plain, AES, Franzen, Franzen+AES, parts");
-		scrivi_riga("Virtual files", "-fast history, VFILE-info, VCOMMENT...: how many,");
-		scrivi_riga(" ", "how big, the first and the last version");
-		scrivi_riga("Blocks", "c, d+h, i of every version: what is missing");
-		scrivi_riga("-summary", "Brief");
-		scrivi_riga("-verbose", "Show useful infos");
-		scrivi_riga("-all", "A bit deeper");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Default infos", "dump z:\\kajo.zpaq");
-		scrivi_esempio("More", "dump z:\\kajo.zpaq -verbose");
-		scrivi_esempio("Brief", "dump z:\\kajo.zpaq -summary");
-		scrivi_esempio("All available details", "dump z:\\kajo.zpaq -all");
-	}
-	return ("Show tech info: blocks, virtual files, verdict");
-}
-string help_redu(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD redu", "Technical (quick) exam of files");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Default infos", "redu z:\\*.exe");
-	}
-	return ("Estimate compression (0=none, 255=high)");
-}
-string help_w(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD w", "Chunked-extraction");
-		scrivi_riga(" ", "Extract/test in chunks, on disk or 'ramdisk' (RAM)");
-		scrivi_riga(" ", "The output -to folder MUST BE EMPTY");
-		scrivi_riga("-maxsize X", "Maxsize of the chunk @ X bytes");
-		scrivi_riga("-ramdisk", "Use RAM batches; split oversized files into sequential RAM windows");
-		scrivi_riga("-frugal", "Use less possible RAM (default: get 75% of free RAM)'");
-		scrivi_riga("-ssd", "Multithread writing from ramdisk");
-		scrivi_riga("-test", "Do not write on media");
-		scrivi_riga("-verbose", "Show useful infos");
-		scrivi_riga("-checksum", "Do CRC-32 / hashes test");
-		scrivi_riga("-verify", "Do a 'check-against-filesystem'");
-		scrivi_riga("-paranoid", "Extract to filesystem, then delete if OK (need -verify)");
+	/// zip and pakka run in every build: their help too (they were inside #ifdef _WIN32)
+	/// zip
+	HU(678, "zip", "CMD zip", "extract into ONE single ZIP64 file (STORED, or -deflate)|It is the x command: same filters, same -until, same -range,|only the output is a .zip instead of the filesystem|Made for 'universal' restores: the Linux/NAS/Mac filenames that|Windows cannot even create ( : * ? \" < > || , trailing dots and|spaces, CON, LPT1...) are legal INSIDE a zip, so the whole tree|travels on a Windows (or exFAT) disk and is unpacked back *nix side|Nothing is compressed unless -deflate is asked for|Symlinks, *nix permissions and mtime are kept"),
+	HIT(678, 0xA9B82716, "estrae in UN unico file ZIP64 (STORED, o -deflate)|E' il comando x: stessi filtri, stesso -until, stesso -range,|solo l'output e' un .zip invece del filesystem|Fatto per ripristini 'universali': i nomi di file Linux/NAS/Mac che|Windows non riesce neanche a creare ( : * ? \" < > || ,|punti e spazi finali, CON, LPT1...) sono leciti DENTRO|uno zip, cosi' tutto l'albero viaggia su un disco|Windows (o exFAT) e viene riaperto dal lato *nix|Nulla viene compresso se non si chiede -deflate|Symlink, permessi *nix e mtime vengono mantenuti"),
+	HRU(678, 0xA9B82716, "извлечение в ОДИН файл ZIP64 (STORED или -deflate)|Это команда x: те же фильтры, тот же -until, тот же -range,|только результат - .zip вместо файловой системы|Для 'универсального' восстановления:|имена файлов Linux/NAS/Mac, которые|Windows даже не может создать ( : * ? \" < > || , точки|и пробелы в конце, CON, LPT1...), допустимы ВНУТРИ|zip, поэтому всё дерево переезжает на диск Windows|(или exFAT) и распаковывается обратно на *nix|Ничего не сжимается, если не задан -deflate|Symlink, права *nix и mtime сохраняются"),
+	HU(679, "zip", "-to X.zip", "the file to be created. WITHOUT -to the .zip is|born beside the archive, same name, .zip extension|(zip z:\\pippo.zpaq => z:\\pippo.zip) and, in this case,|must NOT exist yet (or -force to overwrite it)"),
+	HIT(679, 0x3CDC8D8B, "il file da creare. SENZA -to il .zip|nasce accanto all'archivio, stesso nome, estensione .zip|(zip z:\\pippo.zpaq => z:\\pippo.zip) e, in questo caso,|NON deve esistere gia' (o -force per sovrascriverlo)"),
+	HRU(679, 0x3CDC8D8B, "создаваемый файл. БЕЗ -to .zip|появляется рядом с архивом, то же имя, расширение .zip|(zip z:\\pippo.zpaq => z:\\pippo.zip) и в этом случае|НЕ должен уже существовать (или -force для перезаписи)"),
+	HU(680, "zip", "-all", "Every version, as the mount command shows them: one|  VER00000000, VER00000001... folder per version, each one|  the FULL tree at that point (a snapshot, not a delta)|  Careful: a zip does not deduplicate and nothing is packed,|  so an unchanged file is written again in every folder.|  The size is printed before anything is created"),
+	HIT(680, 0xD38501E6, "Ogni versione, come le mostra il comando mount: una cartella|  VER00000000, VER00000001... per versione, ognuna l'albero|  COMPLETO in quel momento (uno snapshot, non un delta)|  Attenzione: uno zip non deduplica e nulla viene compresso,|  quindi un file invariato viene riscritto in ogni cartella.|  La dimensione viene stampata|  prima di creare qualsiasi cosa"),
+	HRU(680, 0xD38501E6, "Все версии, как их показывает команда mount: по папке|  VER00000000, VER00000001... на версию, в каждой|  ПОЛНОЕ дерево на тот момент (снимок, а не дельта)|  Осторожно: zip не дедуплицирует и ничего не сжимается,|  поэтому неизменённый файл пишется заново в каждую папку.|  Размер выводится до того, как что-либо создаётся"),
+	HU(681, "zip", "-range X:Y", "With -all, write only the version folders from X to Y|  (the versions before X are read anyway: a snapshot is made|  of everything that happened before it)|  Only the files a version added/updated (a diff): x -all -range, or mount -range"),
+	HIT(681, 0x2E4CDC97, "Con -all, scrive solo le cartelle delle versioni da X a Y|  (le versioni prima di X vengono lette comunque: uno snapshot e' fatto|  di tutto cio' che e' successo prima)|  Solo i file che una versione ha aggiunto/aggiornato|  (una differenza): x -all -range, o mount -range"),
+	HRU(681, 0x2E4CDC97, "С -all записать только папки версий от X до Y|  (версии до X всё равно читаются: снимок состоит|  из всего, что было до него)|  Только файлы, которые версия добавила/обновила|  (разница): x -all -range или mount -range"),
+	HU(682, "zip", "-deflate", "Compress (method 8) instead of storing. Same .zip, readable|  everywhere, ~3x smaller on sources and text, ~100 MB/s.|  Folders, symlinks, files under 64 bytes and things that are|  compressed already (jpg, mp4, zip, docx...) stay STORED|  -zip is an alias of -deflate"),
+	HIT(682, 0x16E71648, "Comprime (metodo 8) invece di salvare e basta.|  Stesso .zip, leggibile ovunque, ~3x piu'|  piccolo su sorgenti e testo, ~100 MB/s.|  Cartelle, symlink, file sotto i 64 byte e cose gia'|  compresse (jpg, mp4, zip, docx...) restano STORED|  -zip e' un alias di -deflate"),
+	HRU(682, 0x16E71648, "Сжимать (метод 8) вместо простого хранения.|  Тот же .zip, читается везде, в ~3 раза|  меньше на исходниках и тексте, ~100 MB/s.|  Папки, symlink, файлы меньше 64 байт и уже|  сжатое (jpg, mp4, zip, docx...) остаются STORED|  -zip - псевдоним -deflate"),
+	HU(683, "zip", "-force", "Overwrite the default .zip, if already there|  With -all: go on even beyond 5.000.000 entries"),
+	HIT(683, 0xCDE4AA07, "Sovrascrive il .zip di default, se c'e' gia'|  Con -all: prosegue anche oltre 5.000.000 di voci"),
+	HRU(683, 0xCDE4AA07, "Перезаписать .zip по умолчанию, если уже есть|  С -all: продолжать и после 5.000.000 записей"),
+	HU(684, "zip", "-space", "Do not check the free space"),
+	HIT(684, 0x9CD26736, "Non controlla lo spazio libero"),
+	HRU(684, 0x9CD26736, "Не проверять свободное место"),
+	HESEMPI("zip", 'b'),
+	HE(685, "zip", "Everything into z:\\nas.zip:", "zip z:\\nas.zpaq"),
+	HIT(685, 0x704D26BD, "Tutto in z:\\nas.zip:"),
+	HRU(685, 0x704D26BD, "Всё в z:\\nas.zip:"),
+	HE(686, "zip", "The same, overwriting it:", "zip z:\\nas.zpaq -force"),
+	HIT(686, 0xA92A54A1, "Lo stesso, sovrascrivendolo:"),
+	HRU(686, 0xA92A54A1, "То же, с перезаписью:"),
+	HE(687, "zip", "Everything into a single zip:", "zip z:\\nas.zpaq -to z:\\restore.zip"),
+	HIT(687, 0xEF4DF032, "Tutto in un unico zip:"),
+	HRU(687, 0xEF4DF032, "Всё в один zip:"),
+	HE(688, "zip", "Only one folder, last version:", "zip z:\\nas.zpaq /share/PUBLIC -to z:\\public.zip"),
+	HIT(688, 0xE54CD261, "Una sola cartella, ultima versione:"),
+	HRU(688, 0xE54CD261, "Одна папка, последняя версия:"),
+	HE(689, "zip", "A specific version:", "zip z:\\nas.zpaq -until 100 -to z:\\v100.zip"),
+	HIT(689, 0x5E100706, "Una versione precisa:"),
+	HRU(689, 0x5E100706, "Определённая версия:"),
+	HE(690, "zip", "Every version, mount-style folders:", "zip z:\\nas.zpaq -all -to z:\\every.zip"),
+	HIT(690, 0xC2F54C02, "Ogni versione, cartelle come in mount:"),
+	HRU(690, 0xC2F54C02, "Все версии, папки как в mount:"),
+	HE(691, "zip", "The snapshots of versions 10 to 20:", "zip z:\\nas.zpaq -all -range 10:20 -to z:\\10_20.zip"),
+	HIT(691, 0x45580A55, "Gli snapshot delle versioni da 10 a 20:"),
+	HRU(691, 0x45580A55, "Снимки версий с 10 по 20:"),
+	HE(692, "zip", "Compressed (sources, text):", "zip z:\\src.zpaq -deflate -to z:\\src.zip"),
+	HIT(692, 0x6A711CBE, "Compresso (sorgenti, testo):"),
+	HRU(692, 0x6A711CBE, "Сжатый (исходники, текст):"),
+	HBREVE(693, "zip", "Extract into a single ZIP64 file (universal restore)"),
+	HIT(693, 0x991E81EC, "Estrae in un unico file ZIP64 (ripristino universale)"),
+	HRU(693, 0x991E81EC, "Извлечь в один файл ZIP64 (универсальное восстановление)"),
+	/// pakka
+	HU(694, "pakka", "CMD pakka", "create zpaqlist-compatible output"),
+	HIT(694, 0xBC845EF5, "crea un output compatibile con zpaqlist"),
+	HRU(694, 0xBC845EF5, "создать вывод, совместимый с zpaqlist"),
+	HU(695, "pakka", "-all", "All version(s)"),
+	HIT(695, 0x23B47628, "Tutte le versioni"),
+	HRU(695, 0x23B47628, "Все версии"),
+	HU(696, "pakka", "-distinct", "Do not deduplicate output"),
+	HIT(696, 0x2C95D3A2, "Non deduplica l'output"),
+	HRU(696, 0x2C95D3A2, "Не дедуплицировать вывод"),
+	HU(697, "pakka", "-until X", "Choose version X"),
+	HIT(697, 0xEFCAE894, "Sceglie la versione X"),
+	HRU(697, 0xEFCAE894, "Выбрать версию X"),
+	HU(698, "pakka", "-out", "thefile  Write output on thefile"),
+	HIT(698, 0x192CB522, "thefile  Scrive l'output su thefile"),
+	HRU(698, 0x192CB522, "thefile  Записать вывод в thefile"),
+	HU(699, "pakka", "-catpaqmode", "Generate catpaq output"),
+	HIT(699, 0x6B9AE691, "Genera l'output per catpaq"),
+	HRU(699, 0x6B9AE691, "Создать вывод для catpaq"),
+	HU(700, "pakka", "-key X", "The password of an encrypted (AES) archive"),
+	HIT(700, 0x18B7A70D, "La password di un archivio cifrato (AES)"),
+	HRU(700, 0x18B7A70D, "Пароль зашифрованного (AES) архива"),
+	HU(701, "pakka", "-franzen X", "The one of a Franzen archive (.zpaq.franzen), with or without AES|Never a question on the console for a Franzen archive: a password|that is missing or wrong is one line (zpaqlist:...) and exit code 1"),
+	HIT(701, 0x4158D374, "Quella di un archivio Franzen (.zpaq.franzen), con o senza AES|Mai una domanda sulla console per un archivio|Franzen: una password mancante o sbagliata e'|una riga (zpaqlist:...) e codice di uscita 1"),
+	HRU(701, 0x4158D374, "Пароль архива Franzen (.zpaq.franzen), с AES или без|Для архива Franzen вопрос в консоли никогда не|задаётся: отсутствующий или неверный пароль -|одна строка (zpaqlist:...) и код выхода 1"),
+	HESEMPI("pakka", 'b'),
+	HE(702, "pakka", "List to file", "pakka h:\\zarc\\1.zpaq -out z:\\default.txt"),
+	HIT(702, 0x896B9CBC, "Elenco su file"),
+	HRU(702, 0x896B9CBC, "Список в файл"),
+	HE(703, "pakka", "Disable de-duplicator", "pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt"),
+	HIT(703, 0xC25B8492, "Disattiva il deduplicatore"),
+	HRU(703, 0xC25B8492, "Отключить дедупликацию"),
+	HE(704, "pakka", "Get version 10", "pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt"),
+	HIT(704, 0x958A5B24, "Prende la versione 10"),
+	HRU(704, 0x958A5B24, "Взять версию 10"),
+	HE(705, "pakka", "List to catpaq", "pakka h:\\zarc\\1.zpaq -catpaqmode"),
+	HIT(705, 0x4B7B3670, "Elenco per catpaq"),
+	HRU(705, 0x4B7B3670, "Список для catpaq"),
+	HE(706, "pakka", "A Franzen archive", "pakka h:\\zarc\\1.zpaq.franzen -all -catpaqmode -franzen pippo"),
+	HIT(706, 0x47F76E62, "Un archivio Franzen"),
+	HRU(706, 0x47F76E62, "Архив Franzen"),
+	HBREVE(707, "pakka", "Output for third-party extractors"),
+	HIT(707, 0x4AE85E90, "Output per estrattori di terze parti"),
+	HRU(707, 0x4AE85E90, "Вывод для сторонних распаковщиков"),
+	/// fzf
+	HU(708, "fzf", "CMD fzf", "List archive content 'plain-and-dirty'"),
+	HIT(708, 0x8F826285, "Elenca il contenuto dell'archivio 'alla buona'"),
+	HRU(708, 0x8F826285, "Список содержимого архива 'по-простому'"),
+	HU(709, "fzf", "-all", "Show all version"),
+	HIT(709, 0xE005834F, "Mostra tutte le versioni"),
+	HRU(709, 0xE005834F, "Показать все версии"),
+	HESEMPI("fzf", 'b'),
+	HE(710, "fzf", "List filenames", "fzf z:\\kajo.zpaq"),
+	HIT(710, 0x73643007, "Elenca i nomi dei file"),
+	HRU(710, 0x73643007, "Список имён файлов"),
+	HE(711, "fzf", "List filenames/pipe in fzf", "fzf z:\\kajo.zpaq|fzf"),
+	HIT(711, 0x0FA24769, "Elenca i nomi dei file/pipe in fzf"),
+	HRU(711, 0x0FA24769, "Список имён файлов/pipe в fzf"),
+	HBREVE(712, "fzf", "List archive filenames (raw output)"),
+	HIT(712, 0x81C4B665, "Elenca i nomi dei file dell'archivio (output grezzo)"),
+	HRU(712, 0x81C4B665, "Список имён файлов архива (сырой вывод)"),
+	/// collision
+	HU(713, "collision", "CMD collision", "Inspect for SHA-1 collisions"),
+	HIT(713, 0x32697341, "Cerca collisioni SHA-1"),
+	HRU(713, 0x32697341, "Поиск коллизий SHA-1"),
+	HESEMPI("collision", 'b'),
+	HE(714, "collision", "Inspect file", "collision z:\\kajo.zpaq"),
+	HIT(714, 0x42B34373, "Esamina un file"),
+	HRU(714, 0x42B34373, "Исследовать файл"),
+	HBREVE(715, "collision", "Inspect archive for SHA-1 collisions"),
+	HIT(715, 0xDCD6919B, "Cerca collisioni SHA-1 nell'archivio"),
+	HRU(715, 0xDCD6919B, "Поиск коллизий SHA-1 в архиве"),
+	/// dump
+	HU(716, "dump", "CMD dump", "Display technical archive information"),
+	HIT(716, 0x7F252282, "Mostra informazioni tecniche sull'archivio"),
+	HRU(716, 0x7F252282, "Показать техническую информацию об архиве"),
+	HU(717, "dump", "BTW", "will show archive compatibility level|715  = plain zpaq 7.15 (or zpaqfranz -715)|60+  = 7.15 + extensions of zpaqfranz v60+ ~jul 2024|<60  = 7.15 + extensions of zpaqfranz up to v59.x|the file: plain, AES, Franzen, Franzen+AES, parts"),
+	HIT(717, 0x8A867CE7, "mostra il livello di compatibilita' dell'archivio|715  = zpaq 7.15 normale (o zpaqfranz -715)|60+  = 7.15 + estensioni di zpaqfranz v60+ ~lug 2024|<60  = 7.15 + estensioni di zpaqfranz fino alla v59.x|il file: normale, AES, Franzen, Franzen+AES, parti"),
+	HRU(717, 0x8A867CE7, "показывает уровень совместимости архива|715  = обычный zpaq 7.15 (или zpaqfranz -715)|60+  = 7.15 + расширения zpaqfranz v60+ ~июль 2024|<60  = 7.15 + расширения zpaqfranz до v59.x|файл: обычный, AES, Franzen, Franzen+AES, части"),
+	HU(718, "dump", "Virtual files", "-fast history, VFILE-info, VCOMMENT...: how many,|how big, the first and the last version"),
+	HIT(718, 0x6C148330, "storia -fast, VFILE-info, VCOMMENT...: quanti,|quanto grandi, la prima e l'ultima versione"),
+	HRU(718, 0x6C148330, "история -fast, VFILE-info, VCOMMENT...: сколько,|какого размера, первая и последняя версия"),
+	HU(719, "dump", "Blocks", "c, d+h, i of every version: what is missing"),
+	HIT(719, 0xE1DE2B6E, "c, d+h, i di ogni versione: cosa manca"),
+	HRU(719, 0xE1DE2B6E, "c, d+h, i каждой версии: чего не хватает"),
+	HU(720, "dump", "-summary", "Brief"),
+	HIT(720, 0xB3C47C3F, "Breve"),
+	HRU(720, 0xB3C47C3F, "Кратко"),
+	HU(721, "dump", "-verbose", "Show useful infos"),
+	HIT(721, 0xDFA764CF, "Mostra informazioni utili"),
+	HRU(721, 0xDFA764CF, "Показать полезные сведения"),
+	HU(722, "dump", "-all", "A bit deeper"),
+	HIT(722, 0x80A7F5BC, "Un po' piu' a fondo"),
+	HRU(722, 0x80A7F5BC, "Чуть глубже"),
+	HESEMPI("dump", 'b'),
+	HE(723, "dump", "Default infos", "dump z:\\kajo.zpaq"),
+	HIT(723, 0x682D8163, "Informazioni di default"),
+	HRU(723, 0x682D8163, "Сведения по умолчанию"),
+	HE(724, "dump", "More", "dump z:\\kajo.zpaq -verbose"),
+	HIT(724, 0x4F34D900, "Di piu'"),
+	HRU(724, 0x4F34D900, "Больше"),
+	HE(725, "dump", "Brief", "dump z:\\kajo.zpaq -summary"),
+	HIT(725, 0xB3C47C3F, "Breve"),
+	HRU(725, 0xB3C47C3F, "Кратко"),
+	HE(726, "dump", "All available details", "dump z:\\kajo.zpaq -all"),
+	HIT(726, 0xF4BF37ED, "Tutti i dettagli disponibili"),
+	HRU(726, 0xF4BF37ED, "Все доступные подробности"),
+	HBREVE(727, "dump", "Show tech info: blocks, virtual files, verdict"),
+	HIT(727, 0xB8D6CD01, "Informazioni tecniche: blocchi, file virtuali, verdetto"),
+	HRU(727, 0xB8D6CD01, "Техническая информация: блоки, виртуальные файлы, вердикт"),
+	/// redu
+	HU(728, "redu", "CMD redu", "Technical (quick) exam of files"),
+	HIT(728, 0xEBDA5B7D, "Esame tecnico (rapido) dei file"),
+	HRU(728, 0xEBDA5B7D, "Технический (быстрый) осмотр файлов"),
+	HESEMPI("redu", 'b'),
+	HE(729, "redu", "Default infos", "redu z:\\*.exe"),
+	HIT(729, 0x682D8163, "Informazioni di default"),
+	HRU(729, 0x682D8163, "Сведения по умолчанию"),
+	HBREVE(730, "redu", "Estimate compression (0=none, 255=high)"),
+	HIT(730, 0x298B201A, "Stima della compressione (0=nessuna, 255=alta)"),
+	HRU(730, 0x298B201A, "Оценка сжимаемости (0=нет, 255=высокая)"),
+	/// w
+	HU(731, "w", "CMD w", "Chunked-extraction|Extract/test in chunks, on disk or 'ramdisk' (RAM)|The output -to folder MUST BE EMPTY"),
+	HIT(731, 0x7A9FB336, "Estrazione a pezzi|Estrae/prova a pezzi, su disco o 'ramdisk' (RAM)|La cartella -to di output DEVE ESSERE VUOTA"),
+	HRU(731, 0x7A9FB336, "Извлечение кусками|Извлечь/проверить кусками, на диск или в 'ramdisk' (RAM)|Папка вывода -to ДОЛЖНА БЫТЬ ПУСТОЙ"),
+	HU(732, "w", "-maxsize X", "Maxsize of the chunk @ X bytes"),
+	HIT(732, 0xF75D4764, "Dimensione massima del pezzo @ X byte"),
+	HRU(732, 0xF75D4764, "Максимальный размер куска @ X байт"),
+	HU(733, "w", "-ramdisk", "Use RAM batches; split oversized files into sequential RAM windows"),
+	HIT(733, 0x11998B9B, "Lotti in RAM; i file troppo grandi|  divisi in finestre di RAM in sequenza"),
+	HRU(733, 0x11998B9B, "Пакеты в RAM; слишком большие файлы|  делятся на последовательные окна RAM"),
+	HU(734, "w", "-frugal", "Use less possible RAM (default: get 75% of free RAM)'"),
+	HIT(734, 0x23194553, "Usa meno RAM possibile (default:|  prende il 75% della RAM libera)'"),
+	HRU(734, 0x23194553, "Как можно меньше RAM (по умолчанию: 75% свободной RAM)'"),
+	HU(735, "w", "-ssd", "Multithread writing from ramdisk|With -test -verify: the files compared by threads"),
+	HIT(735, 0x0191EFDD, "Scrittura multithread dal ramdisk|Con -test -verify: i file confrontati da piu' thread"),
+	HRU(735, 0x0191EFDD, "Многопоточная запись из ramdisk|С -test -verify: файлы сравниваются в несколько потоков"),
+	HU(736, "w", "-test", "Do not write on media"),
+	HIT(736, 0x48A18253, "Non scrive sul supporto"),
+	HRU(736, 0x48A18253, "Не писать на носитель"),
+	HU(737, "w", "-verbose", "Show useful infos"),
+	HIT(737, 0xDFA764CF, "Mostra informazioni utili"),
+	HRU(737, 0xDFA764CF, "Показать полезные сведения"),
+	HU(738, "w", "-checksum", "Do CRC-32 / hashes test"),
+	HIT(738, 0xA6340FBD, "Fa il test di CRC-32 / hash"),
+	HRU(738, 0xA6340FBD, "Выполнить проверку CRC-32 / хешей"),
+	HU(739, "w", "-verify", "Do a 'check-against-filesystem'|With -test nothing is written: every file decompressed in RAM (-ramdisk on)|against the one on disk (the stored path, or -to as x), by the hash|of the whole file; the bars of t -ssd, the names of what differs, rc 2"), /// 65.14i
+	HIT(739, 0x001F1108, "Fa un 'confronto col filesystem'|Con -test non si scrive nulla: ogni file decompresso in|RAM (-ramdisk attivo) contro quello sul disco (il percorso|salvato, o -to come x), con l'hash dell'intero file; le|barre di t -ssd, i nomi di cio' che differisce, rc 2"),
+	HRU(739, 0x001F1108, "Выполнить 'сверку с файловой системой'|С -test ничего не пишется: каждый файл распаковывается в RAM (-ramdisk|включён) и сравнивается с файлом на диске (сохранённый путь или -to, как|в x) по хешу всего файла; индикаторы t -ssd, имена различающихся, rc 2"),
+	HU(740, "w", "-paranoid", "Extract to filesystem, then delete if OK (need -verify, not -test)"),
+	HIT(740, 0x50BFFD48, "Estrae sul filesystem, poi cancella|  se OK (serve -verify, non -test)"),
+	HRU(740, 0x50BFFD48, "Извлечь в файловую систему, затем удалить,|  если OK (нужен -verify, не -test)"),
 #ifdef _WIN32
-		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
+	HU(741, "w", "-longpath", "Extracting on Windows filenames longer than 255"),
+	HIT(741, 0xD4E12AC0, "Estrazione su Windows di nomi piu' lunghi di 255"),
+	HRU(741, 0xD4E12AC0, "Извлечение в Windows имён длиннее 255"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Extract to a spinning drive", "w z:\\1.zpaq -to p:\\muz7\\ -ramdisk -longpath");
-		scrivi_esempio("Paranoid check into folder muz7", "w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -verbose -frugal -longpath");
-		scrivi_esempio("Paranoid  max chunksize 1000000000", "w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -maxsize 1000000000");
-		scrivi_esempio("Test in RAM (no disk write,M/T)", "w z:\\1.zpaq -ramdisk -test -checksum -ssd -frugal");
-		scrivi_esempio("Top test (W/disk write on SSD z:\\)", "w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd");
-	}
-	return ("Extract/test large files in chunks");
-}
-string help_xx(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD xx", "Extract with sequential write (shortcut for x -recover)");
-		scrivi_riga(" ", "Same switches as x, but a different read/write strategy:");
-		scrivi_riga(" ", "the archive is read in stored order (random read, SSD advised),");
-		scrivi_riga(" ", "output files are buffered in a RAM cache and written sequentially.");
-		scrivi_riga(" ", "Faster on spinning drives, reduces fragmentation of restored files,");
-		scrivi_riga(" ", "and gets out as much data as possible from a damaged archive.");
-		scrivi_riga(" ", "A damaged block is checked fragment by fragment (SHA-1): the");
-		scrivi_riga(" ", "good ones are written, the wrong ones too (as they came out),");
-		scrivi_riga(" ", "zeros take the place of the missing ones. The damaged files");
-		scrivi_riga(" ", "are listed at the end (-verbose: where in each file).");
-		scrivi_riga("-ramsize X", "Size of the write cache (default 1GB)");
-		scrivi_riga(" ", "Everything else (-to -only -not -until -force ...) works as in x");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Single file to folder tree", "xx 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
-		scrivi_esempio("Everything into folder muz7", "xx z:\\1.zpaq -to z:\\muz7\\");
-		scrivi_esempio("Bigger cache (4GB) if you have RAM", "xx z:\\1.zpaq -to z:\\muz7\\ -ramsize 4GB");
-		scrivi_esempio("Salvage a damaged archive", "xx z:\\1.zpaq -to z:\\muz7\\ -force");
-	}
-	return ("Extract file(s) with sequential write");
-}
-string help_x(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD x", "Extract");
-		scrivi_riga(" ", "During extraction,if CRC-32s are present, the codes are checked.");
-		scrivi_riga(" ", "Extract multiple files with '*'");
-		scrivi_riga("-all", "All versions");
-		scrivi_riga("-all -comment", "Restore all versions with DATETIME and comment (if any)");
-		scrivi_riga("-checksum", "force a full hash-code verify (if added with -checksum)");
-		scrivi_riga("-zero", "extract to dummy, 0-length files. Do an empty-full restore.");
-		scrivi_riga("-zero -debug", "extract full-sized files, 0 filled (Dry restore)");
-		scrivi_riga("-zero -debug -kill", "Only extract filenames (0 bytes long)");
-		scrivi_riga("-utf", "change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
-		scrivi_riga("-fix255", "shrink max file name, avoid different case collision (Linux => NTFS)");
-		scrivi_riga(" ", "(pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
-		scrivi_riga("-fixeml", "compress .eml filenames.");
+	HESEMPI("w", 'b'),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(742, "w", "Extract to a spinning drive", "w z:\\1.zpaq -to p:\\muz7\\ -ramdisk -longpath"),
+	HIT(742, 0x5E4261B2, "Estrae su un disco meccanico"),
+	HRU(742, 0x5E4261B2, "Извлечь на HDD"),
+#else
+	HE(743, "w", "Extract to a spinning drive", "w z:\\1.zpaq -to p:\\muz7\\ -ramdisk"),
+	HIT(743, 0x5E4261B2, "Estrae su un disco meccanico"),
+	HRU(743, 0x5E4261B2, "Извлечь на HDD"),
+#endif
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(744, "w", "Paranoid check into folder muz7", "w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -verbose -frugal -longpath"),
+	HIT(744, 0x7C6AA190, "Controllo paranoico nella cartella muz7"),
+	HRU(744, 0x7C6AA190, "Параноидальная проверка в папке muz7"),
+#else
+	HE(745, "w", "Paranoid check into folder muz7", "w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -verbose -frugal"),
+	HIT(745, 0x7C6AA190, "Controllo paranoico nella cartella muz7"),
+	HRU(745, 0x7C6AA190, "Параноидальная проверка в папке muz7"),
+#endif
+	HE(746, "w", "Paranoid  max chunksize 1000000000", "w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -maxsize 1000000000"),
+	HIT(746, 0x977696FA, "Paranoico, pezzo massimo 1000000000"),
+	HRU(746, 0x977696FA, "Параноидально, максимальный кусок 1000000000"),
+	HE(747, "w", "Test in RAM (no disk write,M/T)", "w z:\\1.zpaq -ramdisk -test -checksum -ssd -frugal"),
+	HIT(747, 0x02363952, "Test in RAM (niente scritture su disco, M/T)"),
+	HRU(747, 0x02363952, "Тест в RAM (без записи на диск, M/T)"),
+	HE(748, "w", "Verify against filesystem (RAM,M/T)", "w z:\\1.zpaq -ramdisk -test -verify -ssd"), /// 65.14i
+	HIT(748, 0x42EE235D, "Verifica col filesystem (RAM, M/T)"),
+	HRU(748, 0x42EE235D, "Сверка с файловой системой (RAM, M/T)"),
+	HE(749, "w", "Verify the copy in z:\\copy", "w z:\\1.zpaq -to z:\\copy -ramdisk -test -verify -ssd"),
+	HIT(749, 0xE5846FD6, "Verifica la copia in z:\\copy"),
+	HRU(749, 0xE5846FD6, "Проверить копию в z:\\copy"),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(750, "w", "Top test (W/disk write on SSD z:\\)", "w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd"),
+	HIT(750, 0xE2CE025E, "Il test migliore (con scrittura su disco SSD z:\\)"),
+	HRU(750, 0xE2CE025E, "Лучший тест (с записью на SSD z:\\)"),
+#else
+	HE(751, "w", "Top test (W/disk write on SSD z:\\)", "w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -ssd"),
+	HIT(751, 0xE2CE025E, "Il test migliore (con scrittura su disco SSD z:\\)"),
+	HRU(751, 0xE2CE025E, "Лучший тест (с записью на SSD z:\\)"),
+#endif
+	HBREVE(752, "w", "Extract/test large files in chunks"),
+	HIT(752, 0x1F1A26F0, "Estrae/prova file grandi a pezzi"),
+	HRU(752, 0x1F1A26F0, "Извлечь/проверить большие файлы кусками"),
+	/// xx
+	HU(753, "xx", "CMD xx", "Extract with sequential write (shortcut for x -recover)|Same switches as x, but a different read/write strategy:|the archive is read in stored order (random read, SSD advised),|output files are buffered in a RAM cache and written sequentially.|Faster on spinning drives, reduces fragmentation of restored files,|and gets out as much data as possible from a damaged archive.|A damaged block is checked fragment by fragment (SHA-1): the|good ones are written, the wrong ones too (as they came out),|zeros take the place of the missing ones. The damaged files|are listed at the end (-verbose: where in each file)."),
+	HIT(753, 0xF91B6037, "Estrae con scrittura sequenziale (scorciatoia per x -recover)|Stessi switch di x, ma una strategia di lettura/scrittura|diversa: l'archivio si legge nell'ordine in cui e'|salvato (letture casuali, meglio SSD), i file di output|stanno in una cache in RAM e si scrivono in sequenza.|Piu' veloce sui dischi meccanici, riduce la|frammentazione dei file ripristinati, e tira fuori|quanti piu' dati possibile da un archivio danneggiato.|Un blocco danneggiato si controlla frammento per frammento (SHA-1):|quelli buoni vengono scritti, anche quelli sbagliati (come sono|usciti), degli zeri prendono il posto di quelli mancanti. I file|danneggiati sono elencati alla fine (-verbose: dove, in ogni file)."),
+	HRU(753, 0xF91B6037, "Извлечение с последовательной записью (сокращение для x -recover)|Те же ключи, что у x, но другая стратегия чтения/записи:|архив читается в порядке хранения (случайное чтение, лучше SSD),|выходные файлы буферизуются в кеше RAM и пишутся последовательно.|Быстрее на HDD, уменьшает фрагментацию восстановленных файлов|и вытаскивает как можно больше данных из повреждённого архива.|Повреждённый блок проверяется по фрагментам (SHA-1):|хорошие записываются, неверные тоже (какими получились),|вместо отсутствующих - нули. Повреждённые файлы|перечисляются в конце (-verbose: где именно в каждом файле)."),
+	HU(754, "xx", "-ramsize X", "Size of the write cache (default 1GB)|Everything else (-to -only -not -until -force ...) works as in x"),
+	HIT(754, 0xC83FFC85, "Dimensione della cache di scrittura (default 1GB)|Tutto il resto (-to -only -not -until|-force ...) funziona come in x"),
+	HRU(754, 0xC83FFC85, "Размер кеша записи (по умолчанию 1GB)|Всё остальное (-to -only -not|-until -force ...) работает как в x"),
+	HESEMPI("xx", 'b'),
+	HE(755, "xx", "Single file to folder tree", "xx 1.zpaq -only \"*whatever\" -to /tmp/foldertree"),
+	HIT(755, 0x585CD496, "Un singolo file in un albero di cartelle"),
+	HRU(755, 0x585CD496, "Один файл в дерево папок"),
+	HE(756, "xx", "Everything into folder muz7", "xx z:\\1.zpaq -to z:\\muz7\\"),
+	HIT(756, 0x617A28BB, "Tutto nella cartella muz7"),
+	HRU(756, 0x617A28BB, "Всё в папку muz7"),
+	HE(757, "xx", "Bigger cache (4GB) if you have RAM", "xx z:\\1.zpaq -to z:\\muz7\\ -ramsize 4GB"),
+	HIT(757, 0x2CA45099, "Cache piu' grande (4GB) se hai RAM"),
+	HRU(757, 0x2CA45099, "Кеш побольше (4GB), если хватает RAM"),
+	HE(758, "xx", "Salvage a damaged archive", "xx z:\\1.zpaq -to z:\\muz7\\ -force"),
+	HIT(758, 0x73E0AC58, "Recupera un archivio danneggiato"),
+	HRU(758, 0x73E0AC58, "Спасти повреждённый архив"),
+	HBREVE(759, "xx", "Extract file(s) with sequential write"),
+	HIT(759, 0x1CA379C4, "Estrae file con scrittura sequenziale"),
+	HRU(759, 0x1CA379C4, "Извлечь файлы с последовательной записью"),
+	/// x
+	HU(760, "x", "CMD x", "Extract|During extraction,if CRC-32s are present, the codes are checked.|Extract multiple files with '*'"),
+	HIT(760, 0x29A61885, "Estrae|Durante l'estrazione, se ci sono i|CRC-32, i codici vengono controllati.|Per estrarre piu' file usare '*'"),
+	HRU(760, 0x29A61885, "Извлечь|При извлечении, если есть CRC-32, коды проверяются.|Несколько файлов извлекаются через '*'"),
+	HU(761, "x", "-all", "All versions"),
+	HIT(761, 0x2B43A8C9, "Tutte le versioni"),
+	HRU(761, 0x2B43A8C9, "Все версии"),
+	HU(762, "x", "-all -comment", "Restore all versions with DATETIME and comment (if any)"),
+	HIT(762, 0x7D8699BA, "Ripristina tutte le versioni con|  DATA e ORA e commento (se c'e')"),
+	HRU(762, 0x7D8699BA, "Восстановить все версии с ДАТОЙ-ВРЕМЕНЕМ|  и комментарием (если есть)"),
+	HU(763, "x", "-checksum", "force a full hash-code verify (if added with -checksum)"),
+	HIT(763, 0xA36D81E1, "forza una verifica completa degli|  hash (se aggiunti con -checksum)"),
+	HRU(763, 0xA36D81E1, "принудительная полная проверка хешей|  (если добавлено с -checksum)"),
+	HU(764, "x", "-zero", "extract to dummy, 0-length files. Do an empty-full restore."),
+	HIT(764, 0xAAEB8978, "estrae file fittizi, lunghi 0.|  Un ripristino pieno ma vuoto."),
+	HRU(764, 0xAAEB8978, "извлечь фиктивные файлы нулевой длины.|  Пустое полное восстановление."),
+	HU(765, "x", "-zero -debug", "extract full-sized files, 0 filled (Dry restore)"),
+	HIT(765, 0x3B2F9D68, "estrae file della dimensione giusta,|  pieni di zeri (ripristino a secco)"),
+	HRU(765, 0x3B2F9D68, "извлечь файлы полного размера, заполненные|  нулями (пробное восстановление)"),
+	HU(766, "x", "-zero -debug -kill", "Only extract filenames (0 bytes long)"),
+	HIT(766, 0x290BD2CE, "Estrae solo i nomi dei file (lunghi 0 byte)"),
+	HRU(766, 0x290BD2CE, "Извлечь только имена файлов (длиной 0 байт)"),
+	HU(767, "x", "-utf", "change everything non latin to latin (Linux/*Nix => NTFS compatibility)"),
+	HIT(767, 0xBC873F63, "cambia tutto cio' che non e' latino in|  latino (compatibilita' Linux/*Nix => NTFS)"),
+	HRU(767, 0xBC873F63, "заменить всё нелатинское на латиницу (совместимость Linux/*Nix => NTFS)"),
+	HU(768, "x", "-fix255", "shrink max file name, avoid different case collision (Linux => NTFS)|(pippo.txt and PIPPO.txt are be silently overwritten by 7.15)."),
+	HIT(768, 0xDAA0B1D6, "accorcia i nomi troppo lunghi, evita collisioni di|maiuscole/minuscole (Linux => NTFS) (pippo.txt e|PIPPO.txt vengono sovrascritti in silenzio dalla 7.15)."),
+	HRU(768, 0xDAA0B1D6, "сократить слишком длинные имена, избежать коллизий регистра (Linux|=> NTFS) (pippo.txt и PIPPO.txt молча перезаписываются в 7.15)."),
+	HU(769, "x", "-fixeml", "compress .eml filenames."),
+	HIT(769, 0xC13D6641, "comprime i nomi dei file .eml."),
+	HRU(769, 0xC13D6641, "сжать имена файлов .eml."),
 #ifdef _WIN32
-		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
-		scrivi_riga("-fixreserved", "fix reserved filenames on Windows (ex. LPT1).");
-		scrivi_riga("-nosanitize", "do NOT fix the filenames Windows cannot store at all");
-		scrivi_riga(" ", "(: * ? \" < > | \\). Default: fix them, else they are NOT extracted");
-		scrivi_riga("-windate", "Restore (if any) file's creation date");
+	HU(770, "x", "-longpath", "Extracting on Windows filenames longer than 255"),
+	HIT(770, 0xD4E12AC0, "Estrazione su Windows di nomi piu' lunghi di 255"),
+	HRU(770, 0xD4E12AC0, "Извлечение в Windows имён длиннее 255"),
+	HU(771, "x", "-fixreserved", "fix reserved filenames on Windows (ex. LPT1)."),
+	HIT(771, 0x0C28A455, "sistema i nomi riservati su Windows (es. LPT1)."),
+	HRU(771, 0x0C28A455, "исправить зарезервированные имена в Windows (напр. LPT1)."),
+	HU(772, "x", "-nosanitize", "do NOT fix the filenames Windows cannot store at all|(: * ? \" < > || \\). Default: fix them, else they are NOT extracted"),
+	HIT(772, 0xC7F96A98, "NON sistema i nomi che Windows non puo' proprio salvare (: * ? \"|< > || \\). Default: li sistema, altrimenti NON vengono estratti"),
+	HRU(772, 0xC7F96A98, "НЕ исправлять имена, которые Windows вообще не|может хранить (: * ? \" < > || \\). По умолчанию:|исправляются, иначе они НЕ извлекаются"),
+	HU(773, "x", "-windate", "Restore (if any) file's creation date"),
+	HIT(773, 0xEEC7AEFA, "Ripristina (se c'e') la data di creazione dei file"),
+	HRU(773, 0xEEC7AEFA, "Восстановить (если есть) дату создания файлов"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_riga("-flat", "emergency restore of everything into a single folder (Linux => NTFS)");
-		scrivi_riga("-force", "Force overwrite AND extracting of corrupted files (if any)");
-		scrivi_riga("-space", "Do not check free space before extract");
-		scrivi_riga("-find/replace", "Replace part of text");
-		scrivi_riga("-replace X", "Juxtapose X to stored path");
-		scrivi_riga("-image", "Change the progress to handle huge files (-minsize X default 20MB)");
-		scrivi_riga("-stdout", "Output (if possible) a single file on stdout");
-		scrivi_riga("-external", "Show (if any) a stored external file");
-		scrivi_riga("-ramdisk", "Extract to RAM, then write (if possible)");
-		scrivi_riga("-recover", "Random read (SSD advised), sequential write; 1GB default cache (-ramsize X)");
-		help_range();
+	HU(774, "x", "-flat", "emergency restore of everything into a single folder (Linux => NTFS)"),
+	HIT(774, 0xC7F8203E, "ripristino d'emergenza di tutto in un'unica cartella (Linux => NTFS)"),
+	HRU(774, 0xC7F8203E, "аварийное восстановление всего в одну папку (Linux => NTFS)"),
+	HU(775, "x", "-force", "Force overwrite AND extracting of corrupted files (if any)"),
+	HIT(775, 0x9FBA4BE5, "Forza la sovrascrittura E l'estrazione|  dei file corrotti (se ci sono)"),
+	HRU(775, 0x9FBA4BE5, "Принудительно перезаписывать И извлекать|  повреждённые файлы (если есть)"),
+	HU(776, "x", "-space", "Do not check free space before extract"),
+	HIT(776, 0xFD789D07, "Non controlla lo spazio libero prima di estrarre"),
+	HRU(776, 0xFD789D07, "Не проверять свободное место перед извлечением"),
+	HU(777, "x", "-find -replace", "Replace part of text"), /// 65.14b: it was -find/replace (two switches)
+	HIT(777, 0xDE631324, "Sostituisce parte del testo"),
+	HRU(777, 0xDE631324, "Заменить часть текста"),
+	HU(778, "x", "-replace X", "Juxtapose X to stored path"),
+	HIT(778, 0x393E80E1, "Affianca X al percorso salvato"),
+	HRU(778, 0x393E80E1, "Приставить X к сохранённому пути"),
+	HU(779, "x", "-image", "Change the progress to handle huge files (-minsize X default 20MB)"),
+	HIT(779, 0x2D9CE121, "Cambia l'avanzamento per i file enormi (-minsize X default 20MB)"),
+	HRU(779, 0x2D9CE121, "Изменить индикацию прогресса для огромных|  файлов (-minsize X по умолчанию 20MB)"),
+	HU(780, "x", "-stdout", "Output (if possible) a single file on stdout"),
+	HIT(780, 0x2DDFD390, "Output (se possibile) di un singolo file su stdout"),
+	HRU(780, 0x2DDFD390, "Вывести (если возможно) один файл в stdout"),
+	HU(781, "x", "-external", "Show (if any) a stored external file"),
+	HIT(781, 0x12661169, "Mostra (se c'e') un file esterno salvato"),
+	HRU(781, 0x12661169, "Показать (если есть) сохранённый внешний файл"),
+	HU(782, "x", "-ramdisk", "Extract to RAM, then write (if possible)"),
+	HIT(782, 0x86957B6A, "Estrae in RAM, poi scrive (se possibile)"),
+	HRU(782, 0x86957B6A, "Извлечь в RAM, затем записать (если возможно)"),
+	HU(783, "x", "-recover", "Random read (SSD advised), sequential write; 1GB default cache (-ramsize X)"),
+	HIT(783, 0x00C21588, "Lettura casuale (meglio SSD), scrittura|  sequenziale; cache di default 1GB (-ramsize X)"),
+	HRU(783, 0x00C21588, "Случайное чтение (лучше SSD), последовательная|  запись; кеш по умолчанию 1GB (-ramsize X)"),
+	HINCLUDI("x", 'u', "@range", 'b'),
 #ifdef unix
-		scrivi_riga("-tar", "Give back *nix metadata (owner by name, mode, times), symlinks, hard links, FIFO, devices");
-		scrivi_riga("-numeric", "With -tar: owner by uid/gid only (as tar --numeric-owner)");
+	HU(784, "x", "-tar", "Give back *nix metadata (owner by name, mode, times), symlinks, hard links, FIFO, devices"),
+	HIT(784, 0xC7B3C58B, "Rida' i metadati *nix (proprietario per nome, permessi,|  tempi), symlink, hard link, FIFO, dispositivi"),
+	HRU(784, 0xC7B3C58B, "Вернуть метаданные *nix (владелец по имени, права,|  время), symlink, hard link, FIFO, устройства"),
+	HU(785, "x", "-numeric", "With -tar: owner by uid/gid only (as tar --numeric-owner)"),
+	HIT(785, 0x9DA9E417, "Con -tar: proprietario solo per|  uid/gid (come tar --numeric-owner)"),
+	HRU(785, 0x9DA9E417, "С -tar: владелец только по uid/gid|  (как tar --numeric-owner)"),
 #endif
 #ifdef _WIN32
-		{
-			char sparsebuffer[200];
-			snprintf(sparsebuffer, sizeof(sparsebuffer), "Files >= %s as sparse files, the zeros are not written (default)", tohuman(ZPAQ_SPARSEMIN));
-			scrivi_riga("-sparse", sparsebuffer);
-			scrivi_riga("-nosparse", "No sparse files, not even the ones that were sparse at the origin");
-		}
+	HGENERA(786, "x", 'u', 's', "-sparse", "Files >= %s as sparse files, the zeros are not written (default)"),
+	HIT(786, 0xA4359954, "File >= %s come sparse, gli zeri non si scrivono (default)"),
+	HRU(786, 0xA4359954, "Файлы >= %s как разреженные, нули не пишутся (по умолчанию)"),
+	HU(787, "x", "-nosparse", "No sparse files, not even the ones that were sparse at the origin"),
+	HIT(787, 0x034050A4, "Niente file sparse, neanche quelli che lo erano all'origine"),
+	HRU(787, 0x034050A4, "Без разреженных файлов, даже тех,|  что были разреженными в источнике"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef _WIN64
-		scrivi_riga("-ramsize", "Win64: allocate max virtual memory across all swapfiles");
+	HU(788, "x", "-ramsize", "Win64: allocate max virtual memory across all swapfiles"),
+	HIT(788, 0xA02F559E, "Win64: alloca la massima memoria|  virtuale su tutti i file di swap"),
+	HRU(788, 0xA02F559E, "Win64: выделить максимум виртуальной|  памяти по всем файлам подкачки"),
 #endif
-		scrivi_riga("-huge", "Files written without gaps: the zeros are written, never a seek past the end");
-		scrivi_riga(" ", "(huge files on filesystems without sparse files, slow drives). No sparse files");
+	HU(789, "x", "-huge", "Files written without gaps: the zeros are written, never a seek past the end|(huge files on filesystems without sparse files, slow drives). No sparse files"),
+	HIT(789, 0x69DF449D, "File scritti senza buchi: gli zeri si scrivono, mai|un seek oltre la fine (file enormi su filesystem|senza file sparse, dischi lenti). Niente file sparse"),
+	HRU(789, 0x69DF449D, "Файлы пишутся без пропусков: нули записываются, никогда|seek за конец (огромные файлы на ФС без разреженных|файлов, медленные диски). Без разреженных файлов"),
 #ifdef _WIN32
-		scrivi_riga(" ", "Virtual disks (.vhd .vhdx .avhd .avhdx) are never left sparse (no mount): on NTFS");
-		scrivi_riga(" ", "sparse only while written, elsewhere (exFAT, FAT, -nosparse) -huge by itself");
+	HU(790, "x", " ", "Virtual disks (.vhd .vhdx .avhd .avhdx) are never left sparse (no mount): on NTFS"),
+	HIT(790, 0xABCC6F11, "I dischi virtuali (.vhd .vhdx .avhd .avhdx) non|  restano mai sparse (niente mount): su NTFS"),
+	HRU(790, 0xABCC6F11, "Виртуальные диски (.vhd .vhdx .avhd .avhdx) никогда|  не остаются разреженными (нет mount): в NTFS"),
+	HU(791, "x", " ", "sparse only while written, elsewhere (exFAT, FAT, -nosparse) -huge by itself"),
+	HIT(791, 0xEB3E56AD, "sparse solo mentre si scrivono, altrove|  (exFAT, FAT, -nosparse) -huge da solo"),
+	HRU(791, 0xEB3E56AD, "разреженные только во время записи, в других|  местах (exFAT, FAT, -nosparse) сам -huge"),
 #endif
-		scrivi_riga("-backupdir X", "With -force: MOVE (not erase) files to be overwritten into X/<timestamp>/");
-		scrivi_riga(" ", "keeping the relative path. If a move fails, abort BEFORE writing anything");
-		scrivi_riga(" ", "Two runs in the same second get X/<timestamp>_00001/ and so on");
-		scrivi_riga("-extras", "With -backupdir: also move into X/<timestamp>/ files on disk NOT in the archive");
-		scrivi_riga(" ", "so the restored tree matches the archive, and nothing is ever deleted");
-		scrivi_riga(" ", "Compared folder: the -to one, or (without -to) the archive's own folder");
-		scrivi_riga(" ", "Refused for a whole drive/filesystem: use -to. No -flat -utf -nopath");
-
-
+	HU(792, "x", "-backupdir X", "With -force: MOVE (not erase) files to be overwritten into X/<timestamp>/|keeping the relative path. If a move fails, abort BEFORE writing anything|Two runs in the same second get X/<timestamp>_00001/ and so on"),
+	HIT(792, 0xAAAD0FF6, "Con -force: SPOSTA (non cancella) i file da sovrascrivere|in X/<timestamp>/ mantenendo il percorso relativo. Se uno|spostamento fallisce, esce PRIMA di scrivere qualsiasi cosa|Due giri nello stesso secondo prendono X/<timestamp>_00001/ e cosi' via"),
+	HRU(792, 0xAAAD0FF6, "С -force: ПЕРЕНОСИТЬ (а не стирать) перезаписываемые|файлы в X/<timestamp>/ с сохранением относительного|пути. Если перенос не удался, прервать ДО любой записи|Два запуска в одну секунду получают X/<timestamp>_00001/ и так далее"),
+	HU(793, "x", "-extras", "With -backupdir: also move into X/<timestamp>/ files on disk NOT in the archive|so the restored tree matches the archive, and nothing is ever deleted|Compared folder: the -to one, or (without -to) the archive's own folder|Refused for a whole drive/filesystem: use -to. No -flat -utf -nopath"),
+	HIT(793, 0xB649B75A, "Con -backupdir: sposta in X/<timestamp>/ anche i file sul|disco che NON sono nell'archivio cosi' l'albero ripristinato|e' uguale all'archivio, e non si cancella mai nulla|Cartella confrontata: quella di -to, o (senza -to) quella dell'archivio stesso|Rifiutato per un'intera unita'/filesystem: usare -to. Niente -flat -utf -nopath"),
+	HRU(793, 0xB649B75A, "С -backupdir: переносить в X/<timestamp>/ также файлы на диске, которых НЕТ в|архиве, чтобы восстановленное дерево совпадало с архивом и ничего не удалялось|Сравниваемая папка: из -to или (без -to) папка самого архива|Отвергается для целого диска/ФС: используйте -to. Без -flat -utf -nopath"),
 #endif /// NOSFTPEND
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Single file to file extraction", "x 1.zpaq \"/k/foo/b.md\" -to \"/tmp/restored/b.md\"");
-		scrivi_esempio("Single file to folder tree", "x 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
-		scrivi_esempio("Everything into folder muz7", "x z:\\1.zpaq -to z:\\muz7\\");
-		scrivi_esempio("0-bytes files (check restoration)", "x z:\\1.zpaq -to z:\\muz7\\ -kill");
-		scrivi_esempio("Extract into single directory", "x z:\\1.zpaq -to z:\\muz7\\ -flat");
-		scrivi_esempio("Extract without utf,<255,.eml", "x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
-		scrivi_esempio("Extract forcing overwrite", "x z:\\1.zpaq -to z:\\muz7\\ -force");
-		scrivi_esempio("Extract version K", "x z:\\1.zpaq -to z:\\muz7\\ -until K");
-		scrivi_esempio("Extract last versions of multipart", "x \"z:\\a_???\" -to z:\\ugo");
-		scrivi_esempio("Extract into muz7 every versions", "x z:\\1.zpaq -to z:\\muz7\\ -all");
-		scrivi_esempio("Extract all *.xls into new archive", "x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
-		/// scrivi_esempio("Extract from a VSS (Windows)","x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
-		scrivi_esempio("Replace path in extract", "x 1.zpaq -find /tank/ -replace z:\\uno\\");
-		scrivi_esempio("Change path in extract, longpath", "x 1.zpaq -replace z:\\uno\\ -longpath");
-		scrivi_esempio("Create files' tree", "x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
-		scrivi_esempio("Range-extract version", "x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000");
-		scrivi_esempio("Restore datetime and comments", "x copia.zpaq -to z:\\prova\\ -all -comment");
-		scrivi_esempio("Restore huge image w/smart progress", "x copia.zpaq -to z:\\prova\\ -image");
-		scrivi_esempio("Single file to stdout", "x copia.zpaq 00000015.zfs >z:\\15.zfs");
-		scrivi_esempio("Extract multiple zpaqs", "x \"vu*.zpaq\" -to z:\\pippo\\");
-		scrivi_esempio("Show external VFILE", "x z:\\1.zpaq -external -silent");
-		scrivi_esempio("Spinning drive with lot of RAM", "x z:\11.zpaq -to z:\\ugo -ramdisk");
-		scrivi_esempio("Restoring user/group/dates", "x /1.zpaq -to /tmp/ugo -tar");
+	HESEMPI("x", 'b'),
+	HE(794, "x", "Single file to file extraction", "x 1.zpaq \"/k/foo/b.md\" -to \"/tmp/restored/b.md\""),
+	HIT(794, 0x2B429B09, "Estrazione di un singolo file in un file"),
+	HRU(794, 0x2B429B09, "Извлечение одного файла в файл"),
+	HE(795, "x", "Single file to folder tree", "x 1.zpaq -only \"*whatever\" -to /tmp/foldertree"),
+	HIT(795, 0x585CD496, "Un singolo file in un albero di cartelle"),
+	HRU(795, 0x585CD496, "Один файл в дерево папок"),
+	HE(796, "x", "Everything into folder muz7", "x z:\\1.zpaq -to z:\\muz7\\"),
+	HIT(796, 0x617A28BB, "Tutto nella cartella muz7"),
+	HRU(796, 0x617A28BB, "Всё в папку muz7"),
+	HE(797, "x", "0-bytes files (check restoration)", "x z:\\1.zpaq -to z:\\muz7\\ -kill"),
+	HIT(797, 0x037BB12D, "File da 0 byte (controllo del ripristino)"),
+	HRU(797, 0x037BB12D, "Файлы по 0 байт (проверка восстановления)"),
+	HE(798, "x", "Extract into single directory", "x z:\\1.zpaq -to z:\\muz7\\ -flat"),
+	HIT(798, 0x61AD4B4B, "Estrae in un'unica cartella"),
+	HRU(798, 0x61AD4B4B, "Извлечь в одну папку"),
+	HE(799, "x", "Extract without utf,<255,.eml", "x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml"),
+	HIT(799, 0x7C2BD147, "Estrae senza utf, <255, .eml"),
+	HRU(799, 0x7C2BD147, "Извлечь без utf, <255, .eml"),
+	HE(800, "x", "Extract forcing overwrite", "x z:\\1.zpaq -to z:\\muz7\\ -force"),
+	HIT(800, 0x88C325DB, "Estrae forzando la sovrascrittura"),
+	HRU(800, 0x88C325DB, "Извлечь с принудительной перезаписью"),
+	HE(801, "x", "Extract version K", "x z:\\1.zpaq -to z:\\muz7\\ -until K"),
+	HIT(801, 0xDD69EC9B, "Estrae la versione K"),
+	HRU(801, 0xDD69EC9B, "Извлечь версию K"),
+	HE(802, "x", "Extract last versions of multipart", "x \"z:\\a_???\" -to z:\\ugo"),
+	HIT(802, 0xAE9EA1F4, "Estrae le ultime versioni di un multiparte"),
+	HRU(802, 0xAE9EA1F4, "Извлечь последние версии многотомного"),
+	HE(803, "x", "Extract into muz7 every versions", "x z:\\1.zpaq -to z:\\muz7\\ -all"),
+	HIT(803, 0x424775F3, "Estrae in muz7 tutte le versioni"),
+	HRU(803, 0x424775F3, "Извлечь в muz7 все версии"),
+	HE(804, "x", "Extract all *.xls into new archive", "x z:\\1.zpaq *.xls -repack onlyxls.zpaq"),
+	HIT(804, 0x4D8FAECE, "Estrae tutti i *.xls in un nuovo archivio"),
+	HRU(804, 0x4D8FAECE, "Извлечь все *.xls в новый архив"),
+	/// scrivi_esempio("Extract from a VSS (Windows)","x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
+	HE(805, "x", "Replace path in extract", "x 1.zpaq -find /tank/ -replace z:\\uno\\"),
+	HIT(805, 0x3298D448, "Sostituisce il percorso nell'estrazione"),
+	HRU(805, 0x3298D448, "Заменить путь при извлечении"),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(806, "x", "Change path in extract, longpath", "x 1.zpaq -replace z:\\uno\\ -longpath"),
+	HIT(806, 0x1B6A7253, "Cambia il percorso nell'estrazione, longpath"),
+	HRU(806, 0x1B6A7253, "Изменить путь при извлечении, longpath"),
+#endif
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(807, "x", "Create files' tree", "x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath"),
+	HIT(807, 0xD38E97B9, "Crea l'albero dei file"),
+	HRU(807, 0xD38E97B9, "Создать дерево файлов"),
+#else
+	HE(808, "x", "Create files' tree", "x 1.zpaq -to z:\\testdir\\ -debug -kill -zero"),
+	HIT(808, 0xD38E97B9, "Crea l'albero dei file"),
+	HRU(808, 0xD38E97B9, "Создать дерево файлов"),
+#endif
+	HE(809, "x", "Range-extract version", "x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000"),
+	HIT(809, 0x292CF67E, "Estrae un intervallo di versioni"),
+	HRU(809, 0x292CF67E, "Извлечь диапазон версий"),
+	HE(810, "x", "Restore datetime and comments", "x copia.zpaq -to z:\\prova\\ -all -comment"),
+	HIT(810, 0x39AA72CB, "Ripristina data e ora e commenti"),
+	HRU(810, 0x39AA72CB, "Восстановить дату-время и комментарии"),
+	HE(811, "x", "Restore huge image w/smart progress", "x copia.zpaq -to z:\\prova\\ -image"),
+	HIT(811, 0x2DB0A6E5, "Ripristina un'immagine enorme con avanzamento furbo"),
+	HRU(811, 0x2DB0A6E5, "Восстановить огромный образ с умным прогрессом"),
+	HE(812, "x", "Single file to stdout", "x copia.zpaq 00000015.zfs >z:\\15.zfs"),
+	HIT(812, 0xA61F5509, "Un singolo file su stdout"),
+	HRU(812, 0xA61F5509, "Один файл в stdout"),
+	HE(813, "x", "Extract multiple zpaqs", "x \"vu*.zpaq\" -to z:\\pippo\\"),
+	HIT(813, 0x84A15E17, "Estrae piu' zpaq"),
+	HRU(813, 0x84A15E17, "Извлечь несколько zpaq"),
+	HE(814, "x", "Show external VFILE", "x z:\\1.zpaq -external -silent"),
+	HIT(814, 0x257887EB, "Mostra il VFILE esterno"),
+	HRU(814, 0x257887EB, "Показать внешний VFILE"),
+	HE(815, "x", "Spinning drive with lot of RAM", "x z:\11.zpaq -to z:\\ugo -ramdisk"),
+	HIT(815, 0xD91FC85B, "Disco meccanico con tanta RAM"),
+	HRU(815, 0xD91FC85B, "HDD и много RAM"),
+	HE(816, "x", "Restoring user/group/dates", "x /1.zpaq -to /tmp/ugo -tar"),
+	HIT(816, 0xDD1DA76B, "Ripristina utente/gruppo/date"),
+	HRU(816, 0xDD1DA76B, "Восстановление пользователя/группы/дат"),
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef _WIN64
-		scrivi_esempio("Max virtual memory allocation", "x 1.zpaq -to somewhere -ramdisk -ramsize");
-		scrivi_esempio("Try allocating 500GB virtual memory", "x 1.zpaq -to somewhere -ramdisk -ramsize 500GB");
+	HE(817, "x", "Max virtual memory allocation", "x 1.zpaq -to somewhere -ramdisk -ramsize"),
+	HIT(817, 0x3A5396C1, "Allocazione della massima memoria virtuale"),
+	HRU(817, 0x3A5396C1, "Выделение максимума виртуальной памяти"),
+	HE(818, "x", "Try allocating 500GB virtual memory", "x 1.zpaq -to somewhere -ramdisk -ramsize 500GB"),
+	HIT(818, 0x1430C86A, "Prova ad allocare 500GB di memoria virtuale"),
+	HRU(818, 0x1430C86A, "Попытка выделить 500GB виртуальной памяти"),
 #endif
 #endif /// NOSFTPEND
-		scrivi_esempio("Restoring huge files on not-NTFS", "x z:\\1.zpaq -to u:\\restore -huge");
+	HE(819, "x", "Restoring huge files on not-NTFS", "x z:\\1.zpaq -to u:\\restore -huge"),
+	HIT(819, 0x9816AFF8, "Ripristino di file enormi su non-NTFS"),
+	HRU(819, 0x9816AFF8, "Восстановление огромных файлов не на NTFS"),
 #ifdef _WIN32
-		scrivi_esempio("Restoring without sparse files", "x z:\\1.zpaq -to u:\\restore -nosparse");
-		scrivi_esempio("Restoring VHD", "x z:\\1.zpaq -to u:\\restore");
+	HE(820, "x", "Restoring without sparse files", "x z:\\1.zpaq -to u:\\restore -nosparse"),
+	HIT(820, 0x1910A635, "Ripristino senza file sparse"),
+	HRU(820, 0x1910A635, "Восстановление без разреженных файлов"),
+	HE(821, "x", "Restoring VHD", "x z:\\1.zpaq -to u:\\restore"),
+	HIT(821, 0x912BC644, "Ripristino di un VHD"),
+	HRU(821, 0x912BC644, "Восстановление VHD"),
 #endif
-		scrivi_esempio("Recover as much as possibile", "x z:\\1.zpaq -to u:\\restore -recover");
-		scrivi_esempio("Overwrite, moving old files aside", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv");
-		scrivi_esempio("...and move away files not in archive", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv -extras");
-		scrivi_esempio("Restore in place (1:1 layout)", "x z:\\1.zpaq c:\\data -to c:\\data -force -backupdir z:\\archiv");
-		scrivi_esempio("Restore in place, delete nothing", "x z:\\1.zpaq -force -backupdir z:\\archiv -extras");
-	}
-	return ("Extract file(s)");
-}
-string help_l(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD l", "List");
-		scrivi_riga(" ", "If source folders are specified, do a compare of the archive's content.");
-		scrivi_riga(" ", "A 'verify' more than a 'list', much faster than the standard,");
-		scrivi_riga(" ", "as it performs a block calc  codes of source files, but not of");
-		scrivi_riga(" ", "the archived ones; also checks the CRC-32, to intercept any SHA1 collisions.");
-		scrivi_riga(" ", "Use the exact same parameters of add(), just use l instead of a.");
-		scrivi_riga("-force", "Shows all files (even marked as corrupted)");
-		scrivi_riga("-checksum", "Shows CRC-32/hash, if any");
-		scrivi_riga("-summary", "Compact file list");
-		scrivi_riga("-comment", "foo  Works on the version with comment foo (also x, t)");
-		scrivi_riga("-comment", "Enumerate version-comment");
-		scrivi_riga("-find", "pippo   Just like |grep -i pippo");
-		scrivi_riga("-replace", "foo  Replace -find with -replace in the output");
-		scrivi_riga("-to", "knb       Do the standard rename()");
-		scrivi_riga("-utc", "Do not convert to localtime (show UTC)");
-		scrivi_riga("-stdout", "If -verbose show if files' fragments are ordered");
+	HE(822, "x", "Recover as much as possibile", "x z:\\1.zpaq -to u:\\restore -recover"),
+	HIT(822, 0x2F4D386A, "Recupera il piu' possibile"),
+	HRU(822, 0x2F4D386A, "Восстановить как можно больше"),
+	HE(823, "x", "Overwrite, moving old files aside", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv"),
+	HIT(823, 0xE9E9041E, "Sovrascrive, spostando da parte i vecchi file"),
+	HRU(823, 0xE9E9041E, "Перезаписать, отложив старые файлы в сторону"),
+	HE(824, "x", "...and move away files not in archive", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv -extras"),
+	HIT(824, 0xC526F61E, "...e sposta via i file che non sono nell'archivio"),
+	HRU(824, 0xC526F61E, "...и убрать файлы, которых нет в архиве"),
+	HE(825, "x", "Restore in place (1:1 layout)", "x z:\\1.zpaq c:\\data -to c:\\data -force -backupdir z:\\archiv"),
+	HIT(825, 0xF57018AA, "Ripristino sul posto (struttura 1:1)"),
+	HRU(825, 0xF57018AA, "Восстановление на месте (структура 1:1)"),
+	HE(826, "x", "Restore in place, delete nothing", "x z:\\1.zpaq -force -backupdir z:\\archiv -extras"),
+	HIT(826, 0x1F477269, "Ripristino sul posto, senza cancellare nulla"),
+	HRU(826, 0x1F477269, "Восстановление на месте, ничего не удаляя"),
+	HBREVE(827, "x", "Extract file(s)"),
+	HIT(827, 0xF289F67C, "Estrae file"),
+	HRU(827, 0xF289F67C, "Извлечь файлы"),
+	/// l
+	HU(828, "l", "CMD l", "List|If source folders are specified, do a compare of the archive's content.|A 'verify' more than a 'list', much faster than the standard,|as it performs a block calc  codes of source files, but not of|the archived ones; also checks the CRC-32, to intercept any SHA1 collisions.|Use the exact same parameters of add(), just use l instead of a."),
+	HIT(828, 0x3BFAAE2E, "Elenco|Se si danno cartelle sorgente, confronta il contenuto dell'archivio.|Una 'verifica' piu' che un 'elenco', molto piu' veloce del normale, perche'|calcola i codici a blocchi dei file sorgente, ma non di quelli archiviati;|controlla anche i CRC-32, per intercettare eventuali collisioni SHA1.|Usare esattamente gli stessi parametri di add(), con l invece di a."),
+	HRU(828, 0x3BFAAE2E, "Список|Если указаны исходные папки, содержимое архива сравнивается с ними.|Скорее 'проверка', чем 'список', гораздо быстрее обычной,|так как блочные коды считаются для исходных файлов, но не для|архивных; также проверяются CRC-32, чтобы поймать коллизии SHA1.|Используйте те же параметры, что и для add(), только l вместо a."),
+	HU(829, "l", "-force", "Shows all files (even marked as corrupted)"),
+	HIT(829, 0x9267F22C, "Mostra tutti i file (anche quelli segnati come corrotti)"),
+	HRU(829, 0x9267F22C, "Показать все файлы (даже помеченные как повреждённые)"),
+	HU(830, "l", "-checksum", "Shows CRC-32/hash, if any"),
+	HIT(830, 0xB4A32DB5, "Mostra CRC-32/hash, se ci sono"),
+	HRU(830, 0xB4A32DB5, "Показать CRC-32/хеш, если есть"),
+	HU(831, "l", "-summary", "Compact file list"),
+	HIT(831, 0xBE8B34C4, "Elenco compatto dei file"),
+	HRU(831, 0xBE8B34C4, "Компактный список файлов"),
+	HU(832, "l", "-comment", "foo  Works on the version with comment foo (also x, t)"),
+	HIT(832, 0x5B20FE40, "foo  Lavora sulla versione col commento foo (anche x, t)"),
+	HRU(832, 0x5B20FE40, "foo  Работать с версией с комментарием foo (также x, t)"),
+	HU(833, "l", "-comment", "Enumerate version-comment"),
+	HIT(833, 0x8F35DEB1, "Elenca versioni e commenti"),
+	HRU(833, 0x8F35DEB1, "Перечислить версии и комментарии"),
+	HU(834, "l", "-find", "pippo   Just like ||grep -i pippo"),
+	HIT(834, 0x6A5908DC, "pippo   Proprio come ||grep -i pippo"),
+	HRU(834, 0x6A5908DC, "pippo   Точно как ||grep -i pippo"),
+	HU(835, "l", "-replace", "foo  Replace -find with -replace in the output"),
+	HIT(835, 0x1BD3F1A1, "foo  Sostituisce -find con -replace nell'output"),
+	HRU(835, 0x1BD3F1A1, "foo  Заменить -find на -replace в выводе"),
+	HU(836, "l", "-to", "knb       Do the standard rename()"),
+	HIT(836, 0xB311ECB2, "knb       Fa il rename() standard"),
+	HRU(836, 0xB311ECB2, "knb       Выполнить стандартный rename()"),
+	HU(837, "l", "-utc", "Do not convert to localtime (show UTC)"),
+	HIT(837, 0xEC2C0171, "Non converte all'ora locale (mostra UTC)"),
+	HRU(837, 0xEC2C0171, "Не переводить в местное время (показать UTC)"),
+	HU(838, "l", "-stdout", "If -verbose show if files' fragments are ordered"),
+	HIT(838, 0x85BAEBD1, "Con -verbose mostra se i frammenti dei file sono in ordine"),
+	HRU(838, 0x85BAEBD1, "С -verbose показать, упорядочены ли фрагменты файлов"),
 #ifdef _WIN32
-		scrivi_riga("-windate", "Show (if any) file's creation date");
+	HU(839, "l", "-windate", "Show (if any) file's creation date"),
+	HIT(839, 0x86E41A47, "Mostra (se c'e') la data di creazione dei file"),
+	HRU(839, 0x86E41A47, "Показать (если есть) дату создания файлов"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_riga("-nofast", "Do not use the stored history (-fast), read all");
-		scrivi_riga("-date", "Show creation date (if any)");
-		scrivi_riga("-attr", "Show the attr");
-		scrivi_riga("-terse", "Make a 'script-aware' output");
-		scrivi_riga("-nodel", "Do not show deleted files (with -all)");
-		scrivi_riga("-csv", "\"some\"   Enable -csv delimiter  (\\t for TAB)");
-		scrivi_riga("-csvhf", "\"!\"    CSV line header/footer (\\t for TAB)");
-		help_date();
-		help_size();
-		help_orderby();
-		help_range();
-		scrivi_riga("-715", "Binary-compatible zpaq 7.15 output");
-		scrivi_riga("-norecursion", "Do not recurse with -only (see example below)");
-		scrivi_riga("-tar", "Show Posix metadata (if any): type, owner, mode, times, link, device");
-		scrivi_riga("-home", "Show 1-level data");
-		scrivi_riga("-orderby X", "-desc -n Y");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Last version", "l z:\\1.zpaq");
-		scrivi_esempio("Last version w/checksums", "l z:\\1.zpaq -checksum");
-		scrivi_esempio("Compact output", "l z:\\1.zpaq -checksum -summary");
-		scrivi_esempio("Compact output renamed", "l z:\\1.zpaq -checksum -summary -to z:\\knb");
-		scrivi_esempio("All (every) version", "l z:\\1.zpaq -all");
-		scrivi_esempio("Version comments (if any)", "l z:\\1.zpaq -comment");
-		scrivi_esempio("V.comments verbose (if any)", "l z:\\1.zpaq -comment -all");
-		scrivi_esempio("Only stored 'zpaq.cpp'", "l z:\\1.zpaq -find zpaq.cpp -pakka");
-		scrivi_esempio("Find-and-replace (like awk or sed)", "l r:\\1.zpaq -find c:/biz/ -replace z:\\mydir\\");
-		scrivi_esempio("List the 10 greatest file", "l z:\\1.zpaq -all -orderby size -desc -n 10");
-		scrivi_esempio("List files >1G", "l z:\\1.zpaq -minsize 1g");
-		scrivi_esempio("List files >100M of 2017", "l z:\\1.zpaq -minsize 100m -datefrom 2017 -dateto 2017");
-		scrivi_esempio("List ORDERED files (-stdout)", "l z:\\1.zpaq -stdout");
-		scrivi_esempio("Compare to files on disk   ", "l z:\\1.zpaq \"//somewhere/scanner/\" -ssd");
-		scrivi_esempio("Find the versions of a file", "l z:\\1.zpaq -only \"*/the/file.doc\" -all");
-		scrivi_esempio("Force recomputing list", "l z:\\1.zpaq -nofast");
-				scrivi_esempio("Files added in versions 2 and 3", "l z:\\1.zpaq -range 2:3");
-		scrivi_esempio("Files added in last version", "l z:\\1.zpaq -range ::1");
-		scrivi_esempio("Show creation date (if any)", "l z:\\1.zpaq -date");
-		scrivi_esempio("Fixed sized/no header and footer", "l z:\\1.zpaq -terse");
-		scrivi_esempio("Where are the restorable versions? ", "l z:\\1.zpaq -find \"$$$$\" -all -nodel");
-		scrivi_esempio("TAB-delimited CSV output           ", "l z:\\1.zpaq -terse -csv \"\\t\"");
-		scrivi_esempio("Enclose fields between double quote", "l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\"");
-		scrivi_esempio("Output just like zpaq 7.15", "l z:\\1.zpaq -715");
-		scrivi_esempio("Show a folder WITHOUT subfolders", "l z:\\1.zpaq -only c:/dropbox/snapshot -norecursion");
-		scrivi_esempio("Show a folder WITH subfolders", "l z:\\1.zpaq -only c:/dropbox/snapshot");
-		scrivi_esempio("Get metadata (if any)", "l /tmp/backup.zpaq -tar");
-		scrivi_esempio("Show 4 largest 1-level folders", "l z:\\1.zpaq c:/zpaqfranz -home -desc -n 4");
-	}
-	return ("List file(s)");
-}
-string help_i(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD i (info)", "Directly shows the versions into the archive, with size and comments");
-		scrivi_riga("-comment", "Shows comments (if any: they are shown without it too)");
-		scrivi_riga("-stat", "Count 'weird' files and show uncompressed size (slow)");
-		scrivi_riga("-verbose", "What the versions say they are (VFILE-info, written with -fast), below the list");
-		scrivi_riga(" ", "and what ac saved, if the archive has one: the last backup (-all: every one)");
-		help_range();
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Show versions info (command i)", "i z:\\1.zpaq");
-		scrivi_esempio("Count 'not good filenames'", "i z:\\1.zpaq -stat");
-		scrivi_esempio("Shows version comment", "i z:\\1.zpaq -comment");
-		scrivi_esempio("Show version 153", "i z:\\1.zpaq -range 153");
-		scrivi_esempio("Show last 5 versions", "i z:\\1.zpaq -range ::5");
-	}
-	return ("Show file/archive info");
-}
-string help_ls(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD ls", "Navigate inside .zpaq like a 'filesystem'");
-		scrivi_riga(" ", "EXPERIMENTAL");
-		scrivi_riga(" ", "Enter help or ? to commands list");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Enter inside archive", "ls z:\\1.zpaq");
-	}
-	return ("Browse inside .zpaq archive");
-}
-
-string help_tui(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD tui", "Start text-based TUI");
-		scrivi_riga("CMD gui", "Start text-based TUI (yep, no Graphic)");
-		scrivi_riga(" ", "Please strike ? key to get all commands");
-		scrivi_riga(" ", "Without the archive (zpaqfranz tui; and t x l i v e w p zip image crop trim...):");
-		scrivi_riga(" ", "a file chooser on the file system (same keys), then RUN and the switches of");
-		scrivi_riga(" ", "the command. More archives marked: one run each (t and x)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Launch the TUI", "tui z:\\okane.zpaq");
-		scrivi_esempio("Pick the archive on a screen, then the TUI", "tui");
-		scrivi_esempio("Pick the archive(s), then test", "t");
-	}
-	return ("Text UI for listing/extraction");
-}
-/// 65.10a
-string help_mc(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD mc", "Two panels on the file system, a very small Midnight Commander");
-		scrivi_riga(" ", "TAB (left, right) the other panel; ENTER into a folder, or the TUI of an");
-		scrivi_riga(" ", "archive; BACKSPACE up; \\ the drives (*nix: / /home and the home); SPACE marks");
-		scrivi_riga(" ", "F1 add to an archive (the one under the cursor of the other panel, or a new");
-		scrivi_riga(" ", "one; a menu: default, -m1...-m5, with a password) F2 rename F3 list F4 info");
-		scrivi_riga(" ", "F5 copy F6 move (to another disk: verified) F7 mkdir F8 delete F9 sort");
-		scrivi_riga(" ", "F10 ESC leave. Alt+1...Alt+0 are F1-F10. ? for all the keys");
-		scrivi_riga(" ", "A name typed (letters, digits): the cursor on the first one that begins that way");
-		scrivi_riga(" ", "* marks by a wildcard (*.cpp, source*), | turns the marks over");
-		scrivi_riga(" ", "Ctrl+S size (s), Ctrl+H size of each folder (s -home), Ctrl+V compare the two");
-		scrivi_riga(" ", "panels (c), Ctrl+R robocopy to the other panel (r: dry run, or -kill)");
-		scrivi_riga(" ", "Ctrl+R: from the folder under the cursor, always into a folder with its name");
-		scrivi_riga(" ", "(c:\\data\\715 with z:\\ on the other panel goes to z:\\715; h:\\ to z:\\h_)");
-		scrivi_riga(" ", "F1 F5 F6 F8 work on the marked ones, or on the one under the cursor");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("The two panels, on the current folder", "mc");
-		scrivi_esempio("Left and right panel", "mc c:\\data z:\\backup");
-	}
-	return ("Two panels on the file system (copy, move, delete, add to an archive)");
-}
+	HU(840, "l", "-nofast", "Do not use the stored history (-fast), read all"),
+	HIT(840, 0x17560BBB, "Non usa la storia salvata (-fast), legge tutto"),
+	HRU(840, 0x17560BBB, "Не использовать сохранённую историю (-fast), читать всё"),
+	HU(841, "l", "-date", "Show creation date (if any)"),
+	HIT(841, 0xADE16881, "Mostra la data di creazione (se c'e')"),
+	HRU(841, 0xADE16881, "Показать дату создания (если есть)"),
+	HU(842, "l", "-attr", "Show the attr"),
+	HIT(842, 0x62B6E872, "Mostra gli attributi"),
+	HRU(842, 0x62B6E872, "Показать атрибуты"),
+	HU(843, "l", "-terse", "Make a 'script-aware' output"),
+	HIT(843, 0xDD4452B3, "Output adatto agli script"),
+	HRU(843, 0xDD4452B3, "Вывод, удобный для скриптов"),
+	HU(844, "l", "-nodel", "Do not show deleted files (with -all)"),
+	HIT(844, 0x1AE4F0A1, "Non mostra i file cancellati (con -all)"),
+	HRU(844, 0x1AE4F0A1, "Не показывать удалённые файлы (с -all)"),
+	HU(845, "l", "-csv", "\"some\"   Enable -csv delimiter  (\\t for TAB)"),
+	HIT(845, 0x69C77F9B, "\"some\"   Attiva il delimitatore -csv  (\\t per il TAB)"),
+	HRU(845, 0x69C77F9B, "\"some\"   Включить разделитель -csv  (\\t для TAB)"),
+	HU(846, "l", "-csvhf", "\"!\"    CSV line header/footer (\\t for TAB)"),
+	HIT(846, 0xE3C5A824, "\"!\" Intestazione/chiusura delle righe CSV (\\t per il TAB)"),
+	HRU(846, 0xE3C5A824, "\"!\"    Заголовок/концовка строк CSV (\\t для TAB)"),
+	HINCLUDI("l", 'u', "@date", 'b'),
+	HINCLUDI("l", 'u', "@size", 'b'),
+	HINCLUDI("l", 'u', "@orderby", 'b'),
+	HINCLUDI("l", 'u', "@range", 'b'),
+	HU(847, "l", "-715", "Binary-compatible zpaq 7.15 output"),
+	HIT(847, 0x5C5B06D7, "Output binario-compatibile con zpaq 7.15"),
+	HRU(847, 0x5C5B06D7, "Двоично-совместимый с zpaq 7.15 вывод"),
+	HU(848, "l", "-norecursion", "Do not recurse with -only (see example below)"),
+	HIT(848, 0x3FE42B2E, "Non scende nelle sottocartelle con|  -only (vedi l'esempio sotto)"),
+	HRU(848, 0x3FE42B2E, "Без рекурсии с -only (см. пример ниже)"),
+	HU(849, "l", "-tar", "Show Posix metadata (if any): type, owner, mode, times, link, device"),
+	HIT(849, 0x4334ADD2, "Mostra i metadati Posix (se ci sono): tipo,|  proprietario, permessi, tempi, link, dispositivo"),
+	HRU(849, 0x4334ADD2, "Показать метаданные Posix (если есть): тип,|  владелец, права, время, ссылка, устройство"),
+	HU(850, "l", "-home", "Show 1-level data"),
+	HIT(850, 0x19217D74, "Mostra i dati del 1o livello"),
+	HRU(850, 0x19217D74, "Показать данные 1-го уровня"),
+	HU(0, "l", "-orderby X", "-desc -n Y"),
+	HESEMPI("l", 'b'),
+	HE(851, "l", "Last version", "l z:\\1.zpaq"),
+	HIT(851, 0xE3EF12D5, "Ultima versione"),
+	HRU(851, 0xE3EF12D5, "Последняя версия"),
+	HE(852, "l", "Last version w/checksums", "l z:\\1.zpaq -checksum"),
+	HIT(852, 0x86B04053, "Ultima versione coi checksum"),
+	HRU(852, 0x86B04053, "Последняя версия с контрольными суммами"),
+	HE(853, "l", "Compact output", "l z:\\1.zpaq -checksum -summary"),
+	HIT(853, 0x9F72D153, "Output compatto"),
+	HRU(853, 0x9F72D153, "Компактный вывод"),
+	HE(854, "l", "Compact output renamed", "l z:\\1.zpaq -checksum -summary -to z:\\knb"),
+	HIT(854, 0x22DF6499, "Output compatto rinominato"),
+	HRU(854, 0x22DF6499, "Компактный вывод с переименованием"),
+	HE(855, "l", "All (every) version", "l z:\\1.zpaq -all"),
+	HIT(855, 0x3DC2644A, "Tutte (ogni) le versioni"),
+	HRU(855, 0x3DC2644A, "Все (каждая) версии"),
+	HE(856, "l", "Version comments (if any)", "l z:\\1.zpaq -comment"),
+	HIT(856, 0x154278CD, "Commenti delle versioni (se ci sono)"),
+	HRU(856, 0x154278CD, "Комментарии версий (если есть)"),
+	HE(857, "l", "V.comments verbose (if any)", "l z:\\1.zpaq -comment -all"),
+	HIT(857, 0x66891B3F, "Commenti delle versioni, dettagliato (se ci sono)"),
+	HRU(857, 0x66891B3F, "Комментарии версий подробно (если есть)"),
+	HE(858, "l", "Only stored 'zpaq.cpp'", "l z:\\1.zpaq -find zpaq.cpp -pakka"),
+	HIT(858, 0x0277BE0D, "Solo 'zpaq.cpp' salvati"),
+	HRU(858, 0x0277BE0D, "Только сохранённые 'zpaq.cpp'"),
+	HE(859, "l", "Find-and-replace (like awk or sed)", "l r:\\1.zpaq -find c:/biz/ -replace z:\\mydir\\"),
+	HIT(859, 0xB9BA2BAD, "Trova e sostituisce (come awk o sed)"),
+	HRU(859, 0xB9BA2BAD, "Найти и заменить (как awk или sed)"),
+	HE(860, "l", "List the 10 greatest file", "l z:\\1.zpaq -all -orderby size -desc -n 10"),
+	HIT(860, 0x161B1C68, "Elenca i 10 file piu' grandi"),
+	HRU(860, 0x161B1C68, "Список 10 самых больших файлов"),
+	HE(861, "l", "List files >1G", "l z:\\1.zpaq -minsize 1g"),
+	HIT(861, 0x3086B59C, "Elenca i file >1G"),
+	HRU(861, 0x3086B59C, "Список файлов >1G"),
+	HE(862, "l", "List files >100M of 2017", "l z:\\1.zpaq -minsize 100m -datefrom 2017 -dateto 2017"),
+	HIT(862, 0xD77C9127, "Elenca i file >100M del 2017"),
+	HRU(862, 0xD77C9127, "Список файлов >100M за 2017"),
+	HE(863, "l", "List ORDERED files (-stdout)", "l z:\\1.zpaq -stdout"),
+	HIT(863, 0x46E5726C, "Elenca i file ORDINATI (-stdout)"),
+	HRU(863, 0x46E5726C, "Список УПОРЯДОЧЕННЫХ файлов (-stdout)"),
+	HE(864, "l", "Compare to files on disk   ", "l z:\\1.zpaq \"//somewhere/scanner/\" -ssd"),
+	HIT(864, 0x58F7D208, "Confronta coi file sul disco   "),
+	HRU(864, 0x58F7D208, "Сравнить с файлами на диске"),
+	HE(865, "l", "Find the versions of a file", "l z:\\1.zpaq -only \"*/the/file.doc\" -all"),
+	HIT(865, 0x859BFB7E, "Trova le versioni di un file"),
+	HRU(865, 0x859BFB7E, "Найти версии файла"),
+	HE(866, "l", "Force recomputing list", "l z:\\1.zpaq -nofast"),
+	HIT(866, 0xC9E393B7, "Forza il ricalcolo dell'elenco"),
+	HRU(866, 0xC9E393B7, "Принудительно пересчитать список"),
+	HE(867, "l", "Files added in versions 2 and 3", "l z:\\1.zpaq -range 2:3"),
+	HIT(867, 0xA9AB87A4, "File aggiunti nelle versioni 2 e 3"),
+	HRU(867, 0xA9AB87A4, "Файлы, добавленные в версиях 2 и 3"),
+	HE(868, "l", "Files added in last version", "l z:\\1.zpaq -range ::1"),
+	HIT(868, 0xDC13AB5B, "File aggiunti nell'ultima versione"),
+	HRU(868, 0xDC13AB5B, "Файлы, добавленные в последней версии"),
+	HE(869, "l", "Show creation date (if any)", "l z:\\1.zpaq -date"),
+	HIT(869, 0xADE16881, "Mostra la data di creazione (se c'e')"),
+	HRU(869, 0xADE16881, "Показать дату создания (если есть)"),
+	HE(870, "l", "Fixed sized/no header and footer", "l z:\\1.zpaq -terse"),
+	HIT(870, 0x2427154F, "Dimensione fissa/senza intestazione e chiusura"),
+	HRU(870, 0x2427154F, "Фиксированный размер/без заголовка и концовки"),
+	HE(871, "l", "Where are the restorable versions? ", "l z:\\1.zpaq -find \"$$$$\" -all -nodel"),
+	HIT(871, 0x794277E2, "Dove sono le versioni ripristinabili? "),
+	HRU(871, 0x794277E2, "Где восстанавливаемые версии?"),
+	HE(872, "l", "TAB-delimited CSV output           ", "l z:\\1.zpaq -terse -csv \"\\t\""),
+	HIT(872, 0x7B570151, "Output CSV delimitato da TAB           "),
+	HRU(872, 0x7B570151, "Вывод CSV с разделителем TAB"),
+	HE(873, "l", "Enclose fields between double quote", "l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\""),
+	HIT(873, 0xD47C9AEC, "Racchiude i campi fra virgolette"),
+	HRU(873, 0xD47C9AEC, "Заключать поля в двойные кавычки"),
+	HE(874, "l", "Output just like zpaq 7.15", "l z:\\1.zpaq -715"),
+	HIT(874, 0xE59FCD2A, "Output proprio come zpaq 7.15"),
+	HRU(874, 0xE59FCD2A, "Вывод точно как в zpaq 7.15"),
+	HE(875, "l", "Show a folder WITHOUT subfolders", "l z:\\1.zpaq -only c:/dropbox/snapshot -norecursion"),
+	HIT(875, 0xC5928FE8, "Mostra una cartella SENZA sottocartelle"),
+	HRU(875, 0xC5928FE8, "Показать папку БЕЗ подпапок"),
+	HE(876, "l", "Show a folder WITH subfolders", "l z:\\1.zpaq -only c:/dropbox/snapshot"),
+	HIT(876, 0x8707176A, "Mostra una cartella CON sottocartelle"),
+	HRU(876, 0x8707176A, "Показать папку С подпапками"),
+	HE(877, "l", "Get metadata (if any)", "l /tmp/backup.zpaq -tar"),
+	HIT(877, 0xC0D6D174, "Prende i metadati (se ci sono)"),
+	HRU(877, 0xC0D6D174, "Получить метаданные (если есть)"),
+	HE(878, "l", "Show 4 largest 1-level folders", "l z:\\1.zpaq c:/zpaqfranz -home -desc -n 4"),
+	HIT(878, 0x6CAD5FFD, "Mostra le 4 cartelle piu' grandi del 1o livello"),
+	HRU(878, 0x6CAD5FFD, "Показать 4 самые большие папки 1-го уровня"),
+	HBREVE(879, "l", "List file(s)"),
+	HIT(879, 0x77BA7E37, "Elenca file"),
+	HRU(879, 0x77BA7E37, "Список файлов"),
+	/// i
+	HU(880, "i", "CMD i (info)", "Directly shows the versions into the archive, with size and comments"),
+	HIT(880, 0xD1EAA930, "Mostra direttamente le versioni|  dell'archivio, con dimensione e commenti"),
+	HRU(880, 0xD1EAA930, "Прямо показывает версии в архиве, с размером и комментариями"),
+	HU(881, "i", "-comment", "Shows comments (if any: they are shown without it too)"),
+	HIT(881, 0x7464651D, "Mostra i commenti (se ci sono: si vedono anche senza)"),
+	HRU(881, 0x7464651D, "Показать комментарии (если есть: видны и без этого)"),
+	HU(882, "i", "-stat", "Count 'weird' files and show uncompressed size (slow)"),
+	HIT(882, 0x2EDC75E7, "Conta i file 'strani' e mostra la|  dimensione non compressa (lento)"),
+	HRU(882, 0x2EDC75E7, "Подсчитать 'странные' файлы и|  показать несжатый размер (медленно)"),
+	HU(883, "i", "-verbose", "What the versions say they are (VFILE-info, written with -fast), below the list|and what ac saved, if the archive has one: the last backup (-all: every one)"),
+	HIT(883, 0x6BBBB6D1, "Cosa dicono di essere le versioni (VFILE-info, scritto|con -fast), sotto l'elenco e cosa ha salvato ac, se|l'archivio ne ha uno: l'ultimo backup (-all: tutti)"),
+	HRU(883, 0x6BBBB6D1, "Что версии говорят о себе (VFILE-info, записывается с -fast), под списком|и что сохранил ac, если в архиве он есть: последний backup (-all: все)"),
+	HINCLUDI("i", 'u', "@range", 'b'),
+	HESEMPI("i", 'b'),
+	HE(884, "i", "Show versions info (command i)", "i z:\\1.zpaq"),
+	HIT(884, 0x66A0CB62, "Mostra le informazioni sulle versioni (comando i)"),
+	HRU(884, 0x66A0CB62, "Показать сведения о версиях (команда i)"),
+	HE(885, "i", "Count 'not good filenames'", "i z:\\1.zpaq -stat"),
+	HIT(885, 0x31929736, "Conta i 'nomi di file non buoni'"),
+	HRU(885, 0x31929736, "Подсчитать 'плохие имена файлов'"),
+	HE(886, "i", "Shows version comment", "i z:\\1.zpaq -comment"),
+	HIT(886, 0x149554FC, "Mostra il commento delle versioni"),
+	HRU(886, 0x149554FC, "Показать комментарий версий"),
+	HE(887, "i", "Show version 153", "i z:\\1.zpaq -range 153"),
+	HIT(887, 0xFD92708B, "Mostra la versione 153"),
+	HRU(887, 0xFD92708B, "Показать версию 153"),
+	HE(888, "i", "Show last 5 versions", "i z:\\1.zpaq -range ::5"),
+	HIT(888, 0x056090F8, "Mostra le ultime 5 versioni"),
+	HRU(888, 0x056090F8, "Показать последние 5 версий"),
+	HBREVE(889, "i", "Show file/archive info"),
+	HIT(889, 0x94601795, "Mostra informazioni su file/archivio"),
+	HRU(889, 0x94601795, "Показать сведения о файле/архиве"),
+	/// ls
+	HU(890, "ls", "CMD ls", "Navigate inside .zpaq like a 'filesystem'|EXPERIMENTAL|Enter help or ? to commands list"),
+	HIT(890, 0x82A7C2A3, "Naviga dentro un .zpaq come in un 'filesystem'|SPERIMENTALE|Scrivere help o ? per l'elenco dei comandi"),
+	HRU(890, 0x82A7C2A3, "Навигация внутри .zpaq как по 'файловой системе'|ЭКСПЕРИМЕНТАЛЬНО|Введите help или ? для списка команд"),
+	HESEMPI("ls", 'b'),
+	HE(891, "ls", "Enter inside archive", "ls z:\\1.zpaq"),
+	HIT(891, 0xE5D6C8D5, "Entra nell'archivio"),
+	HRU(891, 0xE5D6C8D5, "Войти в архив"),
+	HBREVE(892, "ls", "Browse inside .zpaq archive"),
+	HIT(892, 0x8E427889, "Sfoglia un archivio .zpaq"),
+	HRU(892, 0x8E427889, "Просмотр архива .zpaq изнутри"),
+	/// tui
+	HU(893, "tui", "CMD tui", "Start text-based TUI"),
+	HIT(893, 0x5020512E, "Avvia la TUI testuale"),
+	HRU(893, 0x5020512E, "Запустить текстовый интерфейс (TUI)"),
+	HU(894, "tui", "CMD gui", "Start text-based TUI (yep, no Graphic)|Please strike ? key to get all commands|Without the archive (zpaqfranz tui; and t x l i v e w p zip image crop trim...):|a file chooser on the file system (same keys), then RUN and the switches of|the command. More archives marked: one run each (t and x)"),
+	HIT(894, 0xB5079845, "Avvia la TUI testuale (eh si', niente grafica)|Premere il tasto ? per avere tutti i comandi|Senza l'archivio (zpaqfranz tui; e t x l i v e w p zip image crop trim...):|un selettore di file sul file system (stessi tasti), poi RUN e gli switch del|comando. Piu' archivi marcati: un giro ciascuno (t e x)"),
+	HRU(894, 0xB5079845, "Запустить текстовый интерфейс TUI (да, без графики)|Нажмите ? для списка всех команд|Без архива (zpaqfranz tui; а также t x l i v e w p zip image crop trim...):|выбор файла в файловой системе (те же клавиши), затем RUN и ключи|команды. Отмечено несколько архивов: по запуску на каждый (t и x)"),
+	HESEMPI("tui", 'b'),
+	HE(895, "tui", "Launch the TUI", "tui z:\\okane.zpaq"),
+	HIT(895, 0x4E15E6CB, "Lancia la TUI"),
+	HRU(895, 0x4E15E6CB, "Запустить TUI"),
+	HE(896, "tui", "Pick the archive on a screen, then the TUI", "tui"),
+	HIT(896, 0xC7AA8AB5, "Sceglie l'archivio su una schermata, poi la TUI"),
+	HRU(896, 0xC7AA8AB5, "Выбрать архив на экране, затем TUI"),
+	HE(897, "tui", "Pick the archive(s), then test", "t"),
+	HIT(897, 0x261C8FA8, "Sceglie gli archivi, poi il test"),
+	HRU(897, 0x261C8FA8, "Выбрать архив(ы), затем проверить"),
+	HBREVE(898, "tui", "Text UI for listing/extraction"),
+	HIT(898, 0x2C144D2D, "Interfaccia testuale per elenco/estrazione"),
+	HRU(898, 0x2C144D2D, "Текстовый интерфейс для просмотра/извлечения"),
+	/// 65.10a
+	/// mc
+	HU(899, "mc", "CMD mc", "Two panels on the file system, a very small Midnight Commander|TAB (left, right) the other panel; ENTER into a folder, or the TUI of an|archive; BACKSPACE up; \\ the drives (*nix: / /home and the home); SPACE marks|F1 add to an archive (the one under the cursor of the other panel, or a new|one; a menu: default, -m1...-m5, with a password) F2 rename F3 list F4 info|F5 copy F6 move (to another disk: verified) F7 mkdir F8 delete F9 sort|F10 ESC leave. Alt+1...Alt+0 are F1-F10. ? for all the keys|A name typed (letters, digits): the cursor on the first one that begins that way|* marks by a wildcard (*.cpp, source*), || turns the marks over|Ctrl+S size (s), Ctrl+H size of each folder (s -home), Ctrl+V compare the two|panels (c), Ctrl+R robocopy to the other panel (r: dry run, or -kill)|Ctrl+R: from the folder under the cursor, always into a folder with its name|(c:\\data\\715 with z:\\ on the other panel goes to z:\\715; h:\\ to z:\\h_)|F1 F5 F6 F8 work on the marked ones, or on the one under the cursor"),
+	HIT(899, 0x549ECD8B, "Due pannelli sul file system, un Midnight Commander molto piccolo|TAB (sinistra, destra) l'altro pannello; INVIO in una cartella, o la TUI di un|archivio; BACKSPACE su; \\ le unita' (*nix: / /home e la home); SPAZIO marca|F1 aggiunge a un archivio (quello sotto il cursore dell'altro pannello, o uno|nuovo; un menu: default, -m1...-m5, con password) F2 rinomina F3 elenco F4 info|F5 copia F6 sposta (su un altro disco:|verificato) F7 mkdir F8 cancella F9 ordina|F10 ESC esce. Alt+1...Alt+0 sono F1-F10. ? per tutti i tasti|Un nome scritto (lettere, cifre): il cursore sul primo che comincia cosi'|* marca con un carattere jolly (*.cpp, source*), || inverte le marcature|Ctrl+S dimensione (s), Ctrl+H dimensione di ogni cartella|(s -home), Ctrl+V confronta i due pannelli (c), Ctrl+R|robocopy verso l'altro pannello (r: prova a secco, o -kill)|Ctrl+R: dalla cartella sotto il cursore, sempre in una cartella col suo nome|(c:\\data\\715 con z:\\ nell'altro pannello va in z:\\715; h:\\ in z:\\h_)|F1 F5 F6 F8 lavorano su quelli marcati, o su quello sotto il cursore"),
+	HRU(899, 0x549ECD8B, "Две панели на файловой системе, совсем маленький Midnight Commander|TAB (левая, правая) другая панель; ENTER в папку или TUI|архива; BACKSPACE вверх; \\ диски (*nix: / /home и домашняя); ПРОБЕЛ отмечает|F1 добавить в архив (тот, что под курсором другой панели, или новый;|меню: по умолчанию, -m1...-m5, с паролем) F2 переименовать F3 список F4 сведения|F5 копировать F6 перенести (на другой диск: с|проверкой) F7 mkdir F8 удалить F9 сортировка|F10 ESC выход. Alt+1...Alt+0 = F1-F10. ? - все клавиши|Набранное имя (буквы, цифры): курсор на первый элемент, начинающийся так|* отмечает по шаблону (*.cpp, source*), || инвертирует отметки|Ctrl+S размер (s), Ctrl+H размер каждой папки (s -home), Ctrl+V сравнить две|панели (c), Ctrl+R robocopy в другую панель (r: пробный прогон, или -kill)|Ctrl+R: из папки под курсором, всегда в папку с её именем|(c:\\data\\715 при z:\\ в другой панели идёт в z:\\715; h:\\ в z:\\h_)|F1 F5 F6 F8 работают с отмеченными или с тем, что под курсором"),
+	HESEMPI("mc", 'b'),
+	HE(900, "mc", "The two panels, on the current folder", "mc"),
+	HIT(900, 0xCE2CCB32, "I due pannelli, sulla cartella corrente"),
+	HRU(900, 0xCE2CCB32, "Две панели в текущей папке"),
+	HE(901, "mc", "Left and right panel", "mc c:\\data z:\\backup"),
+	HIT(901, 0x09EF64DD, "Pannello sinistro e destro"),
+	HRU(901, 0x09EF64DD, "Левая и правая панель"),
+	HBREVE(902, "mc", "Two panels on the file system (copy, move, delete, add to an archive)"),
+	HIT(902, 0x505BC852, "Due pannelli sul file system (copia, sposta, cancella, archivia)"),
+	HRU(902, 0x505BC852, "Две панели (копирование, перенос, удаление, добавление в архив)"),
 #if defined(_WIN32) && !defined(ANCIENT)
-/// 65.9n
-string help_ac(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD ac", "The disk of Windows, for a restore that boots (*** REQUIRES ADMIN RIGHTS ***)");
-		scrivi_riga(" ", "ac archive is a archive c: -image (the used clusters of C:, with a shadow copy)");
-		scrivi_riga(" ", "plus everything else of that disk that is not a data partition, raw: the");
-		scrivi_riga(" ", "partitions without a letter (boot, recovery...), the partition table, the");
-		scrivi_riga(" ", "space between the partitions. And disk_C.txt: the map of the disk, with the");
-		scrivi_riga(" ", "hashes of every piece. MBR and GPT disks. One version for each run");
-		scrivi_riga(" ", "The partitions with a letter (D:, E:...) are NOT taken: the table says so");
-		scrivi_riga(" ", "Refused: boot files on another disk or on a data partition, dynamic disks");
-		scrivi_riga("-all", "The partitions with a letter too: NTFS, FAT, exFAT by their used clusters");
-		scrivi_riga(" ", "(image_X.fhd), anything else raw, the whole of it (image_X.raw). Not the one");
-		scrivi_riga(" ", "the archive is on. Each one can be restored alone, with the image command");
-		scrivi_riga(" ", "(a c: -image -all is another thing: the whole disk, raw, in one file)");
-		scrivi_riga("-not X:", "With -all: the partition X: is left out");
-		scrivi_riga("-gui", "Choose on a screen what to take: [+] Windows and what it boots with (always),");
-		scrivi_riga(" ", "[X] or [ ] every other partition. Arrows and space, F8 starts, ESC quits");
-		scrivi_riga("-vss", "With -all: a shadow copy for every NTFS (by itself for C: only: the others");
-		scrivi_riga(" ", "are locked, and read as they are if something keeps them in use)");
-		scrivi_riga("\"\"", "As the archive: a dry run (everything is read, nothing is written)");
-		scrivi_riga("-novss", "No shadow copy of C: (as in a -image)");
-		scrivi_riga("-key X", "Encrypt the archive (a BitLocker volume is saved in clear)");
-		scrivi_riga("***", "The restore: the xc command (the whole disk), image (one partition alone)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("The disk of Windows", "ac z:\\pc.zpaq");
-		scrivi_esempio("Dry run: what would be taken", "ac \"\"");
-		scrivi_esempio("Every partition of that disk", "ac z:\\pc.zpaq -all");
-		scrivi_esempio("Every partition but M:", "ac z:\\pc.zpaq -all -not m:");
-		scrivi_esempio("Choose the partitions on a screen", "ac z:\\pc.zpaq -gui");
-		scrivi_esempio("Encrypted archive", "ac z:\\pc.zpaq -key mypassword");
-		scrivi_esempio("Read the map of the disk", "x z:\\pc.zpaq disk_C.txt -to z:\\out\\");
-		scrivi_esempio("C: alone, to a virtual disk", "image z:\\pc.zpaq c: -to z:\\c.vhd");
-		scrivi_esempio("The restore of the disk: its plan", "xc z:\\pc.zpaq");
-	}
-	return ("The disk of Windows, for a restore that boots (Windows only)");
-}
-string help_xc(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD xc", "Restore the disk of Windows saved by ac (*** REQUIRES ADMIN RIGHTS ***)");
-		scrivi_riga(" ", "xc archive alone is the plan: which backup it is, its pieces, where each one");
-		scrivi_riga(" ", "goes. Nothing is written without a -to");
-		scrivi_riga(" ", "Every piece goes back at the offset it had, with the partition table of the");
-		scrivi_riga(" ", "backup: same disk signature (or GUIDs), nothing to repair to make it boot");
-		scrivi_riga(" ", "The pieces must be the ones the backup wrote (size, CRC-32, hash): checked");
-		scrivi_riga(" ", "in the index before anything is written, and again while they are written");
-		scrivi_riga("-to N: -force", "The physical disk N (the drives command lists them). -force is the");
-		scrivi_riga(" ", "consent: the disk is OVERWRITTEN, after a captcha that names it (killdrive2)");
-		scrivi_riga(" ", "At least as big as the one of the backup, same sector size; never the disk");
-		scrivi_riga(" ", "of this Windows, or the one of the archive");
-		scrivi_riga(" ", "On the disk of the backup itself (same signature, same partitions) what was");
-		scrivi_riga(" ", "not in the backup (the data partitions) is not touched. On another disk the");
-		scrivi_riga(" ", "partition table is written last, and those partitions are to be formatted");
-		scrivi_riga("-to x.vmdk", "A virtual disk for VMware, VirtualBox, QEMU/Proxmox (-raw: a flat one)");
-		scrivi_riga("-to x.vhdx", "A virtual disk that Windows mounts (and Hyper-V starts)");
-		scrivi_riga("-to x.raw", "The disk byte by byte, in a (sparse) file. Any other extension too");
-		scrivi_riga("c:", "After the archive: which backup, when the archive has more than one disk");
-		scrivi_riga("-until N", "The backup of version N (default: the last one)");
-		scrivi_riga("-gui", "Choose on a screen what to restore, and the disk: [+] Windows and what it");
-		scrivi_riga(" ", "boots with (always), [X] or [ ] the other partitions of the backup; then the");
-		scrivi_riga(" ", "disks of this PC, one only (red: it cannot be). F8 starts, after the name");
-		scrivi_riga(" ", "of the disk is typed (killdrive2: no -force); i: in a file; ESC quits");
-		scrivi_riga("-verify", "Read back what was written (a disk, a raw file)");
-		scrivi_riga("-force", "The consent to overwrite: the disk of -to N:, a destination file already there");
-		scrivi_riga("-nocaptcha", "Do not ask the captcha before a disk is overwritten (for scripts)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("The plan: what is in the backup", "xc z:\\pc.zpaq");
-		scrivi_esempio("Choose on a screen what, and where", "xc z:\\pc.zpaq -gui");
-		scrivi_esempio("On the physical disk 2", "xc z:\\pc.zpaq -to 2: -force");
-		scrivi_esempio("...and read it back", "xc z:\\pc.zpaq -to 2: -force -verify");
-		scrivi_esempio("A disk for a virtual machine", "xc z:\\pc.zpaq -to d:\\pc.vmdk");
-		scrivi_esempio("An older backup, for Hyper-V", "xc z:\\pc.zpaq -to d:\\pc.vhdx -until 3");
-		scrivi_esempio("The disks of this PC", "drives");
-	}
-	return ("Restore the disk of Windows saved by ac (Windows only)");
-}
+	/// 65.9n
+	/// ac
+	HU(903, "ac", "CMD ac", "The disk of Windows, for a restore that boots (*** REQUIRES ADMIN RIGHTS ***)|ac archive is a archive c: -image (the used clusters of C:, with a shadow copy)|plus everything else of that disk that is not a data partition, raw: the|partitions without a letter (boot, recovery...), the partition table, the|space between the partitions. And disk_C.txt: the map of the disk, with the|hashes of every piece. MBR and GPT disks. One version for each run|The partitions with a letter (D:, E:...) are NOT taken: the table says so|Refused: boot files on another disk or on a data partition, dynamic disks"),
+	HIT(903, 0x2DFE1D96, "Il disco di Windows, per un ripristino che si avvia (*** SERVONO I|DIRITTI DI AMMINISTRATORE ***) ac archivio e' a archivio c: -image|(i cluster usati di C:, con una copia shadow) piu' tutto il resto di|quel disco che non e' una partizione di dati, raw: le partizioni|senza lettera (boot, ripristino...), la tabella delle partizioni, lo|spazio fra le partizioni. E disk_C.txt: la mappa del disco, con gli|hash di ogni pezzo. Dischi MBR e GPT. Una versione per ogni giro|Le partizioni con una lettera (D:, E:...) NON vengono prese: la tabella lo dice|Rifiutati: file di boot su un altro disco o|su una partizione di dati, dischi dinamici"),
+	HRU(903, 0x2DFE1D96, "Диск Windows, для восстановления с загрузкой (*** НУЖНЫ ПРАВА|АДМИНИСТРАТОРА ***) ac архив - это a архив c: -image (используемые кластеры|C:, с теневой копией) плюс всё остальное на этом диске, что не является|разделом данных, в raw: разделы без буквы (загрузочный, восстановления...),|таблица разделов, промежутки между разделами. И disk_C.txt: карта диска с|хешами каждого куска. Диски MBR и GPT. Одна версия на каждый запуск|Разделы с буквой (D:, E:...) НЕ берутся: это сказано в таблице|Отвергается: загрузочные файлы на другом диске|или на разделе данных, динамические диски"),
+	HU(904, "ac", "-all", "The partitions with a letter too: NTFS, FAT, exFAT by their used clusters|(image_X.fhd), anything else raw, the whole of it (image_X.raw). Not the one|the archive is on. Each one can be restored alone, with the image command|(a c: -image -all is another thing: the whole disk, raw, in one file)"),
+	HIT(904, 0x2408DCBC, "Anche le partizioni con una lettera: NTFS, FAT, exFAT coi loro cluster usati|(image_X.fhd), tutto il resto raw, per intero (image_X.raw). Non quella su|cui sta l'archivio. Ognuna si puo' ripristinare da sola, col comando image|(un a c: -image -all e' un'altra cosa: tutto il disco, raw, in un file)"),
+	HRU(904, 0x2408DCBC, "Также разделы с буквой: NTFS, FAT, exFAT по используемым кластерам|(image_X.fhd), всё прочее целиком в raw (image_X.raw). Кроме раздела,|на котором лежит архив. Каждый можно восстановить отдельно командой image|(a c: -image -all - другое: весь диск в raw одним файлом)"),
+	HU(905, "ac", "-not X:", "With -all: the partition X: is left out"),
+	HIT(905, 0x86B4653F, "Con -all: la partizione X: viene lasciata fuori"),
+	HRU(905, 0x86B4653F, "С -all: раздел X: не берётся"),
+	HU(906, "ac", "-gui", "Choose on a screen what to take: [+] Windows and what it boots with (always),|[X] or [ ] every other partition. Arrows and space, F8 starts, ESC quits"),
+	HIT(906, 0xADD58380, "Sceglie su una schermata cosa prendere: [+] Windows e|cio' con cui si avvia (sempre), [X] o [ ] ogni altra|partizione. Frecce e spazio, F8 parte, ESC esce"),
+	HRU(906, 0xADD58380, "Выбрать на экране, что брать: [+] Windows и то, с|чего он загружается (всегда), [X] или [ ] каждый|другой раздел. Стрелки и пробел, F8 запуск, ESC выход"),
+	HU(907, "ac", "-vss", "With -all: a shadow copy for every NTFS (by itself for C: only: the others|are locked, and read as they are if something keeps them in use)"),
+	HIT(907, 0xF2E4A817, "Con -all: una copia shadow per ogni NTFS (da solo solo per C:: le altre|vengono bloccate, e lette come sono se qualcosa le tiene in uso)"),
+	HRU(907, 0xF2E4A817, "С -all: теневая копия для каждого NTFS (сама по себе только для C::|остальные блокируются и читаются как есть, если их что-то использует)"),
+	HU(908, "ac", "\"\"", "As the archive: a dry run (everything is read, nothing is written)"),
+	HIT(908, 0x0B04C0D7, "Come l'archivio: una prova a secco (si|  legge tutto, non si scrive nulla)"),
+	HRU(908, 0x0B04C0D7, "Как архив: пробный прогон (всё читается, ничего не пишется)"),
+	HU(909, "ac", "-novss", "No shadow copy of C: (as in a -image)"),
+	HIT(909, 0x26425188, "Niente copia shadow di C: (come in un -image)"),
+	HRU(909, 0x26425188, "Без теневой копии C: (как в -image)"),
+	HU(910, "ac", "-key X", "Encrypt the archive (a BitLocker volume is saved in clear)"),
+	HIT(910, 0xD8D8F711, "Cifra l'archivio (un volume|  BitLocker viene salvato in chiaro)"),
+	HRU(910, 0xD8D8F711, "Зашифровать архив (том BitLocker|  сохраняется в открытом виде)"),
+	HU(911, "ac", "X:", "Windows PE only (booted from a stick): the Windows to save, if there is|more than one. Else it is found by itself (a volume with \\Windows\\System32|\\config\\SYSTEM, not the X: of the PE): not running, no shadow copy needed|If that volume has no letter (a GPT disk can come so) it gets the first free one|Elsewhere a drive given is ignored: ac saves the disk of the Windows running"), /// 65.14j, 65.14k
+	HIT(911, 0x5B311D03, "Solo Windows PE (avviato da una chiavetta): il Windows da salvare, se ce n'e'|piu' di uno. Altrimenti lo trova da solo (un volume con \\Windows\\System32|\\config\\SYSTEM, non la X: del PE): spento, non serve la copia shadow|Se quel volume non ha lettera (un disco GPT|puo' arrivare cosi') prende la prima libera|Altrove un'unita' data viene ignorata: ac|salva il disco del Windows in esecuzione"),
+	HRU(911, 0x5B311D03, "Только Windows PE (загрузка с флешки): Windows, который сохранять, если их|несколько. Иначе находится сам (том с \\Windows\\System32|\\config\\SYSTEM, не X: от PE): не запущен, теневая копия не нужна|Если у тома нет буквы (на GPT-диске так бывает), он получает первую свободную|В других случаях заданный диск игнорируется:|ac сохраняет диск работающего Windows"),
+	HU(912, "ac", "***", "The restore: the xc command (the whole disk), image (one partition alone)"),
+	HIT(912, 0x040FA260, "Il ripristino: il comando xc (tutto il|  disco), image (una partizione da sola)"),
+	HRU(912, 0x040FA260, "Восстановление: команда xc (весь диск), image (отдельный раздел)"),
+	HESEMPI("ac", 'b'),
+	HE(913, "ac", "The disk of Windows", "ac z:\\pc.zpaq"),
+	HIT(913, 0x16AD4EDF, "Il disco di Windows"),
+	HRU(913, 0x16AD4EDF, "Диск Windows"),
+	HE(914, "ac", "Dry run: what would be taken", "ac \"\""),
+	HIT(914, 0x185B5FD0, "Prova a secco: cosa verrebbe preso"),
+	HRU(914, 0x185B5FD0, "Пробный прогон: что было бы взято"),
+	HE(915, "ac", "Every partition of that disk", "ac z:\\pc.zpaq -all"),
+	HIT(915, 0xC787C9A1, "Ogni partizione di quel disco"),
+	HRU(915, 0xC787C9A1, "Все разделы этого диска"),
+	HE(916, "ac", "Every partition but M:", "ac z:\\pc.zpaq -all -not m:"),
+	HIT(916, 0xE3970B04, "Ogni partizione tranne M:"),
+	HRU(916, 0xE3970B04, "Все разделы, кроме M:"),
+	HE(917, "ac", "From Windows PE (Windows not running)", "ac e:\\pc.zpaq"), /// 65.14j
+	HIT(917, 0xB00F5009, "Da Windows PE (Windows spento)"),
+	HRU(917, 0xB00F5009, "Из Windows PE (Windows не запущен)"),
+	HE(918, "ac", "From Windows PE, two Windows: D:", "ac e:\\pc.zpaq d:"),
+	HIT(918, 0x98E7357A, "Da Windows PE, due Windows: D:"),
+	HRU(918, 0x98E7357A, "Из Windows PE, два Windows: D:"),
+	HE(919, "ac", "Choose the partitions on a screen", "ac z:\\pc.zpaq -gui"),
+	HIT(919, 0xD8DEED60, "Sceglie le partizioni su una schermata"),
+	HRU(919, 0xD8DEED60, "Выбрать разделы на экране"),
+	HE(920, "ac", "Encrypted archive", "ac z:\\pc.zpaq -key mypassword"),
+	HIT(920, 0xF81E6B21, "Archivio cifrato"),
+	HRU(920, 0xF81E6B21, "Зашифрованный архив"),
+	HE(921, "ac", "Read the map of the disk", "x z:\\pc.zpaq disk_C.txt -to z:\\out\\"),
+	HIT(921, 0xF46AD2CF, "Legge la mappa del disco"),
+	HRU(921, 0xF46AD2CF, "Прочитать карту диска"),
+	HE(922, "ac", "C: alone, to a virtual disk", "image z:\\pc.zpaq c: -to z:\\c.vhd"),
+	HIT(922, 0xBB3591DF, "C: da sola, in un disco virtuale"),
+	HRU(922, 0xBB3591DF, "Только C:, в виртуальный диск"),
+	HE(923, "ac", "The restore of the disk: its plan", "xc z:\\pc.zpaq"),
+	HIT(923, 0x5081F3B6, "Il ripristino del disco: il suo piano"),
+	HRU(923, 0x5081F3B6, "Восстановление диска: его план"),
+	HBREVE(924, "ac", "The disk of Windows, for a restore that boots (Windows only)"),
+	HIT(924, 0x03345C97, "Il disco di Windows, per un ripristino avviabile (solo Windows)"),
+	HRU(924, 0x03345C97, "Диск Windows, для восстановления с загрузкой (только Windows)"),
+	/// xc
+	HU(925, "xc", "CMD xc", "Restore the disk of Windows saved by ac (*** REQUIRES ADMIN RIGHTS ***)|xc archive alone is the plan: which backup it is, its pieces, where each one|goes. Nothing is written without a -to|Every piece goes back at the offset it had, with the partition table of the|backup: same disk signature (or GUIDs), nothing to repair to make it boot|The pieces must be the ones the backup wrote (size, CRC-32, hash): checked|in the index before anything is written, and again while they are written"),
+	HIT(925, 0xC3AE68CE, "Ripristina il disco di Windows salvato da ac (*** SERVONO I DIRITTI|DI AMMINISTRATORE ***) xc archivio da solo e' il piano: che backup|e', i suoi pezzi, dove va ognuno. Senza un -to non si scrive nulla|Ogni pezzo torna all'offset che aveva, con la tabella delle partizioni del|backup: stessa firma del disco (o GUID), niente da riparare perche' si avvii|I pezzi devono essere quelli scritti dal backup|(dimensione, CRC-32, hash): controllati nell'indice prima|di scrivere qualsiasi cosa, e di nuovo mentre si scrivono"),
+	HRU(925, 0xC3AE68CE, "Восстановить диск Windows, сохранённый ac (*** НУЖНЫ ПРАВА|АДМИНИСТРАТОРА ***) xc архив без всего - это план: что за|backup, его куски, куда идёт каждый. Без -to ничего не пишется|Каждый кусок возвращается на своё смещение, с таблицей разделов из|backup: та же сигнатура диска (или GUID), для загрузки ничего чинить не надо|Куски должны быть теми, что записал backup (размер, CRC-32, хеш):|проверяются в индексе до любой записи и ещё раз во время записи"),
+	HU(926, "xc", "-to N: -force", "The physical disk N (the drives command lists them). -force is the|consent: the disk is OVERWRITTEN, after a captcha that names it (killdrive2)|At least as big as the one of the backup, same sector size; never the disk|of this Windows, or the one of the archive|On the disk of the backup itself (same signature, same partitions) what was|not in the backup (the data partitions) is not touched. On another disk the|partition table is written last, and those partitions are to be formatted"),
+	HIT(926, 0x50C65956, "Il disco fisico N (il comando drives li elenca). -force e' il consenso:|il disco viene SOVRASCRITTO, dopo un captcha che lo nomina (killdrive2)|Grande almeno quanto quello del backup, stessa dimensione del|settore; mai il disco di questo Windows, o quello dell'archivio|Sul disco del backup stesso (stessa firma, stesse partizioni)|cio' che non era nel backup (le partizioni di dati) non viene|toccato. Su un altro disco la tabella delle partizioni si|scrive per ultima, e quelle partizioni vanno formattate"),
+	HRU(926, 0x50C65956, "Физический диск N (их перечисляет команда drives). -force - это|согласие: диск ПЕРЕЗАПИСЫВАЕТСЯ после капчи с его именем (killdrive2)|Не меньше диска из backup, тот же размер сектора; никогда диск|этого Windows или диск с архивом|На том же диске, что в backup (та же сигнатура, те же разделы), то, чего|не было в backup (разделы данных), не трогается. На другом диске|таблица разделов пишется последней, а те разделы нужно отформатировать"),
+	HU(927, "xc", "-to x.vmdk", "A virtual disk for VMware, VirtualBox, QEMU/Proxmox (-raw: a flat one)"),
+	HIT(927, 0x47A65169, "Un disco virtuale per VMware, VirtualBox,|  QEMU/Proxmox (-raw: uno flat)"),
+	HRU(927, 0x47A65169, "Виртуальный диск для VMware, VirtualBox, QEMU/Proxmox (-raw: плоский)"),
+	HU(928, "xc", "-to x.vhdx", "A virtual disk that Windows mounts (and Hyper-V starts)"),
+	HIT(928, 0xA8102EA6, "Un disco virtuale che Windows monta (e Hyper-V avvia)"),
+	HRU(928, 0xA8102EA6, "Виртуальный диск, который монтирует|  Windows (и запускает Hyper-V)"),
+	HU(929, "xc", "-to x.raw", "The disk byte by byte, in a (sparse) file. Any other extension too"),
+	HIT(929, 0xB58ED2AC, "Il disco byte per byte, in un file (sparse).|  Anche qualsiasi altra estensione"),
+	HRU(929, 0xB58ED2AC, "Диск побайтно в (разреженный) файл. Любое другое расширение тоже"),
+	HU(930, "xc", "c:", "After the archive: which backup, when the archive has more than one disk"),
+	HIT(930, 0xB70C9DEB, "Dopo l'archivio: quale backup, quando l'archivio ha piu' di un disco"),
+	HRU(930, 0xB70C9DEB, "После архива: какой backup, если в архиве больше одного диска"),
+	HU(931, "xc", "-until N", "The backup of version N (default: the last one)"),
+	HIT(931, 0xF96860BC, "Il backup della versione N (default: l'ultima)"),
+	HRU(931, 0xF96860BC, "Backup версии N (по умолчанию: последний)"),
+	HU(932, "xc", "-gui", "Choose on a screen what to restore, and the disk: [+] Windows and what it|boots with (always), [X] or [ ] the other partitions of the backup; then the|disks of this PC, one only (red: it cannot be). F8 starts, after the name|of the disk is typed (killdrive2: no -force); i: in a file; ESC quits"),
+	HIT(932, 0x66AD11A4, "Sceglie su una schermata cosa ripristinare, e il disco: [+]|Windows e cio' con cui si avvia (sempre), [X] o [ ] le altre|partizioni del backup; poi i dischi di questo PC, uno solo|(rosso: non si puo'). F8 parte, dopo aver scritto il nome del|disco (killdrive2: niente -force); i: in un file; ESC esce"),
+	HRU(932, 0x66AD11A4, "Выбрать на экране, что восстанавливать, и диск: [+] Windows и то, с чего он|загружается (всегда), [X] или [ ] другие разделы backup; затем|диски этого ПК, только один (красный: нельзя). F8 запуск после ввода имени|диска (killdrive2: без -force); i: в файл; ESC выход"),
+	HU(933, "xc", "-verify", "Read back what was written (a disk, a raw file)"),
+	HIT(933, 0x54A44A64, "Rilegge cio' che e' stato scritto (un disco, un file raw)"),
+	HRU(933, 0x54A44A64, "Перечитать записанное (диск, raw-файл)"),
+	HU(934, "xc", "-force", "The consent to overwrite: the disk of -to N:, a destination file already there"),
+	HIT(934, 0xA7528060, "Il consenso a sovrascrivere: il disco di -to|  N:, un file di destinazione gia' presente"),
+	HRU(934, 0xA7528060, "Согласие на перезапись: диск из -to N:, уже существующий файл назначения"),
+	HU(935, "xc", "-nocaptcha", "Do not ask the captcha before a disk is overwritten (for scripts)"),
+	HIT(935, 0x98753A1B, "Non chiede il captcha prima di|  sovrascrivere un disco (per gli script)"),
+	HRU(935, 0x98753A1B, "Не спрашивать капчу перед перезаписью диска (для скриптов)"),
+	HESEMPI("xc", 'b'),
+	HE(936, "xc", "The plan: what is in the backup", "xc z:\\pc.zpaq"),
+	HIT(936, 0xE49DDF6F, "Il piano: cosa c'e' nel backup"),
+	HRU(936, 0xE49DDF6F, "План: что есть в backup"),
+	HE(937, "xc", "Choose on a screen what, and where", "xc z:\\pc.zpaq -gui"),
+	HIT(937, 0xC28B9356, "Sceglie su una schermata cosa, e dove"),
+	HRU(937, 0xC28B9356, "Выбрать на экране, что и куда"),
+	HE(938, "xc", "On the physical disk 2", "xc z:\\pc.zpaq -to 2: -force"),
+	HIT(938, 0x9C2AE073, "Sul disco fisico 2"),
+	HRU(938, 0x9C2AE073, "На физический диск 2"),
+	HE(939, "xc", "...and read it back", "xc z:\\pc.zpaq -to 2: -force -verify"),
+	HIT(939, 0x95C70CC2, "...e lo rilegge"),
+	HRU(939, 0x95C70CC2, "...и перечитать его"),
+	HE(940, "xc", "A disk for a virtual machine", "xc z:\\pc.zpaq -to d:\\pc.vmdk"),
+	HIT(940, 0x7212F99B, "Un disco per una macchina virtuale"),
+	HRU(940, 0x7212F99B, "Диск для виртуальной машины"),
+	HE(941, "xc", "An older backup, for Hyper-V", "xc z:\\pc.zpaq -to d:\\pc.vhdx -until 3"),
+	HIT(941, 0x3CCE710C, "Un backup piu' vecchio, per Hyper-V"),
+	HRU(941, 0x3CCE710C, "Более старый backup, для Hyper-V"),
+	HE(942, "xc", "The disks of this PC", "drives"),
+	HIT(942, 0x4DCE1D6A, "I dischi di questo PC"),
+	HRU(942, 0x4DCE1D6A, "Диски этого ПК"),
+	HBREVE(943, "xc", "Restore the disk of Windows saved by ac (Windows only)"),
+	HIT(943, 0x77C3640B, "Ripristina il disco di Windows salvato da ac (solo Windows)"),
+	HRU(943, 0x77C3640B, "Восстановить диск Windows, сохранённый ac (только Windows)"),
 #endif
 #ifdef _WIN32
-string help_q(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD q", "Windows C: drive archiving (*** REQUIRES ADMIN RIGHTS ***)");
-		scrivi_riga(" ", "Archives useful data from C: drive (no Windows system files and swapfile)");
-		scrivi_riga(" ", "NOTE: This is NOT a full bare-metal backup!");
-		scrivi_riga("-forcewindows", "INCLUDE Windows system folder (normally excluded)");
-		scrivi_riga("-frugal", "Exclude Windows, Program Files, and Temp folders");
-		scrivi_riga("-all", "Archive everything (except swapfile)");
-		scrivi_riga("-to c:\\path", "Custom snapshot folder c:\\path (default c:\\franzsnap)");
-		scrivi_riga(" ", "Use %pcname% placeholder for computer name");
-		scrivi_riga("***", "Snapshot folder MUST NOT exist and on be on C:");
-		scrivi_riga("***", "Source is always C:/* (cannot be changed)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Default (no Win,no Recycle Bin)", "q z:\\1.zpaq");
-		scrivi_esempio("Everything", "q z:\\1.zpaq -all");
-		scrivi_esempio("Using alias 'cc'", "cc z:\\1.zpaq");
-		scrivi_esempio("Everything excluding C:\\DROPBOX", "q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
-		scrivi_esempio("NOT C:\\WINDOWS, NOT %programs%", "q z:\\1.zpaq -frugal");
-		scrivi_esempio("Only C/C++ files and header", "q z:\\1.zpaq -only *.c* -only *.h*");
-		scrivi_esempio("For multi-PC 'backup' on one zpaq", "q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose");
-	}
-	return ("Archive C: drive using VSS (Windows only)");
-}
-
-string help_ads(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD ads", "Manipulate NTFS Alternate Data Stream");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Show    ADS", "ads z:\\1.zpaq");
-		scrivi_esempio("Remove  ADS (all of them)", "ads z:\\*.zpaq -kill");
-		scrivi_esempio("Remove old ADS filelist", "ads z:\\*.zpaq -only zpaqlist -kill");
-		scrivi_esempio("Rebuild ADS CRC-32", "ads z:\\1.zpaq -force");
-	}
-	return ("Manipulate ADS (Alternate Data Stream)");
-}
-
-string help_g(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD g", "Run a q command (Windows archiving of C:)");
-		scrivi_riga(" ", "If the user is in the administrator group, BUT");
-		scrivi_riga(" ", "the current shell does not have admin rights, this will work");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("NOT C:\\WINDOWS, NOT RECYCLE BIN", "g z:\\1.zpaq");
-	}
-	return ("Archive C: from shell without admin rights");
-}
+	/// q
+	HU(944, "q", "CMD q", "Windows C: drive archiving (*** REQUIRES ADMIN RIGHTS ***)|Archives useful data from C: drive (no Windows system files and swapfile)|NOTE: This is NOT a full bare-metal backup!"),
+	HIT(944, 0x4BA397F2, "Archiviazione dell'unita' C: di Windows (***|SERVONO I DIRITTI DI AMMINISTRATORE ***)|Archivia i dati utili dell'unita' C: (niente|file di sistema di Windows e file di swap)|NOTA: NON e' un backup bare-metal completo!"),
+	HRU(944, 0x4BA397F2, "Архивация диска C: Windows (*** НУЖНЫ ПРАВА АДМИНИСТРАТОРА ***)|Архивирует полезные данные диска C: (без|системных файлов Windows и файла подкачки)|ПРИМЕЧАНИЕ: это НЕ полный bare-metal backup!"),
+	HU(945, "q", "-forcewindows", "INCLUDE Windows system folder (normally excluded)"),
+	HIT(945, 0x7E8E4AD8, "INCLUDE la cartella di sistema|  di Windows (di solito esclusa)"),
+	HRU(945, 0x7E8E4AD8, "ВКЛЮЧИТЬ системную папку Windows (обычно исключается)"),
+	HU(946, "q", "-frugal", "Exclude Windows, Program Files, and Temp folders"),
+	HIT(946, 0xB1AC4D47, "Esclude le cartelle Windows, Program Files e Temp"),
+	HRU(946, 0xB1AC4D47, "Исключить папки Windows, Program Files и Temp"),
+	HU(947, "q", "-all", "Archive everything (except swapfile)"),
+	HIT(947, 0x450A8BF3, "Archivia tutto (tranne il file di swap)"),
+	HRU(947, 0x450A8BF3, "Архивировать всё (кроме файла подкачки)"),
+	HU(948, "q", "-to c:\\path", "Custom snapshot folder c:\\path (default c:\\franzsnap)|Use %pcname% placeholder for computer name"),
+	HIT(948, 0xC77B1A85, "Cartella degli snapshot c:\\percorso (default c:\\franzsnap)|Usare il segnaposto %pcname% per il nome del computer"),
+	HRU(948, 0xC77B1A85, "Своя папка снимков c:\\path (по умолчанию c:\\franzsnap)|Используйте заполнитель %pcname% для имени компьютера"),
+	HU(949, "q", "***", "Snapshot folder MUST NOT exist and on be on C:"),
+	HIT(949, 0x5B015757, "La cartella degli snapshot NON|  deve esistere e deve stare su C:"),
+	HRU(949, 0x5B015757, "Папка снимков НЕ должна существовать и должна быть на C:"),
+	HU(950, "q", "***", "Source is always C:/* (cannot be changed)"),
+	HIT(950, 0x328C7DAC, "La sorgente e' sempre C:/* (non si puo' cambiare)"),
+	HRU(950, 0x328C7DAC, "Источник всегда C:/* (изменить нельзя)"),
+	HESEMPI("q", 'b'),
+	HE(951, "q", "Default (no Win,no Recycle Bin)", "q z:\\1.zpaq"),
+	HIT(951, 0x2F6820ED, "Default (niente Win, niente Cestino)"),
+	HRU(951, 0x2F6820ED, "По умолчанию (без Win, без Корзины)"),
+	HE(952, "q", "Everything", "q z:\\1.zpaq -all"),
+	HIT(952, 0xF0408340, "Tutto"),
+	HRU(952, 0xF0408340, "Всё"),
+	HE(953, "q", "Using alias 'cc'", "cc z:\\1.zpaq"),
+	HIT(953, 0x9F0A6C59, "Con l'alias 'cc'"),
+	HRU(953, 0x9F0A6C59, "Через псевдоним 'cc'"),
+	HE(954, "q", "Everything excluding C:\\DROPBOX", "q z:\\1.zpaq -all -not c:/franzsnap/dropbox"),
+	HIT(954, 0xB9429F40, "Tutto tranne C:\\DROPBOX"),
+	HRU(954, 0xB9429F40, "Всё, кроме C:\\DROPBOX"),
+	HE(955, "q", "NOT C:\\WINDOWS, NOT %programs%", "q z:\\1.zpaq -frugal"),
+	HIT(955, 0x60DD7F18, "NON C:\\WINDOWS, NON %programs%"),
+	HRU(955, 0x60DD7F18, "НЕ C:\\WINDOWS, НЕ %programs%"),
+	HE(956, "q", "Only C/C++ files and header", "q z:\\1.zpaq -only *.c* -only *.h*"),
+	HIT(956, 0x6103EDB9, "Solo file C/C++ e header"),
+	HRU(956, 0x6103EDB9, "Только файлы C/C++ и заголовки"),
+	HE(957, "q", "For multi-PC 'backup' on one zpaq", "q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose"),
+	HIT(957, 0x466B1A64, "Per il 'backup' di piu' PC su un solo zpaq"),
+	HRU(957, 0x466B1A64, "Для 'backup' нескольких ПК в один zpaq"),
+	HBREVE(958, "q", "Archive C: drive using VSS (Windows only)"),
+	HIT(958, 0x0D8456C6, "Archivia l'unita' C: con VSS (solo Windows)"),
+	HRU(958, 0x0D8456C6, "Архивировать диск C: через VSS (только Windows)"),
+	/// ads
+	HU(959, "ads", "CMD ads", "Manipulate NTFS Alternate Data Stream"),
+	HIT(959, 0x83EBB8B4, "Manipola gli Alternate Data Stream di NTFS"),
+	HRU(959, 0x83EBB8B4, "Работа с Alternate Data Stream NTFS"),
+	HESEMPI("ads", 'b'),
+	HE(960, "ads", "Show    ADS", "ads z:\\1.zpaq"),
+	HIT(960, 0xBB955D7E, "Mostra  gli ADS"),
+	HRU(960, 0xBB955D7E, "Показать ADS"),
+	HE(961, "ads", "Remove  ADS (all of them)", "ads z:\\*.zpaq -kill"),
+	HIT(961, 0x284E1290, "Toglie  gli ADS (tutti)"),
+	HRU(961, 0x284E1290, "Удалить ADS (все)"),
+	HE(962, "ads", "Remove old ADS filelist", "ads z:\\*.zpaq -only zpaqlist -kill"),
+	HIT(962, 0xFDFC3050, "Toglie il vecchio elenco dei file negli ADS"),
+	HRU(962, 0xFDFC3050, "Удалить старый список файлов в ADS"),
+	HE(963, "ads", "Rebuild ADS CRC-32", "ads z:\\1.zpaq -force"),
+	HIT(963, 0xECB04B26, "Ricostruisce i CRC-32 negli ADS"),
+	HRU(963, 0xECB04B26, "Перестроить CRC-32 в ADS"),
+	HBREVE(964, "ads", "Manipulate ADS (Alternate Data Stream)"),
+	HIT(964, 0x26172C32, "Manipola gli ADS (Alternate Data Stream)"),
+	HRU(964, 0x26172C32, "Работа с ADS (Alternate Data Stream)"),
+	/// g
+	HU(965, "g", "CMD g", "Run a q command (Windows archiving of C:)|If the user is in the administrator group, BUT|the current shell does not have admin rights, this will work"),
+	HIT(965, 0xD1FAD7DF, "Esegue un comando q (archiviazione di C: su Windows)|Se l'utente e' nel gruppo degli amministratori, MA la shell|attuale non ha i diritti di amministratore, questo funziona"),
+	HRU(965, 0xD1FAD7DF, "Выполнить команду q (архивация C: в Windows)|Если пользователь в группе администраторов, НО|у текущей оболочки нет прав администратора, это сработает"),
+	HESEMPI("g", 'b'),
+	HE(966, "g", "NOT C:\\WINDOWS, NOT RECYCLE BIN", "g z:\\1.zpaq"),
+	HIT(966, 0xB53B4F67, "NON C:\\WINDOWS, NON il CESTINO"),
+	HRU(966, 0xB53B4F67, "НЕ C:\\WINDOWS, НЕ КОРЗИНА"),
+	HBREVE(967, "g", "Archive C: from shell without admin rights"),
+	HIT(967, 0x80F0AA6E, "Archivia C: da una shell senza diritti di amministratore"),
+	HRU(967, 0x80F0AA6E, "Архивировать C: из оболочки без прав администратора"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-string help_find(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD find", "Search file(s) with wildcards. DO NOT FORGET DOUBLE QUOTES ON *NIX!");
-		scrivi_riga("-verbose", "Show date/size (default:NO)");
-		help_date();
-		help_size();
-		help_orderby();
-		scrivi_riga("-find", "Like grep -i");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("'Double filter'", "find c:\\dropbox *.txt -minsize 1000000  -find franco");
-		scrivi_esempio("Search in multiple folders", "find c:\\uno z:\\kb -only *franco*");
-		scrivi_esempio("Search file ending with 01.cpp", "find c:\\zpaqfranz *01.cpp");
-		scrivi_esempio("Search all .cpp", "find c:\\zpaqfranz *.cpp -verbose");
-		scrivi_esempio("Search *francia* BEWARE DOUBLE QUOTE", "find /root \"*francia*\"");
-		scrivi_esempio("Search filtered on date", "find c:\\zpaqfranz *.cpp -datefrom 20220920 -dateto 2022-10-01");
-		scrivi_esempio("Search every file of 2017", "find . -datefrom 2017 -dateto 2017");
-		scrivi_esempio("Search every EXE file of 2017", "find . *.exe -datefrom 2017 -dateto 2017");
-		scrivi_esempio("10 biggest cpp", "find . *.cpp -orderby size -desc -limit 10 -verbose");
-	}
-	return ("Search file(s) using wildcards");
-}
-string help_e(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD e", "Extract on current folder");
-		scrivi_riga(" ", "Shortcut for extracting on Windows with longpath");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Extract everything 'here'", "e z:\\1.zpaq -longpath");
-	}
-	return ("Extract file(s) to current folder");
-}
-string help_dirsize(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD dirsize", "Show cumulative folder(s) size");
-		scrivi_riga(" ", "Case INsensitive ENDING with parameters (unless -force)");
-		scrivi_riga(" ", "i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS (not /1/xmarcus)");
-		scrivi_riga("-force", "Exact match; /tank/marcus != /tank/MARCUS");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Search with 2 parameters", "dirsize z:\\1.zpaq marcus vanessa");
-		scrivi_esempio("Getting size (exact, sensitive)", "dirsize z:\\1.zpaq /tank/d/documenti/marcus -force");
-	}
-	return ("Show total folder(s) size");
-}
-#ifdef ZPAQFULL /// NOSFTPSTART
-#ifdef _WIN32
-string help_monitor(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-        scrivi_riga("CMD monitor", "Analyze NTFS USN Journal to detect background changes");
-        scrivi_riga("-n <sec>", "Set polling interval in seconds (default: 10)"); 
-        scrivi_riga("-not -only", "Filter what is listed, as add does");
-        scrivi_riga("NOTE:", "Audit mode only. Detects changes but does NOT archive them (yet)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-        scrivi_esempio("Monitor entire C: drive", "monitor z:\\1.zpaq c:\\");
-        scrivi_esempio("Monitor path every 100s", "monitor z:\\1.zpaq c:\\zpaqfranz -n 100");
-	}
-	return ("Analyze NTFS USN Journal for changes");
-}
-
-string help_sfx(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD sfx", "sfx module, with encryption support");
-		scrivi_riga("(no switch)", "Write SFX along the .zpaq");
-		scrivi_riga("(w/switch)", "Convert .zpaq (max 2GB) to Windows .EXE");
-		scrivi_riga("-to X", "Extract the .zpaq from a .exe into X");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Create  z:\\1.exe", "sfx z:\\1.zpaq");
-		scrivi_esempio("Convert 1.zpaq to 2.exe", "sfx z:\\1.zpaq -sfx z:\\2.exe");
-		scrivi_esempio("Extract sfx module", "sfx z:\\64bit.exe");
-		scrivi_esempio("Extract the zpaq (if any)", "sfx z:\\1.exe -to z:\\1.zpaq -space -force");
-	}
-	return ("Create SFX module (supports encryption)");
-}
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-#endif /// NOSFTPEND
-string help_grep(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD grep", "Mini grep");
-		scrivi_riga(" ", "Last parameter is the text to search, the others are folders/files/masks");
-		scrivi_riga(" ", "Case-insensitive (ASCII), line-by-line, no regex");
-		scrivi_riga("-verbose", "Show all the matching lines, leading spaces trimmed");
-		scrivi_riga(" ", "(of a line over 200 bytes, the part around the match)");
-		scrivi_riga("-all", "Do not skip files with binary extensions (zip, jpg, exe...)");
-		scrivi_riga(" ", "(files with NUL bytes in the first 64 KB are always skipped,");
-		scrivi_riga(" ", "but UTF-16 text with a BOM, which is read as UTF-8)");
-		scrivi_riga("-n X", "Width of the path column in -verbose (default: 40)");
-		scrivi_riga("-debug", "Show unreadable and skipped binary files");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("First match in each cpp", "grep c:\\*.cpp d:\\ something");
-		scrivi_esempio("Every matching line", "grep c:\\src something -verbose");
-		scrivi_esempio("Text with spaces (quote it)", "grep c:\\src \"mysql --user\" -verbose");
-		scrivi_esempio("Wider path column", "grep c:\\dropbox password -verbose -n 60");
-		scrivi_esempio("Include binary extensions", "grep c:\\dropbox something -all");
-	}
-	return ("Search (case-insensitive) for text in files");
-}
-string help_checkpassword(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD checkpassword", "Check if password is OK");
-		scrivi_riga("-key X", "Use X as password");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Check if password is pippo", "checkpassword file.zpaq -key pippo");
-	}
-	return ("Check password");
-}
-string help_t(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD t", "Test");
-		scrivi_riga(" ", "NO PATH:   check all blocks, and CRC-32s of the files");
-		scrivi_riga(" ", "           corresponds to what would be generated by extracting");
-		scrivi_riga(" ", "WITH PATH: compares files/folders in the path(s) with the");
-		scrivi_riga(" ", "           archive's content");
-		scrivi_riga("-checksum", "Enable hash checksums");
-		scrivi_riga("-verify", "Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
-		scrivi_riga("-verify -ssd", "Multithread verify (do NOT use on spinning drives)");
-		scrivi_riga("-find", "pippo   For path-rework of verify");
-		scrivi_riga("-replace", "plu  For path-rework of verify (find and replace)");
-		scrivi_riga("-paranoid", "Extract all into -to something, check every file with stored hash");
-		scrivi_riga(" ", "delete every equal files");
-		scrivi_riga("-collision", "Test collisions");
-		scrivi_riga("-quick", "Do not check hash, only size/date");
-		scrivi_riga("-crc32", "Run a triple CRC-32 check (!) against the filesystem");
-		scrivi_riga(" ", "Use -find/replace to fix path (if needed); -ssd for M/T");
-		scrivi_riga("-ssd", "Run multithread CRC-32 rebuilder / pre .franzen check\n");
-		scrivi_riga("VFILE-info", "The versions that say what they are (a -fast): their number, where they");
-		scrivi_riga(" ", "begin, first fragment and index are checked. Nothing more is read");
-		scrivi_riga("-debug6", "Enforce CRC-32 error\n");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Last version", "t z:\\1.zpaq");
-		scrivi_esempio("All versions", "t z:\\1.zpaq -all");
-		scrivi_esempio("Last+Against filesystem, 4 threads", "t z:\\1.zpaq -verify -ssd -t4");
-		scrivi_esempio("Real paranoid: extract all", "t z:\\1.zpaq -to z:\\knb -paranoid");
-		scrivi_esempio("Multiple paranoid check (Win)", "t *.zpaq -to z:\\temp\\ -paranoid -longpath -big");
-		scrivi_esempio("Multiple test (*NIX)", "t \"/copie/*.zpaq\" ");
-		scrivi_esempio("Compare with string manipulation", "t z:\\2 c:\\nz -find k:\\nz -replace c:\\nz -verify");
-		scrivi_esempio("All version SHA-1 collisions", "t z:\\1.zpaq -collision -all");
-		scrivi_esempio("Triple check CRC-32", "t z:\\1.zpaq -crc32");
-		scrivi_esempio("3 check w/path manipulation", "t z:\\1.zpaq -crc32 -find \"x:/memme/\" -replace \"c:/nz/\"");
-		color_yellow();
-		moreprint("BEWARE: path(s) changes the logic!");
-		color_restore();
-		scrivi_esempio("Fast-SHA1 (nz the source dir)", "t z:\\1.zpaq c:\\nz");
-		scrivi_esempio("SHA1 + hash", "t z:\\1.zpaq c:\\nz -verify");
-		scrivi_esempio("Quick-and-dirty size/date", "t z:\\1.zpaq c:\\nz c:\\kz -quick");
-	}
-	return ("Test archive integrity or compare with filesystem");
-}
-string help_sync(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD sync", "Compare archive content with filesystem folders");
-		scrivi_riga("  ", "Estimate size of new/changed data to be compressed");
-		scrivi_riga("-quick", "Compare only file sizes (skip hash verification)");
-		scrivi_riga("-ssd", "Use multithreaded hashing for faster processing");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("(example) Archive with 3 folders", "a z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
-		scrivi_esempio("Check all 3 folders against archive", "sync z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
-		scrivi_esempio("Check only 2 specific folders", "sync z:\\1.zpaq c:\\nz c:\\ut");
-		scrivi_esempio("Check with multithreaded hashing", "sync z:\\1.zpaq c:\\nz -ssd");
-		scrivi_esempio("Quick size-only comparison", "sync z:\\1.zpaq c:\\nz -quick");
-		scrivi_esempio("Check specific subfolder only", "sync z:\\1.zpaq c:\\zpaqfranz\\release -ssd");
-	}
-	return ("Compare archive with filesystem");
-}
-string help_v(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD   v (verify)", "Verify all files (by hashes) against filesystem");
-		scrivi_riga("-ssd", "Multithread (for SSD/NVMe). Do NOT use on spinning drives");
-		scrivi_riga("-tX", "Limit -ssd to X threads");
-		scrivi_riga("-until Y", "Check the version Y");
-		scrivi_riga("-find", "pippo   For path-rework of verify");
-		scrivi_riga("-replace", "plu  For path-rework of verify (find and replace)");
-		scrivi_riga("-verbose", "Show distinct errors");
-		scrivi_riga("-debug", "Show a lot of info");
-		scrivi_riga("-output x.txt", "Put errors in x.txt (alias -out)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Last version", "v z:\\1.zpaq");
-		scrivi_esempio("Show errors line by line", "v z:\\1.zpaq -verbose");
-		scrivi_esempio("2n version", "v z:\\1.zpaq -until 2");
-		scrivi_esempio("Remake path", "v z:\\1.zpaq -find c:\\dropbox -replace z:\\knb");
-		scrivi_esempio("1st version, multithread", "v z:\\1.zpaq -until 1 -ssd");
-	}
-
-	return ("Verify an archive (against filesystem)");
-}
-string help_p(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD p", "Paranoid test");
-		scrivi_riga(" ", "Test the archive (** NOT multipart **) in a very paranoid fashion.");
-		scrivi_riga(" ", "ZPAQ reference decompressor is used to extract blocks in RAM.");
-		scrivi_riga(" ", "Runs on unzpaq206.cpp source instead of 7.15 extract: double check");
-		scrivi_riga(" ", "to avoid the risk of 'silent' bugs. The RAM needed can");
-		scrivi_riga(" ", "quickly become unmanageable (warn: be very careful with 32bit versions)");
-		scrivi_riga("-noeta", "Brief");
-		scrivi_riga("-verbose", "Shows positive checks");
-		scrivi_riga("-verify", "Next level (mine) of paranoia: check hashes against the filesystem.");
-		scrivi_riga(" ", "Essentially equivalent to extracting in a temporary folder and check");
-		scrivi_riga(" ", "against initial folders. For very paranoid people, or debug reason.");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Paranoid, use a lot of RAM", "p z:\\1.zpaq");
-		scrivi_esempio("Very paranoid, use a lot of RAM", "p z:\\1.zpaq -verify");
-	}
-	return ("Paranoid archive test (slow, high RAM)");
-}
-#ifndef ANCIENT
-string help_pp(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD pp", "Paranoid test of SSD-based archive");
-		scrivi_riga(" ", "Rebuilds and verifies all stored hashes (if present)");
-		scrivi_riga(" ", "Warning: avoid running on large archives stored on HDDs");
-		scrivi_riga("-noeta", "Brief, no progress ETA");
-		scrivi_riga("-verbose", "Show unsuccessful checks");
-		scrivi_riga("-verify", "Re-read files from disk and compare hashes");
-		scrivi_riga("-paranoid", "Bijective check: archive <-> filesystem");
-		scrivi_riga(" ", "  Detects files on disk missing from archive");
-		scrivi_riga(" ", "  Detects files in archive missing from disk");
-		scrivi_riga(" ", "  Detects size mismatches between archive and disk");
-		scrivi_riga("-n X", "Limit warning output to X lines (counting continues)");
-		scrivi_riga("-ssd", "Run a pre-franzen check (if any)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Use as much RAM as available", "pp z:\\1.zpaq");
-		scrivi_esempio("Limit RAM usage to 5 GB", "pp z:\\1.zpaq -ramsize 5GB");
-		scrivi_esempio("Re-read and verify hashes from disk", "pp j:\\1.zpaq -verify");
-		scrivi_esempio("Verify with path substitution", "pp j:\\1.zpaq -verify -find \"g:/\" -replace \"u:/omare/g/\"");
-		scrivi_esempio("Full paranoid test (verify + bijective)", "pp j:\\1.zpaq -verify -paranoid");
-		scrivi_esempio("Paranoid only (no hash re-read)", "pp j:\\1.zpaq -paranoid");
-		scrivi_esempio("Pre-check of franzen archive", "pp j:\\1.zpaq.franzen -ssd");
-	}
-	return ("Paranoid test (prefer SSD-based archive)");
-}
-#endif
-string help_c(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD c", "Compare dirs");
-		scrivi_riga(" ", "Compare a 'master' directory (d0) against N 'slaves' (d1, d2... dN).");
-		scrivi_riga(" ", "This is ideal for verifying replicated folders (e.g., created by zpaq");
-		scrivi_riga(" ", "restore, rsync, robocopy, or ZFS replica), especially across different");
-		scrivi_riga(" ", "filesystems (like Linux NAS and Windows NTFS)");
-		scrivi_riga(" ", "By default check file name and file size (excluding .zfs), not the content.");
-		scrivi_riga("-ssd", "Concurrent threads will be created, each scan a slave dir (-t K to limit).");
-		scrivi_riga(" ", "Not recommended for a single spinning drive; ideal for multiple target");
-		scrivi_riga(" ", "directories on different physical disks");
-		help_printhash(false);
-		help_size();
-		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-forcezfs", "Include .zfs");
-		scrivi_riga("-checksum", "Run hash compare");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Compare master d0 against d1,d2,d3", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3");
-		scrivi_esempio("Multithread compare", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd");
-		scrivi_esempio("Hashed compare d0 against d1,d2,d3", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -checksum -xxh3");
-	}
-	return ("Compare master dir vs slave dir(s)");
-}
-string help_s(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD s", "Size");
-		scrivi_riga(" ", "Cumulative size of N directory, and free space (estimate for *Nix).");
-		scrivi_riga(" ", "Everything containing .zfs and :$DATA (Windows's ADS) ignored by default");
-		scrivi_riga(" ", "Very quick-and-dirty check of rsynced folders against the master");
-		scrivi_riga("-ssd", "for multithreaded executions (warning for single spinning drive)");
-		scrivi_riga("-minsize X", "Show a warning if free space < X");
-		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-forcezfs", "Include .zfs");
-		scrivi_riga("-home", "Show 1-level cumulative size, with [oldest]-[newest] file date");
-		scrivi_riga("/os", "With -home, order by size (smaller first)");
-		scrivi_riga("-ignore", "Do not show file errors (ex. ERROR_ACCESS_DENIED)");
-		scrivi_riga("-verbose", "With -home, also show oldest/newest filename and full timestamp");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Dir cumulative size (no .zfs/NTFS)", "s r:\\vbox s:\\uno");
-		scrivi_esempio("Multithreaded size", "s r:\\vbox s:\\uno -ssd");
-		scrivi_esempio("(Kind of) size of c:\\users", "s c:\\users -home -ssd -ignore");
-		scrivi_esempio("Find 'cold' (unused) folders", "s c:\\users -home -verbose");
-		scrivi_esempio("Subfolders by size, biggest last", "s c:\\users -home /os");
-	}
-	return ("Show dir(s) size and free disk space");
-}
-
-string help_oneonone(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD 1on1", "Julius Erving and Larry Bird Go One on One");
-		scrivi_riga(" ", "Deduplicate a folder against another one");
-		scrivi_riga("-deleteinto X", "Delete corresponding files found in directory X");
-		scrivi_riga("-checksum", "Rely only on checksums, not filenames");
-		/// scrivi_riga("-zero", "Deduplicate 0-length files too");
-		scrivi_riga("-ssd", "Enable multithreading (use with care on single spinning drives)");
-		scrivi_riga("-forcezfs", "Do not exclude zfs files (default: IGNORE)");
-		scrivi_riga("-kill", "Perform a wet run (default is a dry run)");
-		scrivi_riga("-home", "Only compare the two folders");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Dry run, =hash,=filename,multithread", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -ssd");
-		scrivi_esempio("Real run (0-length files too)", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -kill");
-		scrivi_esempio("Real run, with XXH3, with *", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -xxh3 -kill -forcezfs");
-		scrivi_esempio("Compare folder", "1on1 c:\\ f:\\ -home -xxh3 -ssd");
-	}
-	return ("Delete/compare folder2 file(s) matching folder1's name/hash");
-}
-
-string help_r(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD r", "'robocopy'");
-		scrivi_riga(" ", "Mirror a master folder, just like robocopy /mir or rsync -a --delete");
-		scrivi_riga(" ", "to one or more slave (destination) folders");
-		print_sub();
-		scrivi_riga(" ", "ENFORCING XLS, ignore .zfs and ADS by default");
-		scrivi_riga("", "ENFORCING XLS, ignore .zfs and ADS by default");
-		scrivi_riga("-kill", "wet run (default: dry-run");
-		scrivi_riga("-space", "do not exit if not enough space reported");
-		scrivi_riga("-ssd", "run one thread for folder");
-		scrivi_riga("-verify", "after copy quick check if OK (only filename and size)");
-		scrivi_riga("-checksum", "heavy (hash) test of equality. Suggest: -xxh3 fast and reliable.");
-		help_size();
-		scrivi_riga("-xls", "Do not enforce backup of XLS/PPT");
-		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-forcezfs", "Include .zfs");
-		scrivi_riga("-append", "Only append data (*risky, use with zpaq archives)");
-		scrivi_riga("-zero", "Fill all output file with zeros (for debug)");
-		scrivi_riga("-verbose", "Show internal timings");
-		scrivi_riga("-buffer X", "Use a input buffer of X bytes (default: 1MB)");
-		scrivi_riga("-pakka", "Check-before-touch (faster for big tree over LAN)");
-#ifdef _WIN32
-		scrivi_riga("-big", "Special Windows function for big files over LAN");
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_riga("-bandwidth X", "Limit to X the write rate");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Robocopy d0 in d1,d2      (dry run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
-		scrivi_esempio("Robocopy d0 in d1,d2      (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
-		scrivi_esempio("Robocopy with verify      (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
-		scrivi_esempio("Robocopy with hash verify (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
-		scrivi_esempio("Robocopy d0 in d1, forced (WET run)", "r c:\\d0 k:\\d1 j:\\d2 -kill -space");
-		scrivi_esempio("Robocopy append mode      (WET run)", "r c:\\d0 z:\\backup_%day -append -kill");
-		scrivi_esempio("Robocopy d0 in d1,w/infos (WET run)", "r c:\\d0 k:\\d1 -kill -verbose");
-		scrivi_esempio("Robocopy d0=>d1 over LAN  (WET run)", "r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka");
-#ifdef _WIN32
-		scrivi_esempio("Huge file to NAS (Windows)(WET run)", "r c:\\d0 \\\\nas\\share\\d1 -kill -big");
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_esempio("Robocopy only huge files  (WET run)", "r c:\\d0 z:\\dest -kill -minsize 10GB");
-		scrivi_esempio("Robocopy only E01 files   (WET run)", "r c:\\d0 z:\\dest -kill -only *.e01");
-		scrivi_esempio("Robocopy limited to 100MB/s (WET run)", "r c:\\d0 k:\\d1 -kill -bandwidth 100M");
-	}
-	return ("Robocopy master to multiple slave folders");
-}
-string help_cp(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD cp", "'friendly copy'");
-		scrivi_riga(" ", "Copy files (with wildcards) into -to folder");
-		scrivi_riga(" ", "with 1 sec progression feedback. Huge file, tiny bandwidth");
-		scrivi_riga(" ", "and unreliable media (-verify)");
-		scrivi_riga(" ", "By default overwrite, use -paranoid to create unique name");
-		scrivi_riga(" ", "One file on a console: the map of the file while it is copied");
-		scrivi_riga("-verify", "Copy by pieces: each one written, read back, XXH3 checked");
-		scrivi_riga(" ", "A piece that differs is written again (3 times), then error");
-		scrivi_riga("-n X", "With -verify: pieces of X% (default 10%, at most 1GB)");
-		scrivi_riga("-chunk X", "With -verify: files under X in one piece (default 100MB)");
-		scrivi_riga("-paranoid", "Rename output file to do not overwrite");
-		scrivi_riga("-append", "Only append data (use with zpaq archives): resumable");
-		scrivi_riga(" ", "The part already there must be the beginning of the source");
-		scrivi_riga(" ", "(quick hash); with -verify its last piece is read back too");
-		scrivi_riga("-force", "Do no check if destination is writeable");
-		scrivi_riga("-space", "Do no check if enough destination free space");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Copy k:\\*.mp4 d:\\a.txt in z:\\pluto", "cp k:\\*.mp4 d:\\a.txt -to z:\\pluto");
-		scrivi_esempio("Copy with verify", "cp k:\\*.mp4 -to z:\\pluto -verify");
-		scrivi_esempio("Copy WITHOUT overwrite", "cp k:\\*.mp4 -to z:\\pluto -paranoid");
-		scrivi_esempio("Resumable copy (append only)", "cp k:\\*.zpaq -to z:\\pluto -append");
-		scrivi_esempio("Resumable, checked by pieces of 5%", "cp k:\\*.zpaq -to z:\\pluto -append -verify -n 5");
-	}
-	return ("Friendly file copy with ETA (resumable)");
-}
-#ifdef ZPAQFULL /// NOSFTPSTART
-string help_zfs(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("On UNIX you get some zfs-specific commands", "");
-		scrivi_riga("--- Enumerate / delete snapshots / sizeof", "");
-		scrivi_riga("zfslist", "");
-		scrivi_riga("zfspurge", "");
-		scrivi_riga("zfssize", "");
-		scrivi_riga("--- Freezing snapshot inside archive", "");
-		scrivi_riga("zfsadd", "");
-		scrivi_riga("--- Make / restore zfs backups inside zpaq", "");
-		scrivi_riga("zfsbackup", "");
-		scrivi_riga("zfsreceive", "");
-		scrivi_riga("zfsrestore", "");
-		scrivi_riga("--- Make / restore zfs backups of proxmox VM", "");
-		scrivi_riga("zfsproxbackup", "");
-		scrivi_riga("zfsproxrestore", "");
-	}
-	if (i_example)
-	{
-		moreprint("Ask extensive help, example zpaqfranz h zfsadd       zpaqfranz h zfslist");
-	}
-	return "Bunch of zfs-specific commands";
-}
-string help_zfsadd(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsadd", "Freeze a selection of snapshots into an archive");
-		scrivi_riga(" ", "Optional subfolder as 3rd parameter");
-		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
-		scrivi_riga("-force", "Do the freezing (wet run)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio(" ", "!USE THE DOUBLEQUOTES!");
-		scrivi_esempio(" ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-		scrivi_esempio(" ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\"");
-		scrivi_esempio(" ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\"");
-		scrivi_esempio(" ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -force");
-		scrivi_esempio(" ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -script ./dothejob.sh");
-	}
-	return ("Freeze zfs' snapshots inside the archive");
-}
-string help_zfspurge(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfspurge", "Destroy selected zfs snapshot (works like zfslist)");
-		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio(" ", "!USE THE DOUBLEQUOTES!");
-		scrivi_esempio(" ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-		scrivi_esempio(" ", "zfspurge \"tank/d@2021\" \"--60d\"");
-		scrivi_esempio(" ", "zfspurge \"*\" \"*\"");
-		scrivi_esempio(" ", "zfspurge \"tank\" \"--7d\"");
-		scrivi_esempio(" ", "zfspurge \"tank\" \"--7d\" -script mygoodscript.sh");
-	}
-	return ("Purge snapshots with wildcards");
-}
-string help_zfslist(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfslist", "Show (/filtering) existing zfs snapshot");
-		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		if ((g_optional == "zfslist") || (g_optional == ""))
-		{
-			scrivi_esempio(" ", "!USE THE DOUBLEQUOTES!");
-			scrivi_esempio(" ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-			scrivi_esempio(" ", "zfslist  \"tank/d@\"");
-			scrivi_esempio(" ", "zfslist  \"*\"");
-			scrivi_esempio(" ", "zfslist  \"*\" \"syncoid\"");
-			scrivi_esempio(" ", "zfslist  \"*\" \"10d\" -script pippo.sh");
-		}
-	}
-	return ("List zfs' snapshots with wildcard");
-}
-
-string help_zfssize(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfssize", "Show (/filtering) the SIZE of existing zfs snapshot");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		if ((g_optional == "zfssize") || (g_optional == ""))
-		{
-			scrivi_esempio(" ", "!USE THE DOUBLEQUOTES!");
-			scrivi_esempio(" ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-			scrivi_esempio(" ", "zfssize  \"tank/d@\"");
-			scrivi_esempio(" ", "zfssize  \"*\"");
-			scrivi_esempio(" ", "zfssize  \"*\" \"syncoid\"");
-			scrivi_esempio(" ", "zfssize  \"*\" \"10d\" -script pippo.sh");
-		}
-	}
-	return ("List zfs' SIZE of snapshots with wildcard");
-}
-
-string help_zfsproxbackup(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsproxbackup", "");
-		scrivi_riga(" ", "Archiving proxmox backups (from zfs local storage)");
-		scrivi_riga(" ", "Getting VM disks from /var/lib/vz");
-		scrivi_riga("-force", "Destroy temporary snapshot (before backup)");
-		scrivi_riga("-kill", "Remove snapshot (after backup)");
-		scrivi_riga("-all", "Get all VM");
-		scrivi_riga("-not", "Do not backup (exclude)");
-		scrivi_riga("-snapshot kj", "Make 'snapname' to kj (default: francoproxmox)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Backup/encrypt w/key 'pippo' VM 200", "zfsproxbackup /bak/200.zpaq 200 -force -kill -key pippo");
-		scrivi_esempio("Backup 2 VMs: 200 and 300", "zfsproxbackup /bak/200_300.zpaq 200 300");
-		scrivi_esempio("Backup ALL VMs", "zfsproxbackup /bak/all.zpaq  -all -force -kill");
-		scrivi_esempio("Backup all EXCEPT 200 and 300", "zfsproxbackup /bak/part.zpaq -all -not 200 -not 300 -force -kill");
-	}
-	return ("Backup of proxmox on zfs");
-}
-
-string help_zfsproxrestore(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsproxrestore", "Restore proxmox backups (on local storage)");
-#ifndef _WIN32
-		scrivi_riga(" ", "into /var/lib/vz and /etc/pve/qemu-server");
-		scrivi_riga(" ", "Without files selection restore everything");
-#endif
-		scrivi_riga(" ", "Files can be a sequence of WMIDs (ex. 200 300)");
-		scrivi_riga("-kill", "Remove snapshot (after backup)");
-		scrivi_riga("-not", "Do not restore (exclude)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Restore all VMs", "zfsproxrestore /backup/allvm.zpaq");
-		scrivi_esempio("Restore 2 VMs: 200 and 300", "zfsproxrestore /backup/allvm.zpaq 200 300");
-		scrivi_esempio("Restore VM 200, release snapshot", "zfsproxrestore /backup/allvm.zpaq 200 -kill");
-		scrivi_esempio("Restore all VMs, except 200", "zfsproxrestore /backup/allvm.zpaq -not 200 -kill");
-	}
-	return ("Restore of proxmox on zfs");
-}
-string help_zfsbackup(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsbackup", "Backup w/incremental zfs snapshots for long-term storage");
-		scrivi_riga(" ", "Usually root privileges required");
-		scrivi_riga("-snapshot kj", "Make 'snapname' to kj (default: zpaqfranco)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Update tank/d backup,retain snapshot", "zfsbackup /tmp/incr.zpaq tank/d");
-		scrivi_esempio("Update tank backup,delete snapshot", "zfsbackup /tmp/incr.zpaq tank -kill");
-		scrivi_esempio("Update tank/d backup,w/hashdeep", "zfsbackup /tmp/incr.zpaq tank/d");
-		scrivi_esempio("Choose snapmark to 'mycopy'", "zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy");
-	}
-	return ("Backup of zfs' streams");
-}
-
-string help_zfsrestore(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsrestore", "Prepare a script for restoring from EXTRACTED .zfs backup files");
-		scrivi_riga("-snapshot kj", "Make 'snapname' to kj (default: franco)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Restore *.zfs into /rez to rpool/rk", "zfsrestore /rez rpool/rk -script myscript.sh");
-		scrivi_esempio("Restore *.zfs into /rez to rpool/rk", "zfsrestore /rez rpool/rk -script myscript.sh -snapshot ugo");
-	}
-	return ("Restore from extracted .zfs stream");
-}
-
-string help_zfsreceive(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD zfsreceive", "Prepare a script for restoring from zpaq archive");
-		scrivi_riga("-snapshot", "kj  Make 'snapname' to kj (default: franco)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Rebuild rpool/restored from archive", "zfsreceive /tmp/ordinato.zpaq rpool/restored -script myscript.sh");
-	}
-	return ("Restore (with zfs) from zpaq archive");
-}
-#endif /// NOSFTPEND
-
-string help_z(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD z", "Delete empty directories, zero length");
-		scrivi_riga(" ", "Remove empty directories in d0...dK folders. Conservative (ex hidden Thumbs.db)");
-		scrivi_riga("-kill", "Do a wet run (default dry run)");
-		scrivi_riga("-verbose", "Show infos");
-#ifdef _WIN32
-		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Delete empty dirs in d0,d1(dry run)", "z c:\\d0 k:\\d1");
-		scrivi_esempio("Delete empty dirs in d0,d1(WET run)", "z c:\\d0 k:\\d1 -kill -longpath");
-	}
-	return ("Remove empty directories");
-}
-string help_m(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD m", "merge, consolidate");
-		scrivi_riga(" ", "Merge a split (multipart) archive into a single one,");
-		scrivi_riga(" ", "just like a concatenated cat or copy /b");
-		scrivi_riga("-force", "Overwrite existing output");
-		scrivi_riga("-space", "Ignore lack of free space");
-		scrivi_riga("-verify", "Double-check (XXH3 hash test)");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Merge (consolidate) multipart", "m \"p:\\test\\prova_???\" z:\\cons.zpaq -verify");
-	}
-	return ("Merge multipart archive into one");
-}
-string help_d(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD d", "Deduplicate");
-		scrivi_riga(" ", "Find and delete duplicate files in a single folder, and in all that is below.");
-		scrivi_riga(" ", "WARNING: This operation is destructive!");
-		scrivi_riga(" ", "A folder, or a folder and what to search: d c:\\dir\\*.mp4, or (as find) d c:\\dir\\ *.mp4");
-		scrivi_riga(" ", "Of the files with the same content the first one by name stays, the others go");
-		scrivi_riga("-ssd", "Multithread run");
-		scrivi_riga("-force", "Wet run (default: dry-run)");
-		scrivi_riga("-verbose", "Show the duplicated files in groups: the first (with its date) stays, the ==== ones go;");
-		scrivi_riga(" ", "  then what the group gives back and its hash. Smallest saving first, biggest last.");
-		scrivi_riga(" ", "  Hard links (names of the same file: nothing freed) in yellow, not counted in the total");
-		scrivi_riga("-find X", "Only the files with X in the name (as find, grep -i)");
-		scrivi_riga("-minsize X", "Only the files from X bytes up (-maxsize: up to X); -only, -not, -datefrom, -dateto too");
-		scrivi_riga("-zero", "Leave the empty files alone (by default they are all duplicates of each other)");
-		scrivi_riga("-norecursion", "Only that folder, not what is below");
-		scrivi_riga("-(somehash)", "Use (somehash), one of the available next two lines, for detection (default: xxh3)");
-		help_printhash(false);
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Deduplicate d0 (dry run, w/xxh3)", "d c:\\d0\\");
-		scrivi_esempio("Only the .mp4 of u: (dry run)", "d u:\\*.mp4");
-		scrivi_esempio("The same, the big ones, no empty files", "d u:\\ *.mp4 -minsize 100MB -zero");
-		scrivi_esempio("Deduplicate d0 (dry run,xxh3,M/T)", "d c:\\d0\\ -ssd");
-		scrivi_esempio("Deduplicate d0 WITHOUT MERCY (wet)", "d c:\\d0\\ -force");
-		scrivi_esempio("Dedup WITHOUT MERCY (wet run,sha256)", "d c:\\d0\\ -force -sha256");
-	}
-	return ("Deduplicate file(s) in folder (no mercy)");
-}
-string help_mysqldump(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		if (i_usage)
-		{
-			scrivi_riga("CMD mysqldump", "Dump all MySQL/MariaDB databases");
-			scrivi_riga(" ", "Requires 'mysql' (or 'mariadb') and 'mysqldump' (or 'mariadb-dump')");
-#ifdef _WIN32
-			scrivi_riga(" ", "On Windows, append '.exe' to executable names [of course]");
-#endif
-			scrivi_riga(" ", "Use one of these methods to locate executables:");
-			scrivi_riga(" ", "- Specify path with -bin something");
-			scrivi_riga(" ", "- Let the program search automatically (default)");
-#ifdef _WIN32
-			scrivi_riga(" ", "- Use -space to download from the Internet (Windows only)");
-#endif
-			scrivi_riga("-bin path", "Path where mysql/mariadb(.exe) and mysqldump/mariadb-dump(.exe) are located");
-#ifdef _WIN32
-			scrivi_riga("-space", "Download mysql.exe and mysqldump.exe from the Internet");
-#endif
-			scrivi_riga("-u user", "MySQL/MariaDB username");
-			scrivi_riga("-p password", "MySQL/MariaDB password (use quotes if it contains spaces)");
-			scrivi_riga("-h host", "MySQL/MariaDB host (e.g., localhost or IP address)");
-			scrivi_riga("-P port", "MySQL/MariaDB port (default: 3306)");
-			scrivi_riga("-key pwd", "Password for encrypting the ZPAQ archive");
-			scrivi_riga("-mX", "ZPAQ compression method (X = 0-5, none to highest)");
-			scrivi_riga("-verbose", "Be... verbose");
-			scrivi_riga("-only", "pattern Select only databases containing the specified text or matching pattern");
-			scrivi_riga(" ", "-only 2015 matches any DB containing '2015' (e.g., db2015, test2015prod)");
-			scrivi_riga("-not", "pattern  Exclude databases containing the specified text or matching pattern");
-			scrivi_riga(" ", "-not temp matches any DB containing 'temp' (e.g., temporary, temp_db)");
-			scrivi_riga(" ", "*** Note: System databases (information_schema, performance_schema,");
-			scrivi_riga(" ", "    sys) are automatically excluded");
-		}
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Dump all databases (Windows)", "mysqldump z:\\1.zpaq -u root -p pluto -h 127.0.0.1 -P 3306 -key pippo -m2");
-		scrivi_esempio("Get tools from Internet (Windows)", "mysqldump z:\\1.zpaq -u root -p pluto -space");
-		scrivi_esempio("Auto-search on Linux", "mysqldump /tmp/test.zpaq -u root -p pluto");
-		scrivi_esempio("Specify path on Linux", "mysqldump /tmp/test.zpaq -u root -p pluto -bin \"/bin\"");
-		scrivi_esempio("Include databases with '2015'", "mysqldump test.zpaq -u root -p pluto -only 2015");
-		scrivi_esempio("Exclude databases with 'geo'", "mysqldump test.zpaq -u root -p pluto -not geo");
-		scrivi_esempio("Multiple conditions", "mysqldump test.zpaq -u root -p pluto -only prod -not backup");
-	}
-	return ("Dump all MySQL databases to .zpaq");
-}
-
-#ifdef _WIN32
-string help_image(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD image", "Restore/export zpaqfranz images (RISKY: can overwrite drives; use with caution)");
-		scrivi_riga("-to x.vhd", "A .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount x.vhd)");
-		scrivi_riga(" ", "  Up to 2040 GB: over that it becomes x.vhdx by itself (the command x too)");
-		scrivi_riga("-to x.vhdx", "A .vhdx, mounted by Windows the same way, of any size (7-Zip opens it too)");
-		scrivi_riga("-to folder", "image_X.vhd in it (a name without extension is a folder)");
-		scrivi_riga("-to x.vmdk", "A .vmdk for VMware Workstation, VirtualBox, QEMU/Proxmox (7-Zip opens it too)");
-		scrivi_riga(" ", "  One sparse file: the zeros are not in it (a thin image: about the used data)");
-		scrivi_riga(" ", "  With -raw a flat one: x.vmdk (a text) and x-flat.vmdk, the disk byte by byte");
-		scrivi_riga(" ", "  Over 2032 GB the sparse one is in more files, as VMware makes it: x.vmdk (a text),");
-		scrivi_riga(" ", "  x-s001.vmdk, x-s002.vmdk... Sectors of 512 only. A partition over 2 TB: in a GPT");
-		scrivi_riga("-to x.raw", "The partition byte by byte (any other extension too: .img, .bin...)");
-		scrivi_riga("-to G: -image", "Write on the partition G: (-image is the consent: G: is overwritten)");
-		scrivi_riga(" ", "  The archive says what the image is: used clusters (NTFS, FAT, exFAT) or raw");
-		scrivi_riga(" ", "  A disk number (3:): the image of a whole disk, to a .vhd, a .vmdk or a raw file");
-		scrivi_riga(" ", "  A *nix device (/dev/sda, imaged there with a -image): to a raw file only");
-		scrivi_riga("-raw", "Write the unused part too, as zeros: the whole partition is written");
-		scrivi_riga(" ", "  (-to x.vmdk -raw: a flat .vmdk)");
-		scrivi_riga("-until N", "The image of version N (default: the last one)");
-		scrivi_riga("-space", "Do not ask when the destination partition is not empty");
-		scrivi_riga("-force", "Overwrite an existing destination file");
-    }
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		color_cyan();
-		moreprint("Restore to file");
-		color_restore();
-		scrivi_esempio("Image to VHD", "image i5.zpaq f: -to d:\\3.vhd");
-		scrivi_esempio("Image of disk 3 in a folder", "image i5.zpaq 3: -to d:\\folderone");
-		scrivi_esempio("Image to raw file", "image i2.zpaq f: -to d:\\1.raw");
-		scrivi_esempio("Image to VHDX (any size)", "image i5.zpaq f: -to d:\\3.vhdx");
-		scrivi_esempio("Image to VMDK (sparse)", "image i5.zpaq f: -to d:\\3.vmdk");
-		scrivi_esempio("Image to VMDK (flat)", "image i5.zpaq f: -to d:\\3.vmdk -raw");
-		scrivi_esempio("An older version", "image i5.zpaq f: -to d:\\old.vhd -until 3");
-		color_cyan();
-		moreprint("Restore to drive");
-		color_restore();
-		scrivi_esempio("Restore f: on the partition i:", "image i1.zpaq f: -to i: -image");
-		scrivi_esempio("Restore f: on i:, every sector", "image i1.zpaq f: -to i: -image -raw");
-		color_cyan();
-		moreprint("See also");
-		color_restore();
-		scrivi_esempio("Mount VHD (read-only)", "mount d:\\3.vhd");
-		scrivi_esempio("Partition/drive list", "drives");
-	}
-	return ("Restore/export zpaqfranz images");
-}
+	/// find
+	HU(968, "find", "CMD find", "Search file(s) with wildcards. DO NOT FORGET DOUBLE QUOTES ON *NIX!"),
+	HIT(968, 0x1B5905C4, "Cerca file con caratteri jolly. NON|  DIMENTICARE LE VIRGOLETTE SU *NIX!"),
+	HRU(968, 0x1B5905C4, "Поиск файлов по шаблону. НЕ ЗАБЫВАЙТЕ ДВОЙНЫЕ КАВЫЧКИ В *NIX!"),
+	HU(969, "find", "-verbose", "Show date/size (default:NO)"),
+	HIT(969, 0x5FE9378D, "Mostra data/dimensione (default: NO)"),
+	HRU(969, 0x5FE9378D, "Показать дату/размер (по умолчанию: NO)"),
+	HINCLUDI("find", 'u', "@date", 'b'),
+	HINCLUDI("find", 'u', "@size", 'b'),
+	HINCLUDI("find", 'u', "@orderby", 'b'),
+	HU(970, "find", "-find", "Like grep -i"),
+	HIT(970, 0x6C92C4B8, "Come grep -i"),
+	HRU(970, 0x6C92C4B8, "Как grep -i"),
+	HESEMPI("find", 'b'),
+	HE(971, "find", "'Double filter'", "find c:\\dropbox *.txt -minsize 1000000  -find franco"),
+	HIT(971, 0xDAF5FF8C, "'Doppio filtro'"),
+	HRU(971, 0xDAF5FF8C, "'Двойной фильтр'"),
+	HE(972, "find", "Search in multiple folders", "find c:\\uno z:\\kb -only *franco*"),
+	HIT(972, 0x62670679, "Cerca in piu' cartelle"),
+	HRU(972, 0x62670679, "Поиск в нескольких папках"),
+	HE(973, "find", "Search file ending with 01.cpp", "find c:\\zpaqfranz *01.cpp"),
+	HIT(973, 0x9DA72CF8, "Cerca i file che finiscono con 01.cpp"),
+	HRU(973, 0x9DA72CF8, "Найти файлы, оканчивающиеся на 01.cpp"),
+	HE(974, "find", "Search all .cpp", "find c:\\zpaqfranz *.cpp -verbose"),
+	HIT(974, 0x23E090A5, "Cerca tutti i .cpp"),
+	HRU(974, 0x23E090A5, "Найти все .cpp"),
+	HE(975, "find", "Search *francia* BEWARE DOUBLE QUOTE", "find /root \"*francia*\""),
+	HIT(975, 0xB031201A, "Cerca *francia* ATTENZIONE ALLE VIRGOLETTE"),
+	HRU(975, 0xB031201A, "Найти *francia* ОСТОРОЖНО С ДВОЙНЫМИ КАВЫЧКАМИ"),
+	HE(976, "find", "Search filtered on date", "find c:\\zpaqfranz *.cpp -datefrom 20220920 -dateto 2022-10-01"),
+	HIT(976, 0x0C8909E3, "Cerca filtrando per data"),
+	HRU(976, 0x0C8909E3, "Поиск с фильтром по дате"),
+	HE(977, "find", "Search every file of 2017", "find . -datefrom 2017 -dateto 2017"),
+	HIT(977, 0xC6D3E5E1, "Cerca tutti i file del 2017"),
+	HRU(977, 0xC6D3E5E1, "Найти все файлы за 2017"),
+	HE(978, "find", "Search every EXE file of 2017", "find . *.exe -datefrom 2017 -dateto 2017"),
+	HIT(978, 0xE0A88DE1, "Cerca tutti gli EXE del 2017"),
+	HRU(978, 0xE0A88DE1, "Найти все EXE за 2017"),
+	HE(979, "find", "10 biggest cpp", "find . *.cpp -orderby size -desc -limit 10 -verbose"),
+	HIT(979, 0x73B88C50, "I 10 cpp piu' grandi"),
+	HRU(979, 0x73B88C50, "10 самых больших cpp"),
+	HBREVE(980, "find", "Search file(s) using wildcards"),
+	HIT(980, 0xA63586EC, "Cerca file con caratteri jolly"),
+	HRU(980, 0xA63586EC, "Поиск файлов по шаблону"),
+	/// e
+	HU(981, "e", "CMD e", "Extract on current folder|Shortcut for extracting on Windows with longpath"),
+	HIT(981, 0x6BDBE933, "Estrae nella cartella corrente|Scorciatoia per estrarre su Windows con longpath"),
+	HRU(981, 0x6BDBE933, "Извлечь в текущую папку|Сокращение для извлечения в Windows с longpath"),
+	HESEMPI("e", 'b'),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(982, "e", "Extract everything 'here'", "e z:\\1.zpaq -longpath"),
+	HIT(982, 0xA8FA90E1, "Estrae tutto 'qui'"),
+	HRU(982, 0xA8FA90E1, "Извлечь всё 'сюда'"),
 #else
-string help_image(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD image", "Restore the image of a device (made by a /dev/sdX -image) to a raw file");
-		scrivi_riga("-to x.raw", "The device byte by byte (any name: put it back with dd, mount it with losetup)");
-		scrivi_riga("-to folder", "_dev_sdX.raw in it (an existing folder, or a name with a final /)");
-		scrivi_riga("-until N", "The image of version N (default: the last one)");
-		scrivi_riga("-force", "Overwrite an existing destination file");
-		scrivi_riga(" ", "The images of Windows drives (used clusters, .vhd) are restored on Windows");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Image of a device", "a /tmp/i1.zpaq /dev/sda1 -image");
-		scrivi_esempio("Restore to a raw file", "image /tmp/i1.zpaq /dev/sda1 -to /tmp/sda1.raw");
-		scrivi_esempio("An older version", "image /tmp/i1.zpaq /dev/sda1 -to /tmp/old.raw -until 3");
-	}
-	return ("Restore zpaqfranz images");
-}
+	HE(983, "e", "Extract everything 'here'", "e z:\\1.zpaq"),
+	HIT(983, 0xA8FA90E1, "Estrae tutto 'qui'"),
+	HRU(983, 0xA8FA90E1, "Извлечь всё 'сюда'"),
+#endif
+	HBREVE(984, "e", "Extract file(s) to current folder"),
+	HIT(984, 0x9A510FAC, "Estrae file nella cartella corrente"),
+	HRU(984, 0x9A510FAC, "Извлечь файлы в текущую папку"),
+	/// dirsize
+	HU(985, "dirsize", "CMD dirsize", "Show cumulative folder(s) size|Case INsensitive ENDING with parameters (unless -force)|i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS (not /1/xmarcus)"),
+	HIT(985, 0x19BE9F71, "Mostra la dimensione cumulativa delle cartelle|Senza distinzione di maiuscole, che FINISCONO coi|parametri (salvo -force) cioe' marcus == /1/marcus,|/tank/d/documenti/MARCUS (non /1/xmarcus)"),
+	HRU(985, 0x19BE9F71, "Показать суммарный размер папок|Без учёта регистра, ОКАНЧИВАЮЩИХСЯ на параметры|(если нет -force) т.е. marcus == /1/marcus,|/tank/d/documenti/MARCUS (но не /1/xmarcus)"),
+	HU(986, "dirsize", "-force", "Exact match; /tank/marcus != /tank/MARCUS"),
+	HIT(986, 0x510B822C, "Corrispondenza esatta; /tank/marcus != /tank/MARCUS"),
+	HRU(986, 0x510B822C, "Точное совпадение; /tank/marcus != /tank/MARCUS"),
+	HESEMPI("dirsize", 'b'),
+	HE(987, "dirsize", "Search with 2 parameters", "dirsize z:\\1.zpaq marcus vanessa"),
+	HIT(987, 0x9718F2EB, "Cerca con 2 parametri"),
+	HRU(987, 0x9718F2EB, "Поиск по 2 параметрам"),
+	HE(988, "dirsize", "Getting size (exact, sensitive)", "dirsize z:\\1.zpaq /tank/d/documenti/marcus -force"),
+	HIT(988, 0x39F6BB18, "Dimensione (esatta, maiuscole distinte)"),
+	HRU(988, 0x39F6BB18, "Размер (точно, с учётом регистра)"),
+	HBREVE(989, "dirsize", "Show total folder(s) size"),
+	HIT(989, 0xF2074D97, "Mostra la dimensione totale delle cartelle"),
+	HRU(989, 0xF2074D97, "Показать общий размер папок"),
+#ifdef ZPAQFULL /// NOSFTPSTART
+#ifdef _WIN32
+	/// monitor
+	HU(990, "monitor", "CMD monitor", "Analyze NTFS USN Journal to detect background changes"),
+	HIT(990, 0x0A4A5476, "Analizza il giornale USN di NTFS per|  scoprire i cambiamenti in background"),
+	HRU(990, 0x0A4A5476, "Анализ журнала USN NTFS для обнаружения фоновых изменений"),
+	HU(991, "monitor", "-n <sec>", "Set polling interval in seconds (default: 10)"),
+	HIT(991, 0x0B372D70, "Intervallo di controllo in secondi (default: 10)"),
+	HRU(991, 0x0B372D70, "Интервал опроса в секундах (по умолчанию: 10)"),
+	HU(992, "monitor", "-not -only", "Filter what is listed, as add does"),
+	HIT(992, 0xAA895D06, "Filtra cio' che viene elencato, come fa add"),
+	HRU(992, 0xAA895D06, "Фильтровать выводимое, как это делает add"),
+	HU(993, "monitor", "NOTE:", "Audit mode only. Detects changes but does NOT archive them (yet)"),
+	HIT(993, 0xAAC99AAC, "Solo controllo. Trova i cambiamenti ma NON li archivia (ancora)"),
+	HRU(993, 0xAAC99AAC, "Только аудит. Находит изменения, но НЕ архивирует их (пока)"),
+	HESEMPI("monitor", 'b'),
+	HE(994, "monitor", "Monitor entire C: drive", "monitor z:\\1.zpaq c:\\"),
+	HIT(994, 0xA55D6F4F, "Sorveglia tutta l'unita' C:"),
+	HRU(994, 0xA55D6F4F, "Наблюдать за всем диском C:"),
+	HE(995, "monitor", "Monitor path every 100s", "monitor z:\\1.zpaq c:\\zpaqfranz -n 100"),
+	HIT(995, 0xAFE16F8D, "Sorveglia un percorso ogni 100s"),
+	HRU(995, 0xAFE16F8D, "Наблюдать за путём каждые 100с"),
+	HBREVE(996, "monitor", "Analyze NTFS USN Journal for changes"),
+	HIT(996, 0x83D66B6F, "Analizza il giornale USN di NTFS"),
+	HRU(996, 0x83D66B6F, "Анализ журнала USN NTFS на изменения"),
+	/// sfx
+	HU(997, "sfx", "CMD sfx", "sfx module, with encryption support"),
+	HIT(997, 0x3471E5FE, "modulo sfx, con supporto per la cifratura"),
+	HRU(997, 0x3471E5FE, "модуль sfx с поддержкой шифрования"),
+	HU(998, "sfx", "(no switch)", "Write SFX along the .zpaq"),
+	HIT(998, 0xA98A25E7, "Scrive l'SFX accanto al .zpaq"),
+	HRU(998, 0xA98A25E7, "Записать SFX рядом с .zpaq"),
+	HU(999, "sfx", "(w/switch)", "Convert .zpaq (max 2GB) to Windows .EXE"),
+	HIT(999, 0x4999F3A0, "Converte un .zpaq (max 2GB) in un .EXE Windows"),
+	HRU(999, 0x4999F3A0, "Преобразовать .zpaq (макс. 2GB) в .EXE Windows"),
+	HU(1000, "sfx", "-to X", "Extract the .zpaq from a .exe into X"),
+	HIT(1000, 0x792807EA, "Estrae in X il .zpaq da un .exe"),
+	HRU(1000, 0x792807EA, "Извлечь .zpaq из .exe в X"),
+	HESEMPI("sfx", 'b'),
+	HE(1001, "sfx", "Create  z:\\1.exe", "sfx z:\\1.zpaq"),
+	HIT(1001, 0x8FFCBE00, "Crea  z:\\1.exe"),
+	HRU(1001, 0x8FFCBE00, "Создать  z:\\1.exe"),
+	HE(1002, "sfx", "Convert 1.zpaq to 2.exe", "sfx z:\\1.zpaq -sfx z:\\2.exe"),
+	HIT(1002, 0xC45451DC, "Converte 1.zpaq in 2.exe"),
+	HRU(1002, 0xC45451DC, "Преобразовать 1.zpaq в 2.exe"),
+	HE(1003, "sfx", "Extract sfx module", "sfx z:\\64bit.exe"),
+	HIT(1003, 0x2EE57AE3, "Estrae il modulo sfx"),
+	HRU(1003, 0x2EE57AE3, "Извлечь модуль sfx"),
+	HE(1004, "sfx", "Extract the zpaq (if any)", "sfx z:\\1.exe -to z:\\1.zpaq -space -force"),
+	HIT(1004, 0x43711BE9, "Estrae lo zpaq (se c'e')"),
+	HRU(1004, 0x43711BE9, "Извлечь zpaq (если есть)"),
+	HBREVE(1005, "sfx", "Create SFX module (supports encryption)"),
+	HIT(1005, 0xBBC1F73A, "Crea il modulo SFX (supporta la cifratura)"),
+	HRU(1005, 0xBBC1F73A, "Создать модуль SFX (поддерживает шифрование)"),
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif /// NOSFTPEND
+	/// grep
+	HU(1006, "grep", "CMD grep", "Mini grep|Last parameter is the text to search, the others are folders/files/masks|Case-insensitive (ASCII), line-by-line, no regex"),
+	HIT(1006, 0x160B88EE, "Mini grep|L'ultimo parametro e' il testo da cercare,|gli altri sono cartelle/file/maschere|Senza distinzione di maiuscole (ASCII), riga per riga, niente regex"),
+	HRU(1006, 0x160B88EE, "Мини-grep|Последний параметр - искомый текст, остальные - папки/файлы/маски|Без учёта регистра (ASCII), построчно, без regex"),
+	HU(1007, "grep", "-verbose", "Show all the matching lines, leading spaces trimmed|(of a line over 200 bytes, the part around the match)"),
+	HIT(1007, 0x598F944A, "Mostra tutte le righe che corrispondono, senza|gli spazi iniziali (di una riga oltre i 200|byte, la parte intorno alla corrispondenza)"),
+	HRU(1007, 0x598F944A, "Показать все совпадающие строки без начальных пробелов|(для строки длиннее 200 байт - часть вокруг совпадения)"),
+	HU(1008, "grep", "-all", "Do not skip files with binary extensions (zip, jpg, exe...)|(files with NUL bytes in the first 64 KB are always skipped,|but UTF-16 text with a BOM, which is read as UTF-8)"),
+	HIT(1008, 0xFACD9C82, "Non salta i file con estensioni binarie (zip, jpg, exe...)|(i file con byte NUL nei primi 64 KB si saltano sempre,|tranne il testo UTF-16 con BOM, che si legge come UTF-8)"),
+	HRU(1008, 0xFACD9C82, "Не пропускать файлы с двоичными расширениями|(zip, jpg, exe...) (файлы с байтами NUL в|первых 64 KB пропускаются всегда, кроме текста|UTF-16 с BOM, который читается как UTF-8)"),
+	HU(1009, "grep", "-n X", "Width of the path column in -verbose (default: 40)"),
+	HIT(1009, 0xF8189858, "Larghezza della colonna dei percorsi|  in -verbose (default: 40)"),
+	HRU(1009, 0xF8189858, "Ширина колонки путей в -verbose (по умолчанию: 40)"),
+	HU(1010, "grep", "-debug", "Show unreadable and skipped binary files"),
+	HIT(1010, 0x9A7BDAE0, "Mostra i file illeggibili e i binari saltati"),
+	HRU(1010, 0x9A7BDAE0, "Показать нечитаемые и пропущенные двоичные файлы"),
+	HESEMPI("grep", 'b'),
+	HE(1011, "grep", "First match in each cpp", "grep c:\\*.cpp d:\\ something"),
+	HIT(1011, 0x2362EDC5, "La prima corrispondenza in ogni cpp"),
+	HRU(1011, 0x2362EDC5, "Первое совпадение в каждом cpp"),
+	HE(1012, "grep", "Every matching line", "grep c:\\src something -verbose"),
+	HIT(1012, 0x9435C6AB, "Ogni riga che corrisponde"),
+	HRU(1012, 0x9435C6AB, "Каждая совпадающая строка"),
+	HE(1013, "grep", "Text with spaces (quote it)", "grep c:\\src \"mysql --user\" -verbose"),
+	HIT(1013, 0xFDD32823, "Testo con spazi (tra virgolette)"),
+	HRU(1013, 0xFDD32823, "Текст с пробелами (в кавычках)"),
+	HE(1014, "grep", "Wider path column", "grep c:\\dropbox password -verbose -n 60"),
+	HIT(1014, 0xE4F8E1BF, "Colonna dei percorsi piu' larga"),
+	HRU(1014, 0xE4F8E1BF, "Более широкая колонка путей"),
+	HE(1015, "grep", "Include binary extensions", "grep c:\\dropbox something -all"),
+	HIT(1015, 0xFE9B17FE, "Include le estensioni binarie"),
+	HRU(1015, 0xFE9B17FE, "Включить двоичные расширения"),
+	HBREVE(1016, "grep", "Search (case-insensitive) for text in files"),
+	HIT(1016, 0xCF53A952, "Cerca (senza distinzione di maiuscole) un testo nei file"),
+	HRU(1016, 0xCF53A952, "Поиск текста в файлах (без учёта регистра)"),
+	/// checkpassword
+	HU(1017, "checkpassword", "CMD checkpassword", "Check if password is OK"),
+	HIT(1017, 0xC377F5D9, "Controlla se la password e' giusta"),
+	HRU(1017, 0xC377F5D9, "Проверить, верен ли пароль"),
+	HU(1018, "checkpassword", "-key X", "Use X as password"),
+	HIT(1018, 0x23A815BD, "Usa X come password"),
+	HRU(1018, 0x23A815BD, "Использовать X как пароль"),
+	HESEMPI("checkpassword", 'b'),
+	HE(1019, "checkpassword", "Check if password is pippo", "checkpassword file.zpaq -key pippo"),
+	HIT(1019, 0xA24D2FF1, "Controlla se la password e' pippo"),
+	HRU(1019, 0xA24D2FF1, "Проверить, является ли пароль pippo"),
+	HBREVE(1020, "checkpassword", "Check password"),
+	HIT(1020, 0x3101C198, "Controlla la password"),
+	HRU(1020, 0x3101C198, "Проверить пароль"),
+	/// t
+	HU(1021, "t", "CMD t", "Test|NO PATH:   check all blocks, and CRC-32s of the files|           corresponds to what would be generated by extracting|WITH PATH: compares files/folders in the path(s) with the|           archive's content"),
+	HIT(1021, 0x3DB17D9E, "Test|SENZA PERCORSO: controlla tutti i blocchi, e|           che i CRC-32 dei file corrispondano|           a quelli che uscirebbero estraendo|CON PERCORSO: confronta file/cartelle del percorso con il|           contenuto dell'archivio"),
+	HRU(1021, 0x3DB17D9E, "Тест|БЕЗ ПУТИ: проверяет все блоки и что CRC-32 файлов|           соответствуют тем, что получились бы при извлечении|С ПУТЁМ: сравнивает файлы/папки по пути(ям) с|           содержимым архива"),
+	HU(1022, "t", "-checksum", "Enable hash checksums"),
+	HIT(1022, 0xF29DA522, "Attiva i checksum degli hash"),
+	HRU(1022, 0xF29DA522, "Включить контрольные суммы хешей"),
+	HU(1023, "t", "-verify", "Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE."),
+	HIT(1023, 0xE7792CB0, "Controllo successivo sul filesystem:|  CRC SALVATO==DECOMPRESSO==DAL FILE."),
+	HRU(1023, 0xE7792CB0, "Последующая проверка по ФС: СОХРАНЁННЫЙ|  CRC==РАСПАКОВАННЫЙ==ИЗ ФАЙЛА."),
+	HU(1024, "t", "-verify -ssd", "Multithread verify (do NOT use on spinning drives)"),
+	HIT(1024, 0x57AFE20D, "Verifica multithread (NON usare su dischi meccanici)"),
+	HRU(1024, 0x57AFE20D, "Многопоточная проверка (НЕ использовать на HDD)"),
+	HU(1025, "t", "path -ssd", "With a path: many files compared at once (threads: -t, default all the cores),|the same report. On a console a bar for each thread, as long as what it reads:|green while all is the same, red once a file is not. Not on spinning drives|A file over 256 MB in pieces, read by more threads (lighter grey in the bars);|not with -verify -checksum -paranoid (the hash of the whole file)|Often -t4 is the limit: more threads on the same disk can be slower"), /// 65.14f-h
+	HIT(1025, 0x837EDBFB, "Con un percorso: molti file confrontati insieme (thread: -t,|default tutti i core), lo stesso report. Su una console una barra|per ogni thread, lunga quanto cio' che legge: verde finche' tutto|e' uguale, rossa appena un file non lo e'. Non su dischi meccanici|Un file oltre 256 MB a pezzi, letto da piu' thread (grigio piu' chiaro|nelle barre); non con -verify -checksum -paranoid (l'hash dell'intero file)|Spesso -t4 e' il limite: piu' thread sullo|stesso disco possono essere piu' lenti"),
+	HRU(1025, 0x837EDBFB, "С путём: много файлов сравниваются одновременно (потоки: -t, по умолчанию все|ядра), тот же отчёт. В консоли по индикатору на поток, длиной с читаемое:|зелёный, пока всё совпадает, красный, как только файл не совпал. Не для HDD|Файл больше 256 MB кусками, читается несколькими потоками (светло-серый|в индикаторах); не с -verify -checksum -paranoid (хеш всего файла)|Часто -t4 - предел: больше потоков на одном диске может быть медленнее"),
+	HU(1026, "t", "-find", "pippo   For path-rework of verify"),
+	HIT(1026, 0x33378480, "pippo   Per rimaneggiare i percorsi di verify"),
+	HRU(1026, 0x33378480, "pippo   Для переделки путей в verify"),
+	HU(1027, "t", "-replace", "plu  For path-rework of verify (find and replace)"),
+	HIT(1027, 0x8CE68F68, "plu Per rimaneggiare i percorsi|  di verify (trova e sostituisce)"),
+	HRU(1027, 0x8CE68F68, "plu  Для переделки путей в verify (найти и заменить)"),
+	HU(1028, "t", "-paranoid", "Extract all into -to something, check every file with stored hash|delete every equal files"),
+	HIT(1028, 0x24787144, "Estrae tutto in -to qualcosa, controlla ogni file|con l'hash salvato cancella tutti i file uguali"),
+	HRU(1028, 0x24787144, "Извлечь всё в -to что-то, проверить каждый файл|по сохранённому хешу удалить все совпавшие файлы"),
+	HU(1029, "t", "-collision", "Test collisions"),
+	HIT(1029, 0x304994A6, "Prova le collisioni"),
+	HRU(1029, 0x304994A6, "Проверка коллизий"),
+	HU(1030, "t", "-quick", "Do not check hash, only size/date"),
+	HIT(1030, 0xB5429083, "Non controlla l'hash, solo dimensione/data"),
+	HRU(1030, 0xB5429083, "Не проверять хеш, только размер/дату"),
+	HU(1031, "t", "-crc32", "Run a triple CRC-32 check (!) against the filesystem|Use -find/replace to fix path (if needed); -ssd for M/T"),
+	HIT(1031, 0x11C30BE3, "Fa un triplo controllo dei CRC-32 (!) sul filesystem|Usare -find/replace per sistemare il|percorso (se serve); -ssd per M/T"),
+	HRU(1031, 0x11C30BE3, "Тройная проверка CRC-32 (!) по файловой системе|Используйте -find/replace для исправления|пути (если нужно); -ssd для M/T"),
+	HU(1032, "t", "-ssd", "Run multithread CRC-32 rebuilder / pre .franzen check\n"),
+	HIT(1032, 0xC11E7455, "Ricostruttore multithread dei CRC-32|  / controllo prima di .franzen\n"),
+	HRU(1032, 0xC11E7455, "Многопоточное восстановление CRC-32|  / проверка перед .franzen\n"),
+	HU(1033, "t", "VFILE-info", "The versions that say what they are (a -fast): their number, where they|begin, first fragment and index are checked. Nothing more is read"),
+	HIT(1033, 0x40B8CB3F, "Le versioni che dicono cosa sono (un -fast): il|loro numero, dove cominciano, il primo frammento e|l'indice vengono controllati. Non si legge altro"),
+	HRU(1033, 0x40B8CB3F, "Версии, которые говорят о себе (-fast): их номер, где они начинаются,|первый фрагмент и индекс проверяются. Больше ничего не читается"),
+	HU(1034, "t", "-debug6", "Enforce CRC-32 error\n"),
+	HIT(1034, 0xFE99E481, "Forza un errore CRC-32\n"),
+	HRU(1034, 0xFE99E481, "Вызвать ошибку CRC-32\n"),
+	HESEMPI("t", 'b'),
+	HE(1035, "t", "Last version", "t z:\\1.zpaq"),
+	HIT(1035, 0xE3EF12D5, "Ultima versione"),
+	HRU(1035, 0xE3EF12D5, "Последняя версия"),
+	HE(1036, "t", "All versions", "t z:\\1.zpaq -all"),
+	HIT(1036, 0x2B43A8C9, "Tutte le versioni"),
+	HRU(1036, 0x2B43A8C9, "Все версии"),
+	HE(1037, "t", "Last+Against filesystem, 4 threads", "t z:\\1.zpaq -verify -ssd -t4"),
+	HIT(1037, 0x1AB150DD, "Ultima+contro il filesystem, 4 thread"),
+	HRU(1037, 0x1AB150DD, "Последняя + сверка с ФС, 4 потока"),
+	HE(1038, "t", "Real paranoid: extract all", "t z:\\1.zpaq -to z:\\knb -paranoid"),
+	HIT(1038, 0xB536EAC5, "Paranoico vero: estrae tutto"),
+	HRU(1038, 0xB536EAC5, "Настоящая паранойя: извлечь всё"),
+#ifdef _WIN32 /// 65.14d: -longpath, Windows only
+	HE(1039, "t", "Multiple paranoid check (Win)", "t *.zpaq -to z:\\temp\\ -paranoid -longpath -big"),
+	HIT(1039, 0x6813A0DA, "Controllo paranoico multiplo (Win)"),
+	HRU(1039, 0x6813A0DA, "Многократная параноидальная проверка (Win)"),
+#endif
+	HE(1040, "t", "Multiple test (*NIX)", "t \"/copie/*.zpaq\" "),
+	HIT(1040, 0xC56F7BC9, "Test multiplo (*NIX)"),
+	HRU(1040, 0xC56F7BC9, "Многократный тест (*NIX)"),
+	HE(1041, "t", "Compare with string manipulation", "t z:\\2 c:\\nz -find k:\\nz -replace c:\\nz -verify"),
+	HIT(1041, 0x9C70A5A2, "Confronta manipolando le stringhe"),
+	HRU(1041, 0x9C70A5A2, "Сравнить с обработкой строк"),
+	HE(1042, "t", "All version SHA-1 collisions", "t z:\\1.zpaq -collision -all"),
+	HIT(1042, 0x214A8041, "Collisioni SHA-1 di tutte le versioni"),
+	HRU(1042, 0x214A8041, "Коллизии SHA-1 во всех версиях"),
+	HE(1043, "t", "Triple check CRC-32", "t z:\\1.zpaq -crc32"),
+	HIT(1043, 0x70B21317, "Triplo controllo CRC-32"),
+	HRU(1043, 0x70B21317, "Тройная проверка CRC-32"),
+	HE(1044, "t", "3 check w/path manipulation", "t z:\\1.zpaq -crc32 -find \"x:/memme/\" -replace \"c:/nz/\""),
+	HIT(1044, 0x364F6A74, "3 controlli con manipolazione dei percorsi"),
+	HRU(1044, 0x364F6A74, "3 проверки с обработкой путей"),
+	HTESTO(1045, "t", 'e', 'y', "BEWARE: path(s) changes the logic!"),
+	HIT(1045, 0x575AAE03, "ATTENZIONE: i percorsi cambiano la logica!"),
+	HRU(1045, 0x575AAE03, "ВНИМАНИЕ: пути меняют логику!"),
+	HE(1046, "t", "Fast-SHA1 (nz the source dir)", "t z:\\1.zpaq c:\\nz"),
+	HIT(1046, 0x03AD9D2D, "SHA1 veloce (nz la cartella sorgente)"),
+	HRU(1046, 0x03AD9D2D, "Быстрый SHA1 (nz - исходная папка)"),
+	HE(1047, "t", "SHA1 + hash", "t z:\\1.zpaq c:\\nz -verify"),
+	HIT(1047, 0x1948C09F, "SHA1 + hash"),
+	HRU(1047, 0x1948C09F, "SHA1 + хеш"),
+	HE(1048, "t", "Quick-and-dirty size/date", "t z:\\1.zpaq c:\\nz c:\\kz -quick"),
+	HIT(1048, 0x845C01DB, "Alla buona, dimensione/data"),
+	HRU(1048, 0x845C01DB, "По-быстрому: размер/дата"),
+	HE(1049, "t", "Fast-SHA1, many files at once (SSD)", "t z:\\1.zpaq c:\\nz -ssd"), /// 65.14f
+	HIT(1049, 0xAA5221C4, "SHA1 veloce, molti file insieme (SSD)"),
+	HRU(1049, 0xAA5221C4, "Быстрый SHA1, много файлов одновременно (SSD)"),
+	HE(1050, "t", "The same, 8 threads, and the hashes", "t z:\\1.zpaq c:\\nz -ssd -t8 -verify"), /// 65.14f
+	HIT(1050, 0xD6C2BC11, "Lo stesso, 8 thread, e gli hash"),
+	HRU(1050, 0xD6C2BC11, "То же, 8 потоков, и хеши"),
+	HBREVE(1051, "t", "Test archive integrity or compare with filesystem"),
+	HIT(1051, 0x2FE49501, "Prova l'integrita' dell'archivio o confronta col filesystem"),
+	HRU(1051, 0x2FE49501, "Проверить целостность архива или сравнить с ФС"),
+	/// sync
+	HU(1052, "sync", "CMD sync", "Compare archive content with filesystem folders|Estimate size of new/changed data to be compressed"),
+	HIT(1052, 0x4BC10C35, "Confronta il contenuto dell'archivio|con le cartelle del filesystem|Stima la dimensione dei dati nuovi/cambiati da comprimere"),
+	HRU(1052, 0x4BC10C35, "Сравнить содержимое архива с папками файловой системы|Оценить объём новых/изменённых данных для сжатия"),
+	HU(1053, "sync", "-quick", "Compare only file sizes (skip hash verification)"),
+	HIT(1053, 0x11871621, "Confronta solo le dimensioni dei|  file (senza verificare gli hash)"),
+	HRU(1053, 0x11871621, "Сравнивать только размеры файлов (без проверки хешей)"),
+	HU(1054, "sync", "-ssd", "Use multithreaded hashing for faster processing"),
+	HIT(1054, 0xABF257DB, "Hash multithread per fare prima"),
+	HRU(1054, 0xABF257DB, "Многопоточное хеширование для ускорения"),
+	HESEMPI("sync", 'b'),
+	HE(1055, "sync", "(example) Archive with 3 folders", "a z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut"),
+	HIT(1055, 0x83E27D20, "(esempio) Archivio con 3 cartelle"),
+	HRU(1055, 0x83E27D20, "(пример) Архив с 3 папками"),
+	HE(1056, "sync", "Check all 3 folders against archive", "sync z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut"),
+	HIT(1056, 0xB8566FB9, "Controlla tutte e 3 le cartelle con l'archivio"),
+	HRU(1056, 0xB8566FB9, "Сверить все 3 папки с архивом"),
+	HE(1057, "sync", "Check only 2 specific folders", "sync z:\\1.zpaq c:\\nz c:\\ut"),
+	HIT(1057, 0x0C133E1E, "Controlla solo 2 cartelle precise"),
+	HRU(1057, 0x0C133E1E, "Сверить только 2 определённые папки"),
+	HE(1058, "sync", "Check with multithreaded hashing", "sync z:\\1.zpaq c:\\nz -ssd"),
+	HIT(1058, 0xFB2A1EE9, "Controlla con hash multithread"),
+	HRU(1058, 0xFB2A1EE9, "Сверка с многопоточным хешированием"),
+	HE(1059, "sync", "Quick size-only comparison", "sync z:\\1.zpaq c:\\nz -quick"),
+	HIT(1059, 0xE49EEDC7, "Confronto rapido solo delle dimensioni"),
+	HRU(1059, 0xE49EEDC7, "Быстрое сравнение только размеров"),
+	HE(1060, "sync", "Check specific subfolder only", "sync z:\\1.zpaq c:\\zpaqfranz\\release -ssd"),
+	HIT(1060, 0xE31035DB, "Controlla solo una sottocartella precisa"),
+	HRU(1060, 0xE31035DB, "Сверить только определённую подпапку"),
+	HBREVE(1061, "sync", "Compare archive with filesystem"),
+	HIT(1061, 0xA87A7501, "Confronta l'archivio col filesystem"),
+	HRU(1061, 0xA87A7501, "Сравнить архив с файловой системой"),
+	/// v
+	HU(1062, "v", "CMD   v (verify)", "Verify all files (by hashes) against filesystem"),
+	HIT(1062, 0xFF618A44, "Verifica tutti i file (con gli hash) sul filesystem"),
+	HRU(1062, 0xFF618A44, "Сверить все файлы (по хешам) с файловой системой"),
+	HU(1063, "v", "-ssd", "Multithread (for SSD/NVMe). Do NOT use on spinning drives"),
+	HIT(1063, 0x2805EA2E, "Multithread (per SSD/NVMe). NON usare su dischi meccanici"),
+	HRU(1063, 0x2805EA2E, "Многопоточно (для SSD/NVMe). НЕ использовать на HDD"),
+	HU(1064, "v", "-tX", "Limit -ssd to X threads"),
+	HIT(1064, 0x5735A9CD, "Limita -ssd a X thread"),
+	HRU(1064, 0x5735A9CD, "Ограничить -ssd X потоками"),
+	HU(1065, "v", "-until Y", "Check the version Y"),
+	HIT(1065, 0x2DF23993, "Controlla la versione Y"),
+	HRU(1065, 0x2DF23993, "Проверить версию Y"),
+	HU(1066, "v", "-find", "pippo   For path-rework of verify"),
+	HIT(1066, 0x33378480, "pippo   Per rimaneggiare i percorsi di verify"),
+	HRU(1066, 0x33378480, "pippo   Для переделки путей в verify"),
+	HU(1067, "v", "-replace", "plu  For path-rework of verify (find and replace)"),
+	HIT(1067, 0x8CE68F68, "plu Per rimaneggiare i percorsi|  di verify (trova e sostituisce)"),
+	HRU(1067, 0x8CE68F68, "plu  Для переделки путей в verify (найти и заменить)"),
+	HU(1068, "v", "-verbose", "Show distinct errors"),
+	HIT(1068, 0xD205921B, "Mostra gli errori distinti"),
+	HRU(1068, 0xD205921B, "Показать различные ошибки"),
+	HU(1069, "v", "-debug", "Show a lot of info"),
+	HIT(1069, 0x3AFCBDF7, "Mostra molte informazioni"),
+	HRU(1069, 0x3AFCBDF7, "Показать много сведений"),
+	HU(1070, "v", "-output x.txt", "Put errors in x.txt (alias -out)"),
+	HIT(1070, 0x6E01669A, "Mette gli errori in x.txt (alias -out)"),
+	HRU(1070, 0x6E01669A, "Писать ошибки в x.txt (псевдоним -out)"),
+	HESEMPI("v", 'b'),
+	HE(1071, "v", "Last version", "v z:\\1.zpaq"),
+	HIT(1071, 0xE3EF12D5, "Ultima versione"),
+	HRU(1071, 0xE3EF12D5, "Последняя версия"),
+	HE(1072, "v", "Show errors line by line", "v z:\\1.zpaq -verbose"),
+	HIT(1072, 0x1BA68A62, "Mostra gli errori riga per riga"),
+	HRU(1072, 0x1BA68A62, "Показать ошибки построчно"),
+	HE(1073, "v", "2n version", "v z:\\1.zpaq -until 2"),
+	HIT(1073, 0x26309FAD, "2a versione"),
+	HRU(1073, 0x26309FAD, "2-я версия"),
+	HE(1074, "v", "Remake path", "v z:\\1.zpaq -find c:\\dropbox -replace z:\\knb"),
+	HIT(1074, 0xF2A69625, "Rifa il percorso"),
+	HRU(1074, 0xF2A69625, "Переделать путь"),
+	HE(1075, "v", "1st version, multithread", "v z:\\1.zpaq -until 1 -ssd"),
+	HIT(1075, 0xFACE10C8, "1a versione, multithread"),
+	HRU(1075, 0xFACE10C8, "1-я версия, многопоточно"),
+	HBREVE(1076, "v", "Verify an archive (against filesystem)"),
+	HIT(1076, 0xD6F6164E, "Verifica un archivio (sul filesystem)"),
+	HRU(1076, 0xD6F6164E, "Проверить архив (по файловой системе)"),
+	/// p
+	HU(1077, "p", "CMD p", "Paranoid test|Test the archive (** NOT multipart **) in a very paranoid fashion.|ZPAQ reference decompressor is used to extract blocks in RAM.|Runs on unzpaq206.cpp source instead of 7.15 extract: double check|to avoid the risk of 'silent' bugs. The RAM needed can|quickly become unmanageable (warn: be very careful with 32bit versions)"),
+	HIT(1077, 0xA588CBA8, "Test paranoico|Prova l'archivio (** NON multiparte **) in modo molto paranoico.|Il decompressore di riferimento di ZPAQ estrae i blocchi in RAM.|Usa il sorgente unzpaq206.cpp invece dell'estrazione della 7.15:|doppio controllo per evitare il rischio di bug 'silenziosi'. La|RAM che serve puo' diventare presto ingestibile (attenzione:|molta prudenza con le versioni a 32 bit)"),
+	HRU(1077, 0xA588CBA8, "Параноидальный тест|Проверка архива (** НЕ многотомного **) очень параноидальным способом.|Эталонный распаковщик ZPAQ извлекает блоки в RAM.|Работает на исходнике unzpaq206.cpp вместо извлечения 7.15:|двойная проверка, чтобы избежать 'тихих' ошибок. Нужный объём RAM|может быстро стать неподъёмным (осторожно с 32-битными версиями)"),
+	HU(1078, "p", "-noeta", "Brief"),
+	HIT(1078, 0xB3C47C3F, "Breve"),
+	HRU(1078, 0xB3C47C3F, "Кратко"),
+	HU(1079, "p", "-verbose", "Shows positive checks"),
+	HIT(1079, 0x526656D9, "Mostra i controlli andati bene"),
+	HRU(1079, 0x526656D9, "Показать успешные проверки"),
+	HU(1080, "p", "-verify", "Next level (mine) of paranoia: check hashes against the filesystem.|Essentially equivalent to extracting in a temporary folder and check|against initial folders. For very paranoid people, or debug reason."),
+	HIT(1080, 0xC4CA63A4, "Livello successivo (mio) di paranoia:|controlla gli hash sul filesystem.|In sostanza come estrarre in una cartella temporanea e controllare|con le cartelle iniziali. Per gente molto paranoica, o per debug."),
+	HRU(1080, 0xC4CA63A4, "Следующий (мой) уровень паранойи: сверка хешей с файловой системой.|По сути то же, что извлечь во временную папку и сравнить|с исходными папками. Для очень параноидальных людей или для отладки."),
+	HESEMPI("p", 'b'),
+	HE(1081, "p", "Paranoid, use a lot of RAM", "p z:\\1.zpaq"),
+	HIT(1081, 0xCF8D132D, "Paranoico, usa molta RAM"),
+	HRU(1081, 0xCF8D132D, "Параноидально, много RAM"),
+	HE(1082, "p", "Very paranoid, use a lot of RAM", "p z:\\1.zpaq -verify"),
+	HIT(1082, 0xD7DC2EDB, "Molto paranoico, usa molta RAM"),
+	HRU(1082, 0xD7DC2EDB, "Очень параноидально, много RAM"),
+	HBREVE(1083, "p", "Paranoid archive test (slow, high RAM)"),
+	HIT(1083, 0x410CC11B, "Test paranoico dell'archivio (lento, molta RAM)"),
+	HRU(1083, 0x410CC11B, "Параноидальный тест архива (медленно, много RAM)"),
+#ifndef ANCIENT
+	/// pp
+	HU(1084, "pp", "CMD pp", "Paranoid test of SSD-based archive|Rebuilds and verifies all stored hashes (if present)|Warning: avoid running on large archives stored on HDDs"),
+	HIT(1084, 0x211CD083, "Test paranoico di un archivio su SSD|Ricostruisce e verifica tutti gli hash salvati (se ci sono)|Attenzione: da evitare su archivi|grandi su dischi meccanici"),
+	HRU(1084, 0x211CD083, "Параноидальный тест архива на SSD|Перестраивает и проверяет все сохранённые хеши (если есть)|Внимание: не запускайте на больших архивах на HDD"),
+	HU(1085, "pp", "-noeta", "Brief, no progress ETA"),
+	HIT(1085, 0x72802423, "Breve, senza ETA di avanzamento"),
+	HRU(1085, 0x72802423, "Кратко, без ETA прогресса"),
+	HU(1086, "pp", "-verbose", "Show unsuccessful checks"),
+	HIT(1086, 0xE9703C3E, "Mostra i controlli falliti"),
+	HRU(1086, 0xE9703C3E, "Показать неудачные проверки"),
+	HU(1087, "pp", "-verify", "Re-read files from disk and compare hashes"),
+	HIT(1087, 0xA0659269, "Rilegge i file dal disco e confronta gli hash"),
+	HRU(1087, 0xA0659269, "Перечитать файлы с диска и сравнить хеши"),
+	HU(1088, "pp", "-paranoid", "Bijective check: archive <-> filesystem|  Detects files on disk missing from archive|  Detects files in archive missing from disk|  Detects size mismatches between archive and disk"),
+	HIT(1088, 0xCA8328DD, "Controllo biiettivo: archivio <-> filesystem|  Trova i file sul disco che mancano nell'archivio|  Trova i file nell'archivio che mancano sul disco|  Trova le differenze di dimensione fra archivio e disco"),
+	HRU(1088, 0xCA8328DD, "Биективная проверка: архив <-> файловая система|  Находит файлы на диске, которых нет в архиве|  Находит файлы в архиве, которых нет на диске|  Находит несовпадения размеров между архивом и диском"),
+	HU(1089, "pp", "-n X", "Limit warning output to X lines (counting continues)"),
+	HIT(1089, 0x88F22499, "Limita gli avvisi a X righe (il conteggio continua)"),
+	HRU(1089, 0x88F22499, "Ограничить вывод предупреждений X|  строками (подсчёт продолжается)"),
+	HU(1090, "pp", "-ssd", "Run a pre-franzen check (if any)"),
+	HIT(1090, 0xDEF1076B, "Fa un controllo prima di franzen (se c'e')"),
+	HRU(1090, 0xDEF1076B, "Выполнить проверку перед franzen (если есть)"),
+	HESEMPI("pp", 'b'),
+	HE(1091, "pp", "Use as much RAM as available", "pp z:\\1.zpaq"),
+	HIT(1091, 0xE7C88508, "Usa tutta la RAM disponibile"),
+	HRU(1091, 0xE7C88508, "Использовать всю доступную RAM"),
+	HE(1092, "pp", "Limit RAM usage to 5 GB", "pp z:\\1.zpaq -ramsize 5GB"),
+	HIT(1092, 0x527BF28C, "Limita l'uso della RAM a 5 GB"),
+	HRU(1092, 0x527BF28C, "Ограничить использование RAM до 5 GB"),
+	HE(1093, "pp", "Re-read and verify hashes from disk", "pp j:\\1.zpaq -verify"),
+	HIT(1093, 0xA90156B0, "Rilegge e verifica gli hash dal disco"),
+	HRU(1093, 0xA90156B0, "Перечитать и проверить хеши с диска"),
+	HE(1094, "pp", "Verify with path substitution", "pp j:\\1.zpaq -verify -find \"g:/\" -replace \"u:/omare/g/\""),
+	HIT(1094, 0x2C5C8714, "Verifica sostituendo il percorso"),
+	HRU(1094, 0x2C5C8714, "Проверка с подстановкой пути"),
+	HE(1095, "pp", "Full paranoid test (verify + bijective)", "pp j:\\1.zpaq -verify -paranoid"),
+	HIT(1095, 0x3D960BC2, "Test paranoico completo (verify + biiettivo)"),
+	HRU(1095, 0x3D960BC2, "Полный параноидальный тест (verify + биективный)"),
+	HE(1096, "pp", "Paranoid only (no hash re-read)", "pp j:\\1.zpaq -paranoid"),
+	HIT(1096, 0xEED83B1D, "Solo paranoico (senza rileggere gli hash)"),
+	HRU(1096, 0xEED83B1D, "Только паранойя (без перечитывания хешей)"),
+	HE(1097, "pp", "Pre-check of franzen archive", "pp j:\\1.zpaq.franzen -ssd"),
+	HIT(1097, 0x0BD31DF2, "Controllo preliminare di un archivio franzen"),
+	HRU(1097, 0x0BD31DF2, "Предварительная проверка архива franzen"),
+	HBREVE(1098, "pp", "Paranoid test (prefer SSD-based archive)"),
+	HIT(1098, 0x441C81FA, "Test paranoico (meglio un archivio su SSD)"),
+	HRU(1098, 0x441C81FA, "Параноидальный тест (лучше архив на SSD)"),
+#endif
+	/// c
+	HU(1099, "c", "CMD c", "Compare dirs|Compare a 'master' directory (d0) against N 'slaves' (d1, d2... dN).|This is ideal for verifying replicated folders (e.g., created by zpaq|restore, rsync, robocopy, or ZFS replica), especially across different|filesystems (like Linux NAS and Windows NTFS)|By default check file name and file size (excluding .zfs), not the content."),
+	HIT(1099, 0x8311B6C9, "Confronta cartelle|Confronta una cartella 'master' (d0) con N 'slave' (d1, d2... dN).|Ideale per verificare cartelle replicate (es. create da un ripristino|zpaq, rsync, robocopy, o una replica ZFS), soprattutto fra filesystem|diversi (come un NAS Linux e NTFS di Windows)|Di default controlla nome e dimensione dei|file (esclusi i .zfs), non il contenuto."),
+	HRU(1099, 0x8311B6C9, "Сравнение папок|Сравнивает 'главную' папку (d0) с N 'подчинёнными' (d1, d2... dN).|Идеально для проверки реплицированных папок (созданных восстановлением|zpaq, rsync, robocopy или репликой ZFS), особенно между разными|файловыми системами (например NAS на Linux и NTFS Windows)|По умолчанию проверяет имя и размер файлов (кроме .zfs), но не содержимое."),
+	HU(1100, "c", "-ssd", "Concurrent threads will be created, each scan a slave dir (-t K to limit).|Not recommended for a single spinning drive; ideal for multiple target|directories on different physical disks"),
+	HIT(1100, 0x45D7C0F4, "Vengono creati thread concorrenti, ognuno|legge una cartella slave (-t K per limitarli).|Sconsigliato per un unico disco meccanico; ideale per|piu' cartelle di destinazione su dischi fisici diversi"),
+	HRU(1100, 0x45D7C0F4, "Создаются параллельные потоки, каждый сканирует|подчинённую папку (-t K для ограничения).|Не рекомендуется для одного HDD; идеально для нескольких целевых|папок на разных физических дисках"),
+	HGENERA(0, "c", 'u', 'h', "", ""),
+	HINCLUDI("c", 'u', "@size", 'b'),
+	HU(1101, "c", "-715", "Work as 7.15 (with .zfs and ADS)"),
+	HIT(1101, 0x6CCEBA80, "Lavora come la 7.15 (con .zfs e ADS)"),
+	HRU(1101, 0x6CCEBA80, "Работать как 7.15 (с .zfs и ADS)"),
+	HU(1102, "c", "-forcezfs", "Include .zfs"),
+	HIT(1102, 0xA3DB2332, "Include .zfs"),
+	HRU(1102, 0xA3DB2332, "Включить .zfs"),
+	HU(1103, "c", "-checksum", "Run hash compare"),
+	HIT(1103, 0x8E50DA5D, "Confronta gli hash"),
+	HRU(1103, 0x8E50DA5D, "Сравнивать хеши"),
+	HESEMPI("c", 'b'),
+	HE(1104, "c", "Compare master d0 against d1,d2,d3", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3"),
+	HIT(1104, 0x47ADFCB3, "Confronta il master d0 con d1,d2,d3"),
+	HRU(1104, 0x47ADFCB3, "Сравнить главную d0 с d1,d2,d3"),
+	HE(1105, "c", "Multithread compare", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd"),
+	HIT(1105, 0xAFB40149, "Confronto multithread"),
+	HRU(1105, 0xAFB40149, "Многопоточное сравнение"),
+	HE(1106, "c", "Hashed compare d0 against d1,d2,d3", "c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -checksum -xxh3"),
+	HIT(1106, 0xD355E186, "Confronto con hash di d0 con d1,d2,d3"),
+	HRU(1106, 0xD355E186, "Сравнение по хешам d0 с d1,d2,d3"),
+	HBREVE(1107, "c", "Compare master dir vs slave dir(s)"),
+	HIT(1107, 0x6B561588, "Confronta la cartella master con le slave"),
+	HRU(1107, 0x6B561588, "Сравнить главную папку с подчинёнными"),
+	/// s
+	HU(1108, "s", "CMD s", "Size|Cumulative size of N directory, and free space (estimate for *Nix).|Everything containing .zfs and :$DATA (Windows's ADS) ignored by default|Very quick-and-dirty check of rsynced folders against the master"),
+	HIT(1108, 0xD0B6D8C9, "Dimensione|Dimensione cumulativa di N cartelle, e spazio libero (stima per *Nix).|Tutto cio' che contiene .zfs e :$DATA (gli|ADS di Windows) e' ignorato di default|Controllo molto alla buona delle cartelle|sincronizzate con rsync rispetto al master"),
+	HRU(1108, 0xD0B6D8C9, "Размер|Суммарный размер N папок и свободное место (оценка для *Nix).|Всё, содержащее .zfs и :$DATA (ADS Windows), по умолчанию игнорируется|Очень быстрая и грубая проверка папок после rsync относительно главной"),
+	HU(1109, "s", "-ssd", "for multithreaded executions (warning for single spinning drive)"),
+	HIT(1109, 0xCEE3EF3B, "per esecuzioni multithread (attenzione|  con un unico disco meccanico)"),
+	HRU(1109, 0xCEE3EF3B, "для многопоточного выполнения (осторожно с одним HDD)"),
+	HU(1110, "s", "-minsize X", "Show a warning if free space < X"),
+	HIT(1110, 0x79ED982A, "Mostra un avviso se lo spazio libero e' < X"),
+	HRU(1110, 0x79ED982A, "Показать предупреждение, если свободно < X"),
+	HU(1111, "s", "-715", "Work as 7.15 (with .zfs and ADS)"),
+	HIT(1111, 0x6CCEBA80, "Lavora come la 7.15 (con .zfs e ADS)"),
+	HRU(1111, 0x6CCEBA80, "Работать как 7.15 (с .zfs и ADS)"),
+	HU(1112, "s", "-forcezfs", "Include .zfs"),
+	HIT(1112, 0xA3DB2332, "Include .zfs"),
+	HRU(1112, 0xA3DB2332, "Включить .zfs"),
+	HU(1113, "s", "-home", "Show 1-level cumulative size, with [oldest]-[newest] file date"),
+	HIT(1113, 0x188CEF00, "Dimensione cumulativa del 1o livello, con la|  data del file [piu' vecchio]-[piu' nuovo]"),
+	HRU(1113, 0x188CEF00, "Суммарный размер 1-го уровня с датой|  файла [самый старый]-[самый новый]"),
+	HU(1114, "s", "/os", "With -home, order by size (smaller first)"),
+	HIT(1114, 0x202300E0, "Con -home, ordina per dimensione (prima i piu' piccoli)"),
+	HRU(1114, 0x202300E0, "С -home сортировать по размеру (сначала меньшие)"),
+	HU(1115, "s", "-ignore", "Do not show file errors (ex. ERROR_ACCESS_DENIED)"),
+	HIT(1115, 0x845FA93C, "Non mostra gli errori sui file (es. ERROR_ACCESS_DENIED)"),
+	HRU(1115, 0x845FA93C, "Не показывать ошибки файлов (напр. ERROR_ACCESS_DENIED)"),
+	HU(1116, "s", "-verbose", "With -home, also show oldest/newest filename and full timestamp"),
+	HIT(1116, 0xA8F21664, "Con -home, mostra anche il nome del file|  piu' vecchio/nuovo e data e ora complete"),
+	HRU(1116, 0xA8F21664, "С -home показать также имя самого|  старого/нового файла и полную метку времени"),
+	HESEMPI("s", 'b'),
+	HE(1117, "s", "Dir cumulative size (no .zfs/NTFS)", "s r:\\vbox s:\\uno"),
+	HIT(1117, 0xEDD1AEB1, "Dimensione cumulativa (senza .zfs/NTFS)"),
+	HRU(1117, 0xEDD1AEB1, "Суммарный размер папки (без .zfs/NTFS)"),
+	HE(1118, "s", "Multithreaded size", "s r:\\vbox s:\\uno -ssd"),
+	HIT(1118, 0x8A6747BC, "Dimensione in multithread"),
+	HRU(1118, 0x8A6747BC, "Многопоточный размер"),
+	HE(1119, "s", "(Kind of) size of c:\\users", "s c:\\users -home -ssd -ignore"),
+	HIT(1119, 0x28CE105C, "Dimensione (piu' o meno) di c:\\users"),
+	HRU(1119, 0x28CE105C, "(Примерный) размер c:\\users"),
+	HE(1120, "s", "Find 'cold' (unused) folders", "s c:\\users -home -verbose"),
+	HIT(1120, 0xE7BEF1E6, "Trova le cartelle 'fredde' (non usate)"),
+	HRU(1120, 0xE7BEF1E6, "Найти 'холодные' (неиспользуемые) папки"),
+	HE(1121, "s", "Subfolders by size, biggest last", "s c:\\users -home /os"),
+	HIT(1121, 0x89B9C287, "Sottocartelle per dimensione, la piu' grande in fondo"),
+	HRU(1121, 0x89B9C287, "Подпапки по размеру, самая большая последней"),
+	HBREVE(1122, "s", "Show dir(s) size and free disk space"),
+	HIT(1122, 0xE8A68FA2, "Mostra la dimensione delle cartelle e lo spazio libero"),
+	HRU(1122, 0xE8A68FA2, "Показать размер папок и свободное место на диске"),
+	/// oneonone
+	HU(1123, "oneonone", "CMD 1on1", "Julius Erving and Larry Bird Go One on One|Deduplicate a folder against another one"),
+	HIT(1123, 0xCD62D826, "Julius Erving e Larry Bird vanno One on One|Deduplica una cartella rispetto a un'altra"),
+	HRU(1123, 0xCD62D826, "Julius Erving и Larry Bird играют One on One|Дедупликация одной папки относительно другой"),
+	HU(1124, "oneonone", "-deleteinto X", "Delete corresponding files found in directory X"),
+	HIT(1124, 0xB47C8BDA, "Cancella i file corrispondenti trovati nella cartella X"),
+	HRU(1124, 0xB47C8BDA, "Удалить соответствующие файлы, найденные в папке X"),
+	HU(1125, "oneonone", "-checksum", "Rely only on checksums, not filenames"),
+	HIT(1125, 0xA73CC8D3, "Si basa solo sui checksum, non sui nomi dei file"),
+	HRU(1125, 0xA73CC8D3, "Полагаться только на контрольные суммы, а не на имена"),
+	/// scrivi_riga("-zero", "Deduplicate 0-length files too");
+	HU(1126, "oneonone", "-ssd", "Enable multithreading (use with care on single spinning drives)"),
+	HIT(1126, 0x9543DAFC, "Attiva il multithread (attenzione con un unico disco meccanico)"),
+	HRU(1126, 0x9543DAFC, "Включить многопоточность (осторожно с одним HDD)"),
+	HU(1127, "oneonone", "-forcezfs", "Do not exclude zfs files (default: IGNORE)"),
+	HIT(1127, 0x5C91F681, "Non esclude i file zfs (default: IGNORA)"),
+	HRU(1127, 0x5C91F681, "Не исключать файлы zfs (по умолчанию: ИГНОРИРОВАТЬ)"),
+	HU(1128, "oneonone", "-kill", "Perform a wet run (default is a dry run)"),
+	HIT(1128, 0xAB992CE3, "Esecuzione vera (il default e' una prova a secco)"),
+	HRU(1128, 0xAB992CE3, "Выполнить по-настоящему (по умолчанию пробный прогон)"),
+	HU(1129, "oneonone", "-home", "Only compare the two folders"),
+	HIT(1129, 0xA12A7B1C, "Confronta solo le due cartelle"),
+	HRU(1129, 0xA12A7B1C, "Только сравнить две папки"),
+	HESEMPI("oneonone", 'b'),
+	HE(1130, "oneonone", "Dry run, =hash,=filename,multithread", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -ssd"),
+	HIT(1130, 0xB4DCE5C5, "Prova a secco, =hash, =nome, multithread"),
+	HRU(1130, 0xB4DCE5C5, "Пробный прогон, =хеш, =имя, многопоточно"),
+	HE(1131, "oneonone", "Real run (0-length files too)", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -kill"),
+	HIT(1131, 0x175C3929, "Esecuzione vera (anche file lunghi 0)"),
+	HRU(1131, 0x175C3929, "Настоящий прогон (и файлы нулевой длины)"),
+	HE(1132, "oneonone", "Real run, with XXH3, with *", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -xxh3 -kill -forcezfs"),
+	HIT(1132, 0x3260CB77, "Esecuzione vera, con XXH3, con *"),
+	HRU(1132, 0x3260CB77, "Настоящий прогон, с XXH3, с *"),
+	HE(1133, "oneonone", "Compare folder", "1on1 c:\\ f:\\ -home -xxh3 -ssd"),
+	HIT(1133, 0x84F62848, "Confronta la cartella"),
+	HRU(1133, 0x84F62848, "Сравнить папку"),
+	HBREVE(1134, "oneonone", "Delete/compare folder2 file(s) matching folder1's name/hash"),
+	HIT(1134, 0x14F4488C, "Cancella/confronta file di folder2 uguali (nome/hash) a folder1"),
+	HRU(1134, 0x14F4488C, "Удалить/сравнить файлы folder2, совпавшие с folder1 (имя/хеш)"),
+	/// r
+	HU(1135, "r", "CMD r", "'robocopy'|Mirror a master folder, just like robocopy /mir or rsync -a --delete|to one or more slave (destination) folders"),
+	HIT(1135, 0x2E6B5B64, "'robocopy'|Rende identica una cartella master, proprio come robocopy /mir o|rsync -a --delete in una o piu' cartelle slave (di destinazione)"),
+	HRU(1135, 0x2E6B5B64, "'robocopy'|Зеркалирует главную папку, как robocopy /mir или rsync -a --delete,|в одну или несколько подчинённых (целевых) папок"),
+	HINCLUDI("r", 'u', "@sub", 'b'),
+	HU(1136, "r", " ", "ENFORCING XLS, ignore .zfs and ADS by default"),
+	HIT(1136, 0x9B2AF225, "XLS FORZATI, .zfs e ADS ignorati di default"),
+	HRU(1136, 0x9B2AF225, "XLS ПРИНУДИТЕЛЬНО, .zfs и ADS по умолчанию игнорируются"),
+	HU(1137, "r", "", "ENFORCING XLS, ignore .zfs and ADS by default"),
+	HIT(1137, 0x9B2AF225, "XLS FORZATI, .zfs e ADS ignorati di default"),
+	HRU(1137, 0x9B2AF225, "XLS ПРИНУДИТЕЛЬНО, .zfs и ADS по умолчанию игнорируются"),
+	HU(1138, "r", "-kill", "wet run (default: dry-run"),
+	HIT(1138, 0xBCD3EE2E, "esecuzione vera (default: prova a secco"),
+	HRU(1138, 0xBCD3EE2E, "настоящий прогон (по умолчанию: пробный"),
+	HU(1139, "r", "-space", "do not exit if not enough space reported"),
+	HIT(1139, 0xD214A252, "non esce se lo spazio risulta insufficiente"),
+	HRU(1139, 0xD214A252, "не прерываться, если сообщается о нехватке места"),
+	HU(1140, "r", "-ssd", "run one thread for folder"),
+	HIT(1140, 0x34A2EA67, "un thread per cartella"),
+	HRU(1140, 0x34A2EA67, "один поток на папку"),
+	HU(1141, "r", "-verify", "after copy quick check if OK (only filename and size)"),
+	HIT(1141, 0xA4C1FD78, "dopo la copia controllo rapido (solo nome e dimensione)"),
+	HRU(1141, 0xA4C1FD78, "после копирования быстрая проверка (только имя и размер)"),
+	HU(1142, "r", "-checksum", "heavy (hash) test of equality. Suggest: -xxh3 fast and reliable."),
+	HIT(1142, 0x45D64EF9, "test pesante (hash) di uguaglianza.|  Consiglio: -xxh3 veloce e affidabile."),
+	HRU(1142, 0x45D64EF9, "тяжёлая (по хешу) проверка равенства.|  Совет: -xxh3 быстрый и надёжный."),
+	HINCLUDI("r", 'u', "@size", 'b'),
+	HU(1143, "r", "-xls", "Do not enforce backup of XLS/PPT"),
+	HIT(1143, 0x9CFDF3DA, "Non forza il backup di XLS/PPT"),
+	HRU(1143, 0x9CFDF3DA, "Не принуждать backup XLS/PPT"),
+	HU(1144, "r", "-715", "Work as 7.15 (with .zfs and ADS)"),
+	HIT(1144, 0x6CCEBA80, "Lavora come la 7.15 (con .zfs e ADS)"),
+	HRU(1144, 0x6CCEBA80, "Работать как 7.15 (с .zfs и ADS)"),
+	HU(1145, "r", "-forcezfs", "Include .zfs"),
+	HIT(1145, 0xA3DB2332, "Include .zfs"),
+	HRU(1145, 0xA3DB2332, "Включить .zfs"),
+	HU(1146, "r", "-append", "Only append data (*risky, use with zpaq archives)"),
+	HIT(1146, 0xF08559D4, "Accoda solo i dati (*rischioso, da usare con archivi zpaq)"),
+	HRU(1146, 0xF08559D4, "Только дописывать данные (*рискованно, для архивов zpaq)"),
+	HU(1147, "r", "-zero", "Fill all output file with zeros (for debug)"),
+	HIT(1147, 0xDD9D0C5E, "Riempie di zeri tutto il file di output (per debug)"),
+	HRU(1147, 0xDD9D0C5E, "Заполнить весь выходной файл нулями (для отладки)"),
+	HU(1148, "r", "-verbose", "Show internal timings"),
+	HIT(1148, 0xE2E61E96, "Mostra i tempi interni"),
+	HRU(1148, 0xE2E61E96, "Показать внутренние замеры времени"),
+	HU(1149, "r", "-buffer X", "Use a input buffer of X bytes (default: 1MB)"),
+	HIT(1149, 0x6485ED65, "Buffer di input di X byte (default: 1MB)"),
+	HRU(1149, 0x6485ED65, "Входной буфер X байт (по умолчанию: 1MB)"),
+	HU(1150, "r", "-pakka", "Check-before-touch (faster for big tree over LAN)"),
+	HIT(1150, 0x53A81005, "Controlla prima di toccare (piu'|  veloce per alberi grandi in LAN)"),
+	HRU(1150, 0x53A81005, "Проверка перед изменением (быстрее|  для больших деревьев по LAN)"),
+#ifdef _WIN32
+	HU(1151, "r", "-big", "Special Windows function for big files over LAN"),
+	HIT(1151, 0xB23A722A, "Funzione speciale di Windows per file grandi in LAN"),
+	HRU(1151, 0xB23A722A, "Особая функция Windows для больших файлов по LAN"),
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	HU(1152, "r", "-bandwidth X", "Limit to X the write rate"),
+	HIT(1152, 0x91F75A01, "Limita a X la velocita' di scrittura"),
+	HRU(1152, 0x91F75A01, "Ограничить скорость записи до X"),
+	HESEMPI("r", 'b'),
+	HE(1153, "r", "Robocopy d0 in d1,d2      (dry run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3"),
+	HIT(1153, 0x1113E157, "Robocopy d0 in d1,d2      (prova a secco)"),
+	HRU(1153, 0x1113E157, "Robocopy d0 в d1,d2       (пробный прогон)"),
+	HE(1154, "r", "Robocopy d0 in d1,d2      (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill"),
+	HIT(1154, 0x0FBDA0D0, "Robocopy d0 in d1,d2      (esecuzione VERA)"),
+	HRU(1154, 0x0FBDA0D0, "Robocopy d0 в d1,d2       (НАСТОЯЩИЙ прогон)"),
+	HE(1155, "r", "Robocopy with verify      (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify"),
+	HIT(1155, 0xA2C215E7, "Robocopy con verifica     (esecuzione VERA)"),
+	HRU(1155, 0xA2C215E7, "Robocopy с проверкой      (НАСТОЯЩИЙ прогон)"),
+	HE(1156, "r", "Robocopy with hash verify (WET run)", "r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3"),
+	HIT(1156, 0x6AF40F21, "Robocopy con verifica hash (esecuzione VERA)"),
+	HRU(1156, 0x6AF40F21, "Robocopy с проверкой хеша (НАСТОЯЩИЙ прогон)"),
+	HE(1157, "r", "Robocopy d0 in d1, forced (WET run)", "r c:\\d0 k:\\d1 j:\\d2 -kill -space"),
+	HIT(1157, 0x4A0EED83, "Robocopy d0 in d1, forzato (esecuzione VERA)"),
+	HRU(1157, 0x4A0EED83, "Robocopy d0 в d1, принудительно (НАСТОЯЩИЙ прогон)"),
+	HE(1158, "r", "Robocopy append mode      (WET run)", "r c:\\d0 z:\\backup_%day -append -kill"),
+	HIT(1158, 0x241B3915, "Robocopy in accodamento   (esecuzione VERA)"),
+	HRU(1158, 0x241B3915, "Robocopy с дописыванием   (НАСТОЯЩИЙ прогон)"),
+	HE(1159, "r", "Robocopy d0 in d1,w/infos (WET run)", "r c:\\d0 k:\\d1 -kill -verbose"),
+	HIT(1159, 0xC2F233B1, "Robocopy d0 in d1,con info (esecuzione VERA)"),
+	HRU(1159, 0xC2F233B1, "Robocopy d0 в d1,со сведениями (НАСТОЯЩИЙ прогон)"),
+	HE(1160, "r", "Robocopy d0=>d1 over LAN  (WET run)", "r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka"),
+	HIT(1160, 0x79A77C83, "Robocopy d0=>d1 in LAN    (esecuzione VERA)"),
+	HRU(1160, 0x79A77C83, "Robocopy d0=>d1 по LAN    (НАСТОЯЩИЙ прогон)"),
+#ifdef _WIN32
+	HE(1161, "r", "Huge file to NAS (Windows)(WET run)", "r c:\\d0 \\\\nas\\share\\d1 -kill -big"),
+	HIT(1161, 0x5E900FE5, "File enorme su NAS (Windows)(esecuzione VERA)"),
+	HRU(1161, 0x5E900FE5, "Огромный файл на NAS (Windows)(НАСТОЯЩИЙ прогон)"),
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	HE(1162, "r", "Robocopy only huge files  (WET run)", "r c:\\d0 z:\\dest -kill -minsize 10GB"),
+	HIT(1162, 0x1A62750A, "Robocopy solo file enormi (esecuzione VERA)"),
+	HRU(1162, 0x1A62750A, "Robocopy только огромных  (НАСТОЯЩИЙ прогон)"),
+	HE(1163, "r", "Robocopy only E01 files   (WET run)", "r c:\\d0 z:\\dest -kill -only *.e01"),
+	HIT(1163, 0x10DDE9A1, "Robocopy solo file E01    (esecuzione VERA)"),
+	HRU(1163, 0x10DDE9A1, "Robocopy только файлов E01 (НАСТОЯЩИЙ прогон)"),
+	HE(1164, "r", "Robocopy limited to 100MB/s (WET run)", "r c:\\d0 k:\\d1 -kill -bandwidth 100M"),
+	HIT(1164, 0x0F680ECD, "Robocopy limitato a 100MB/s (esecuzione VERA)"),
+	HRU(1164, 0x0F680ECD, "Robocopy с ограничением 100MB/s (НАСТОЯЩИЙ прогон)"),
+	HBREVE(1165, "r", "Robocopy master to multiple slave folders"),
+	HIT(1165, 0xF3C1475F, "Robocopy di un master su piu' cartelle slave"),
+	HRU(1165, 0xF3C1475F, "Robocopy главной папки в несколько подчинённых"),
+	/// cp
+	HU(1166, "cp", "CMD cp", "'friendly copy'|Copy files (with wildcards) into -to folder|with 1 sec progression feedback. Huge file, tiny bandwidth|and unreliable media (-verify)|By default overwrite, use -paranoid to create unique name|One file on a console: the map of the file while it is copied"),
+	HIT(1166, 0xCA5E35A2, "'copia amichevole'|Copia file (con caratteri jolly) nella cartella -to|con un avanzamento ogni secondo. File enormi, poca banda|e supporti inaffidabili (-verify)|Di default sovrascrive, -paranoid per creare un nome unico|Un file su una console: la mappa|del file mentre viene copiato"),
+	HRU(1166, 0xCA5E35A2, "'дружелюбное копирование'|Копирует файлы (с шаблонами) в папку -to с|отображением прогресса раз в секунду. Огромные|файлы, узкий канал и ненадёжные носители (-verify)|По умолчанию перезаписывает, -paranoid создаёт уникальное имя|Один файл в консоли: карта файла во время копирования"),
+	HU(1167, "cp", "-verify", "Copy by pieces: each one written, read back, XXH3 checked|A piece that differs is written again (3 times), then error"),
+	HIT(1167, 0x74AD65D6, "Copia a pezzi: ognuno scritto,|riletto, controllato con XXH3|Un pezzo che differisce viene|riscritto (3 volte), poi errore"),
+	HRU(1167, 0x74AD65D6, "Копирование кусками: каждый записывается,|перечитывается, проверяется XXH3|Несовпавший кусок пишется заново (3 раза), затем ошибка"),
+	HU(1168, "cp", "-n X", "With -verify: pieces of X% (default 10%, at most 1GB)"),
+	HIT(1168, 0x2FF7F61A, "Con -verify: pezzi dell'X% (default 10%, al massimo 1GB)"),
+	HRU(1168, 0x2FF7F61A, "С -verify: куски по X% (по умолчанию 10%, не больше 1GB)"),
+	HU(1169, "cp", "-chunk X", "With -verify: files under X in one piece (default 100MB)"),
+	HIT(1169, 0xB09BC747, "Con -verify: file sotto X in un pezzo solo (default 100MB)"),
+	HRU(1169, 0xB09BC747, "С -verify: файлы меньше X одним куском (по умолчанию 100MB)"),
+	HU(1170, "cp", "-paranoid", "Rename output file to do not overwrite"),
+	HIT(1170, 0xC5554AE4, "Rinomina il file di output per non sovrascrivere"),
+	HRU(1170, 0xC5554AE4, "Переименовать выходной файл, чтобы не перезаписывать"),
+	HU(1171, "cp", "-append", "Only append data (use with zpaq archives): resumable|The part already there must be the beginning of the source|(quick hash); with -verify its last piece is read back too"),
+	HIT(1171, 0xA1BC6C9F, "Accoda solo i dati (da usare con|archivi zpaq): si puo' riprendere|La parte gia' presente deve essere l'inizio|della sorgente (hash rapido); con -verify|si rilegge anche il suo ultimo pezzo"),
+	HRU(1171, 0xA1BC6C9F, "Только дописывать данные (для|архивов zpaq): можно продолжить|Уже имеющаяся часть должна быть началом источника (быстрый|хеш); с -verify перечитывается и её последний кусок"),
+	HU(1172, "cp", "-force", "Do no check if destination is writeable"),
+	HIT(1172, 0xB5393C91, "Non controlla se la destinazione e' scrivibile"),
+	HRU(1172, 0xB5393C91, "Не проверять возможность записи в назначение"),
+	HU(1173, "cp", "-space", "Do no check if enough destination free space"),
+	HIT(1173, 0x316DEBF6, "Non controlla se c'e' abbastanza|  spazio libero a destinazione"),
+	HRU(1173, 0x316DEBF6, "Не проверять, хватает ли места в назначении"),
+	HESEMPI("cp", 'b'),
+	HE(1174, "cp", "Copy k:\\*.mp4 d:\\a.txt in z:\\pluto", "cp k:\\*.mp4 d:\\a.txt -to z:\\pluto"),
+	HIT(1174, 0x4C2206DA, "Copia k:\\*.mp4 d:\\a.txt in z:\\pluto"),
+	HRU(1174, 0x4C2206DA, "Копировать k:\\*.mp4 d:\\a.txt в z:\\pluto"),
+	HE(1175, "cp", "Copy with verify", "cp k:\\*.mp4 -to z:\\pluto -verify"),
+	HIT(1175, 0xD4C138A1, "Copia con verifica"),
+	HRU(1175, 0xD4C138A1, "Копирование с проверкой"),
+	HE(1176, "cp", "Copy WITHOUT overwrite", "cp k:\\*.mp4 -to z:\\pluto -paranoid"),
+	HIT(1176, 0xF430717D, "Copia SENZA sovrascrivere"),
+	HRU(1176, 0xF430717D, "Копирование БЕЗ перезаписи"),
+	HE(1177, "cp", "Resumable copy (append only)", "cp k:\\*.zpaq -to z:\\pluto -append"),
+	HIT(1177, 0x49845D75, "Copia che si puo' riprendere (solo accodamento)"),
+	HRU(1177, 0x49845D75, "Копирование с возобновлением (только дописывание)"),
+	HE(1178, "cp", "Resumable, checked by pieces of 5%", "cp k:\\*.zpaq -to z:\\pluto -append -verify -n 5"),
+	HIT(1178, 0x806FC755, "Si puo' riprendere, controllata a pezzi del 5%"),
+	HRU(1178, 0x806FC755, "С возобновлением, проверка кусками по 5%"),
+	HBREVE(1179, "cp", "Friendly file copy with ETA (resumable)"),
+	HIT(1179, 0x381EA15C, "Copia amichevole di file con ETA (si puo' riprendere)"),
+	HRU(1179, 0x381EA15C, "Дружелюбное копирование файлов с ETA (с возобновлением)"),
+#ifdef ZPAQFULL /// NOSFTPSTART
+	/// zfs
+	HU(0, "zfs", "On UNIX you get some zfs-specific commands", ""),
+	HU(0, "zfs", "--- Enumerate / delete snapshots / sizeof", ""),
+	HU(0, "zfs", "zfslist", ""),
+	HU(0, "zfs", "zfspurge", ""),
+	HU(0, "zfs", "zfssize", ""),
+	HU(0, "zfs", "--- Freezing snapshot inside archive", ""),
+	HU(0, "zfs", "zfsadd", ""),
+	HU(0, "zfs", "--- Make / restore zfs backups inside zpaq", ""),
+	HU(0, "zfs", "zfsbackup", ""),
+	HU(0, "zfs", "zfsreceive", ""),
+	HU(0, "zfs", "zfsrestore", ""),
+	HU(0, "zfs", "--- Make / restore zfs backups of proxmox VM", ""),
+	HU(0, "zfs", "zfsproxbackup", ""),
+	HU(0, "zfs", "zfsproxrestore", ""),
+	HTESTO(1180, "zfs", 'e', 0, "Ask extensive help, example zpaqfranz h zfsadd       zpaqfranz h zfslist"),
+	HIT(1180, 0x3BFD8EEB, "Chiedere l'help esteso, es. zpaqfranz h zfsadd       zpaqfranz h zfslist"),
+	HRU(1180, 0x3BFD8EEB, "Подробная справка, напр. zpaqfranz h zfsadd       zpaqfranz h zfslist"),
+	HBREVE(1181, "zfs", "Bunch of zfs-specific commands"),
+	HIT(1181, 0x01B5C12C, "Un mucchio di comandi specifici per zfs"),
+	HRU(1181, 0x01B5C12C, "Набор команд, специфичных для zfs"),
+	/// zfsadd
+	HU(1182, "zfsadd", "CMD zfsadd", "Freeze a selection of snapshots into an archive|Optional subfolder as 3rd parameter"),
+	HIT(1182, 0xDCAFFDFC, "Congela una selezione di snapshot in un archivio|Sottocartella facoltativa come 3o parametro"),
+	HRU(1182, 0xDCAFFDFC, "Заморозить выбранные снапшоты в архив|Необязательная подпапка третьим параметром"),
+	HU(1183, "zfsadd", "-script", "pi.sh Write a script-ready on pi.sh (alias -out)"),
+	HIT(1183, 0x5B5AFE67, "pi.sh Scrive uno script pronto su pi.sh (alias -out)"),
+	HRU(1183, 0x5B5AFE67, "pi.sh Записать готовый скрипт в pi.sh (псевдоним -out)"),
+	HU(1184, "zfsadd", "-force", "Do the freezing (wet run)"),
+	HIT(1184, 0xAA67E2E1, "Fa il congelamento (esecuzione vera)"),
+	HRU(1184, 0xAA67E2E1, "Выполнить заморозку (настоящий прогон)"),
+	HESEMPI("zfsadd", 'b'),
+	HE(0, "zfsadd", " ", "!USE THE DOUBLEQUOTES!"),
+	HE(0, "zfsadd", " ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!"),
+	HE(0, "zfsadd", " ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\""),
+	HE(0, "zfsadd", " ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\""),
+	HE(0, "zfsadd", " ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -force"),
+	HE(0, "zfsadd", " ", "zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -script ./dothejob.sh"),
+	HBREVE(1185, "zfsadd", "Freeze zfs' snapshots inside the archive"),
+	HIT(1185, 0xDB56A7EA, "Congela gli snapshot zfs dentro l'archivio"),
+	HRU(1185, 0xDB56A7EA, "Заморозить снапшоты zfs внутри архива"),
+	/// zfspurge
+	HU(1186, "zfspurge", "CMD zfspurge", "Destroy selected zfs snapshot (works like zfslist)"),
+	HIT(1186, 0xEC33D6C8, "Distrugge gli snapshot zfs scelti (funziona come zfslist)"),
+	HRU(1186, 0xEC33D6C8, "Удалить выбранные снапшоты zfs (работает как zfslist)"),
+	HU(1187, "zfspurge", "-script", "pi.sh Write a script-ready on pi.sh (alias -out)"),
+	HIT(1187, 0x5B5AFE67, "pi.sh Scrive uno script pronto su pi.sh (alias -out)"),
+	HRU(1187, 0x5B5AFE67, "pi.sh Записать готовый скрипт в pi.sh (псевдоним -out)"),
+	HESEMPI("zfspurge", 'b'),
+	HE(0, "zfspurge", " ", "!USE THE DOUBLEQUOTES!"),
+	HE(0, "zfspurge", " ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!"),
+	HE(0, "zfspurge", " ", "zfspurge \"tank/d@2021\" \"--60d\""),
+	HE(0, "zfspurge", " ", "zfspurge \"*\" \"*\""),
+	HE(0, "zfspurge", " ", "zfspurge \"tank\" \"--7d\""),
+	HE(0, "zfspurge", " ", "zfspurge \"tank\" \"--7d\" -script mygoodscript.sh"),
+	HBREVE(1188, "zfspurge", "Purge snapshots with wildcards"),
+	HIT(1188, 0xE89D4C18, "Elimina gli snapshot con caratteri jolly"),
+	HRU(1188, 0xE89D4C18, "Удалить снапшоты по шаблону"),
+	/// zfslist
+	HU(1189, "zfslist", "CMD zfslist", "Show (/filtering) existing zfs snapshot"),
+	HIT(1189, 0x6F7B9CE0, "Mostra (/filtra) gli snapshot zfs esistenti"),
+	HRU(1189, 0x6F7B9CE0, "Показать (/отфильтровать) существующие снапшоты zfs"),
+	HU(1190, "zfslist", "-script", "pi.sh Write a script-ready on pi.sh (alias -out)"),
+	HIT(1190, 0x5B5AFE67, "pi.sh Scrive uno script pronto su pi.sh (alias -out)"),
+	HRU(1190, 0x5B5AFE67, "pi.sh Записать готовый скрипт в pi.sh (псевдоним -out)"),
+	HESEMPI("zfslist", 'b'),
+	HESEMPIO(0, "zfslist", 'E', " ", "!USE THE DOUBLEQUOTES!"),
+	HESEMPIO(0, "zfslist", 'E', " ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!"),
+	HESEMPIO(0, "zfslist", 'E', " ", "zfslist  \"tank/d@\""),
+	HESEMPIO(0, "zfslist", 'E', " ", "zfslist  \"*\""),
+	HESEMPIO(0, "zfslist", 'E', " ", "zfslist  \"*\" \"syncoid\""),
+	HESEMPIO(0, "zfslist", 'E', " ", "zfslist  \"*\" \"10d\" -script pippo.sh"),
+	HBREVE(1191, "zfslist", "List zfs' snapshots with wildcard"),
+	HIT(1191, 0x669110F2, "Elenca gli snapshot zfs con caratteri jolly"),
+	HRU(1191, 0x669110F2, "Список снапшотов zfs по шаблону"),
+	/// zfssize
+	HU(1192, "zfssize", "CMD zfssize", "Show (/filtering) the SIZE of existing zfs snapshot"),
+	HIT(1192, 0xDD2AF715, "Mostra (/filtra) la DIMENSIONE degli snapshot zfs esistenti"),
+	HRU(1192, 0xDD2AF715, "Показать (/отфильтровать) РАЗМЕР существующих снапшотов zfs"),
+	HESEMPI("zfssize", 'b'),
+	HESEMPIO(0, "zfssize", 'E', " ", "!USE THE DOUBLEQUOTES!"),
+	HESEMPIO(0, "zfssize", 'E', " ", "BEWARE of single -  \"-pippo\" DOES NOT WORK!"),
+	HESEMPIO(0, "zfssize", 'E', " ", "zfssize  \"tank/d@\""),
+	HESEMPIO(0, "zfssize", 'E', " ", "zfssize  \"*\""),
+	HESEMPIO(0, "zfssize", 'E', " ", "zfssize  \"*\" \"syncoid\""),
+	HESEMPIO(0, "zfssize", 'E', " ", "zfssize  \"*\" \"10d\" -script pippo.sh"),
+	HBREVE(1193, "zfssize", "List zfs' SIZE of snapshots with wildcard"),
+	HIT(1193, 0x9B89D36C, "Elenca la DIMENSIONE degli snapshot zfs con caratteri jolly"),
+	HRU(1193, 0x9B89D36C, "Список РАЗМЕРОВ снапшотов zfs по шаблону"),
+	/// zfsproxbackup
+	HU(1194, "zfsproxbackup", "CMD zfsproxbackup", "|Archiving proxmox backups (from zfs local storage)|Getting VM disks from /var/lib/vz"),
+	HIT(1194, 0x22401FA0, "|Archiviazione dei backup di|proxmox (dallo storage locale zfs)|Prende i dischi delle VM da /var/lib/vz"),
+	HRU(1194, 0x22401FA0, "|Архивация backup proxmox (из локального хранилища zfs)|Диски VM берутся из /var/lib/vz"),
+	HU(1195, "zfsproxbackup", "-force", "Destroy temporary snapshot (before backup)"),
+	HIT(1195, 0xA33284B0, "Distrugge lo snapshot temporaneo (prima del backup)"),
+	HRU(1195, 0xA33284B0, "Удалить временный снапшот (до backup)"),
+	HU(1196, "zfsproxbackup", "-kill", "Remove snapshot (after backup)"),
+	HIT(1196, 0x89F53F92, "Toglie lo snapshot (dopo il backup)"),
+	HRU(1196, 0x89F53F92, "Удалить снапшот (после backup)"),
+	HU(1197, "zfsproxbackup", "-all", "Get all VM"),
+	HIT(1197, 0xAD006E49, "Prende tutte le VM"),
+	HRU(1197, 0xAD006E49, "Взять все VM"),
+	HU(1198, "zfsproxbackup", "-not", "Do not backup (exclude)"),
+	HIT(1198, 0x4B617E28, "Non fa il backup (esclude)"),
+	HRU(1198, 0x4B617E28, "Не делать backup (исключить)"),
+	HU(1199, "zfsproxbackup", "-snapshot kj", "Make 'snapname' to kj (default: francoproxmox)"),
+	HIT(1199, 0x70B22E00, "'snapname' diventa kj (default: francoproxmox)"),
+	HRU(1199, 0x70B22E00, "Задать 'snapname' равным kj (по умолчанию: francoproxmox)"),
+	HESEMPI("zfsproxbackup", 'b'),
+	HE(1200, "zfsproxbackup", "Backup/encrypt w/key 'pippo' VM 200", "zfsproxbackup /bak/200.zpaq 200 -force -kill -key pippo"),
+	HIT(1200, 0x316036DF, "Backup/cifratura con chiave 'pippo' della VM 200"),
+	HRU(1200, 0x316036DF, "Backup/шифрование с ключом 'pippo' VM 200"),
+	HE(1201, "zfsproxbackup", "Backup 2 VMs: 200 and 300", "zfsproxbackup /bak/200_300.zpaq 200 300"),
+	HIT(1201, 0x312DCDDD, "Backup di 2 VM: 200 e 300"),
+	HRU(1201, 0x312DCDDD, "Backup 2 VM: 200 и 300"),
+	HE(1202, "zfsproxbackup", "Backup ALL VMs", "zfsproxbackup /bak/all.zpaq  -all -force -kill"),
+	HIT(1202, 0x66834246, "Backup di TUTTE le VM"),
+	HRU(1202, 0x66834246, "Backup ВСЕХ VM"),
+	HE(1203, "zfsproxbackup", "Backup all EXCEPT 200 and 300", "zfsproxbackup /bak/part.zpaq -all -not 200 -not 300 -force -kill"),
+	HIT(1203, 0x3CF4EABB, "Backup di tutte TRANNE 200 e 300"),
+	HRU(1203, 0x3CF4EABB, "Backup всех, КРОМЕ 200 и 300"),
+	HBREVE(1204, "zfsproxbackup", "Backup of proxmox on zfs"),
+	HIT(1204, 0x9ABE2F1D, "Backup di proxmox su zfs"),
+	HRU(1204, 0x9ABE2F1D, "Backup proxmox на zfs"),
+	/// zfsproxrestore
+	HU(1205, "zfsproxrestore", "CMD zfsproxrestore", "Restore proxmox backups (on local storage)"),
+	HIT(1205, 0x82F65A49, "Ripristina i backup di proxmox (sullo storage locale)"),
+	HRU(1205, 0x82F65A49, "Восстановить backup proxmox (в локальное хранилище)"),
+#ifndef _WIN32
+	HU(1206, "zfsproxrestore", " ", "into /var/lib/vz and /etc/pve/qemu-server"),
+	HIT(1206, 0x98447F6F, "in /var/lib/vz e /etc/pve/qemu-server"),
+	HRU(1206, 0x98447F6F, "в /var/lib/vz и /etc/pve/qemu-server"),
+	HU(1207, "zfsproxrestore", " ", "Without files selection restore everything"),
+	HIT(1207, 0x9F8829CD, "Senza scegliere i file ripristina tutto"),
+	HRU(1207, 0x9F8829CD, "Без выбора файлов восстанавливается всё"),
+#endif
+	HU(1208, "zfsproxrestore", " ", "Files can be a sequence of WMIDs (ex. 200 300)"),
+	HIT(1208, 0xE0B5F569, "I file possono essere una sequenza di WMID (es. 200 300)"),
+	HRU(1208, 0xE0B5F569, "Файлы могут быть последовательностью WMID (напр. 200 300)"),
+	HU(1209, "zfsproxrestore", "-kill", "Remove snapshot (after backup)"),
+	HIT(1209, 0x89F53F92, "Toglie lo snapshot (dopo il backup)"),
+	HRU(1209, 0x89F53F92, "Удалить снапшот (после backup)"),
+	HU(1210, "zfsproxrestore", "-not", "Do not restore (exclude)"),
+	HIT(1210, 0x7EF9AFBE, "Non ripristina (esclude)"),
+	HRU(1210, 0x7EF9AFBE, "Не восстанавливать (исключить)"),
+	HESEMPI("zfsproxrestore", 'b'),
+	HE(1211, "zfsproxrestore", "Restore all VMs", "zfsproxrestore /backup/allvm.zpaq"),
+	HIT(1211, 0x696C5210, "Ripristina tutte le VM"),
+	HRU(1211, 0x696C5210, "Восстановить все VM"),
+	HE(1212, "zfsproxrestore", "Restore 2 VMs: 200 and 300", "zfsproxrestore /backup/allvm.zpaq 200 300"),
+	HIT(1212, 0x62A971C7, "Ripristina 2 VM: 200 e 300"),
+	HRU(1212, 0x62A971C7, "Восстановить 2 VM: 200 и 300"),
+	HE(1213, "zfsproxrestore", "Restore VM 200, release snapshot", "zfsproxrestore /backup/allvm.zpaq 200 -kill"),
+	HIT(1213, 0xB464AEF3, "Ripristina la VM 200, rilascia lo snapshot"),
+	HRU(1213, 0xB464AEF3, "Восстановить VM 200, освободить снапшот"),
+	HE(1214, "zfsproxrestore", "Restore all VMs, except 200", "zfsproxrestore /backup/allvm.zpaq -not 200 -kill"),
+	HIT(1214, 0x71A50A0F, "Ripristina tutte le VM, tranne la 200"),
+	HRU(1214, 0x71A50A0F, "Восстановить все VM, кроме 200"),
+	HBREVE(1215, "zfsproxrestore", "Restore of proxmox on zfs"),
+	HIT(1215, 0xC6438EE7, "Ripristino di proxmox su zfs"),
+	HRU(1215, 0xC6438EE7, "Восстановление proxmox на zfs"),
+	/// zfsbackup
+	HU(1216, "zfsbackup", "CMD zfsbackup", "Backup w/incremental zfs snapshots for long-term storage|Usually root privileges required"),
+	HIT(1216, 0xAF1061D6, "Backup con snapshot zfs incrementali per conservare a lungo|Di solito servono i privilegi di root"),
+	HRU(1216, 0xAF1061D6, "Backup с инкрементными снапшотами zfs для долгого хранения|Обычно нужны права root"),
+	HU(1217, "zfsbackup", "-snapshot kj", "Make 'snapname' to kj (default: zpaqfranco)"),
+	HIT(1217, 0x08DAA85D, "'snapname' diventa kj (default: zpaqfranco)"),
+	HRU(1217, 0x08DAA85D, "Задать 'snapname' равным kj (по умолчанию: zpaqfranco)"),
+	HESEMPI("zfsbackup", 'b'),
+	HE(1218, "zfsbackup", "Update tank/d backup,retain snapshot", "zfsbackup /tmp/incr.zpaq tank/d"),
+	HIT(1218, 0xCC6165EC, "Aggiorna il backup di tank/d, tiene lo snapshot"),
+	HRU(1218, 0xCC6165EC, "Обновить backup tank/d, сохранить снапшот"),
+	HE(1219, "zfsbackup", "Update tank backup,delete snapshot", "zfsbackup /tmp/incr.zpaq tank -kill"),
+	HIT(1219, 0x6FE3361F, "Aggiorna il backup di tank, cancella lo snapshot"),
+	HRU(1219, 0x6FE3361F, "Обновить backup tank, удалить снапшот"),
+	HE(1220, "zfsbackup", "Update tank/d backup,w/hashdeep", "zfsbackup /tmp/incr.zpaq tank/d"),
+	HIT(1220, 0x33A14061, "Aggiorna il backup di tank/d, con hashdeep"),
+	HRU(1220, 0x33A14061, "Обновить backup tank/d, с hashdeep"),
+	HE(1221, "zfsbackup", "Choose snapmark to 'mycopy'", "zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy"),
+	HIT(1221, 0x7BAAF045, "Sceglie lo snapmark 'mycopy'"),
+	HRU(1221, 0x7BAAF045, "Выбрать snapmark 'mycopy'"),
+	HBREVE(1222, "zfsbackup", "Backup of zfs' streams"),
+	HIT(1222, 0xC94B66BF, "Backup degli stream zfs"),
+	HRU(1222, 0xC94B66BF, "Backup потоков zfs"),
+	/// zfsrestore
+	HU(1223, "zfsrestore", "CMD zfsrestore", "Prepare a script for restoring from EXTRACTED .zfs backup files"),
+	HIT(1223, 0x799997CC, "Prepara uno script per ripristinare|  da file di backup .zfs ESTRATTI"),
+	HRU(1223, 0x799997CC, "Подготовить скрипт восстановления|  из ИЗВЛЕЧЁННЫХ файлов backup .zfs"),
+	HU(1224, "zfsrestore", "-snapshot kj", "Make 'snapname' to kj (default: franco)"),
+	HIT(1224, 0x1D92361D, "'snapname' diventa kj (default: franco)"),
+	HRU(1224, 0x1D92361D, "Задать 'snapname' равным kj (по умолчанию: franco)"),
+	HESEMPI("zfsrestore", 'b'),
+	HE(1225, "zfsrestore", "Restore *.zfs into /rez to rpool/rk", "zfsrestore /rez rpool/rk -script myscript.sh"),
+	HIT(1225, 0x749C0851, "Ripristina *.zfs da /rez in rpool/rk"),
+	HRU(1225, 0x749C0851, "Восстановить *.zfs из /rez в rpool/rk"),
+	HE(1226, "zfsrestore", "Restore *.zfs into /rez to rpool/rk", "zfsrestore /rez rpool/rk -script myscript.sh -snapshot ugo"),
+	HIT(1226, 0x749C0851, "Ripristina *.zfs da /rez in rpool/rk"),
+	HRU(1226, 0x749C0851, "Восстановить *.zfs из /rez в rpool/rk"),
+	HBREVE(1227, "zfsrestore", "Restore from extracted .zfs stream"),
+	HIT(1227, 0x78519A66, "Ripristina da uno stream .zfs estratto"),
+	HRU(1227, 0x78519A66, "Восстановить из извлечённого потока .zfs"),
+	/// zfsreceive
+	HU(1228, "zfsreceive", "CMD zfsreceive", "Prepare a script for restoring from zpaq archive"),
+	HIT(1228, 0x2A930EA6, "Prepara uno script per ripristinare da un archivio zpaq"),
+	HRU(1228, 0x2A930EA6, "Подготовить скрипт восстановления из архива zpaq"),
+	HU(1229, "zfsreceive", "-snapshot", "kj  Make 'snapname' to kj (default: franco)"),
+	HIT(1229, 0xF5A58E72, "kj  'snapname' diventa kj (default: franco)"),
+	HRU(1229, 0xF5A58E72, "kj  Задать 'snapname' равным kj (по умолчанию: franco)"),
+	HESEMPI("zfsreceive", 'b'),
+	HE(1230, "zfsreceive", "Rebuild rpool/restored from archive", "zfsreceive /tmp/ordinato.zpaq rpool/restored -script myscript.sh"),
+	HIT(1230, 0x90DAA4F3, "Ricostruisce rpool/restored dall'archivio"),
+	HRU(1230, 0x90DAA4F3, "Перестроить rpool/restored из архива"),
+	HBREVE(1231, "zfsreceive", "Restore (with zfs) from zpaq archive"),
+	HIT(1231, 0x2D5073A1, "Ripristina (con zfs) da un archivio zpaq"),
+	HRU(1231, 0x2D5073A1, "Восстановить (через zfs) из архива zpaq"),
+#endif /// NOSFTPEND
+	/// z
+	HU(1232, "z", "CMD z", "Delete empty directories, zero length|Remove empty directories in d0...dK folders. Conservative (ex hidden Thumbs.db)"),
+	HIT(1232, 0xEA5680DD, "Cancella le cartelle vuote, lunghezza zero|Toglie le cartelle vuote nelle cartelle|d0...dK. Prudente (es. Thumbs.db nascosti)"),
+	HRU(1232, 0xEA5680DD, "Удалить пустые папки, нулевой длины|Удаляет пустые папки в d0...dK. Осторожно (напр. скрытые Thumbs.db)"),
+	HU(1233, "z", "-kill", "Do a wet run (default dry run)"),
+	HIT(1233, 0x3329A01E, "Esecuzione vera (default prova a secco)"),
+	HRU(1233, 0x3329A01E, "Настоящий прогон (по умолчанию пробный)"),
+	HU(1234, "z", "-verbose", "Show infos"),
+	HIT(1234, 0x7E887D21, "Mostra informazioni"),
+	HRU(1234, 0x7E887D21, "Показать сведения"),
+#ifdef _WIN32
+	HU(1235, "z", "-longpath", "Extracting on Windows filenames longer than 255"),
+	HIT(1235, 0xD4E12AC0, "Estrazione su Windows di nomi piu' lunghi di 255"),
+	HRU(1235, 0xD4E12AC0, "Извлечение в Windows имён длиннее 255"),
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	HESEMPI("z", 'b'),
+	HE(1236, "z", "Delete empty dirs in d0,d1(dry run)", "z c:\\d0 k:\\d1"),
+	HIT(1236, 0xB4084346, "Cancella le cartelle vuote in d0,d1 (prova a secco)"),
+	HRU(1236, 0xB4084346, "Удалить пустые папки в d0,d1 (пробный прогон)"),
+#ifdef _WIN32 /// 65.14d: -longpath is Windows only
+	HE(1237, "z", "Delete empty dirs in d0,d1(WET run)", "z c:\\d0 k:\\d1 -kill -longpath"),
+	HIT(1237, 0xC33AB5C9, "Cancella le cartelle vuote in d0,d1 (esecuzione VERA)"),
+	HRU(1237, 0xC33AB5C9, "Удалить пустые папки в d0,d1 (НАСТОЯЩИЙ прогон)"),
+#else
+	HE(1238, "z", "Delete empty dirs in d0,d1(WET run)", "z c:\\d0 k:\\d1 -kill"),
+	HIT(1238, 0xC33AB5C9, "Cancella le cartelle vuote in d0,d1 (esecuzione VERA)"),
+	HRU(1238, 0xC33AB5C9, "Удалить пустые папки в d0,d1 (НАСТОЯЩИЙ прогон)"),
+#endif
+	HBREVE(1239, "z", "Remove empty directories"),
+	HIT(1239, 0x9E355CFF, "Toglie le cartelle vuote"),
+	HRU(1239, 0x9E355CFF, "Удалить пустые папки"),
+	/// m
+	HU(1240, "m", "CMD m", "merge, consolidate|Merge a split (multipart) archive into a single one,|just like a concatenated cat or copy /b"),
+	HIT(1240, 0xEFDBDFC3, "merge, consolidate|Unisce un archivio diviso (multiparte) in uno solo,|proprio come un cat concatenato o copy /b"),
+	HRU(1240, 0xEFDBDFC3, "merge, consolidate|Объединяет разбитый (многотомный) архив в один,|как конкатенация cat или copy /b"),
+	HU(1241, "m", "-force", "Overwrite existing output"),
+	HIT(1241, 0x8EB6D264, "Sovrascrive l'output esistente"),
+	HRU(1241, 0x8EB6D264, "Перезаписать существующий результат"),
+	HU(1242, "m", "-space", "Ignore lack of free space"),
+	HIT(1242, 0x419EAE17, "Ignora la mancanza di spazio libero"),
+	HRU(1242, 0x419EAE17, "Игнорировать нехватку свободного места"),
+	HU(1243, "m", "-verify", "Double-check (XXH3 hash test)"),
+	HIT(1243, 0x1406A327, "Doppio controllo (test con hash XXH3)"),
+	HRU(1243, 0x1406A327, "Двойная проверка (тест хешем XXH3)"),
+	HESEMPI("m", 'b'),
+	HE(1244, "m", "Merge (consolidate) multipart", "m \"p:\\test\\prova_???\" z:\\cons.zpaq -verify"),
+	HIT(1244, 0x39631CBB, "Unisce (consolida) un multiparte"),
+	HRU(1244, 0x39631CBB, "Объединить (консолидировать) многотомный"),
+	HBREVE(1245, "m", "Merge multipart archive into one"),
+	HIT(1245, 0x54EDD919, "Unisce un archivio multiparte in uno solo"),
+	HRU(1245, 0x54EDD919, "Объединить многотомный архив в один"),
+	/// d
+	HU(1246, "d", "CMD d", "Deduplicate|Find and delete duplicate files in a single folder, and in all that is below.|WARNING: This operation is destructive!|A folder, or a folder and what to search: d c:\\dir\\*.mp4, or (as find) d c:\\dir\\ *.mp4|Of the files with the same content the first one by name stays, the others go"),
+	HIT(1246, 0x5FFB6063, "Deduplica|Trova e cancella i file duplicati in una cartella, e in tutto cio' che sta sotto.|ATTENZIONE: questa operazione e' distruttiva!|Una cartella, o una cartella e cosa cercare:|d c:\\dir\\*.mp4, o (come find) d c:\\dir\\ *.mp4|Dei file con lo stesso contenuto resta il primo per nome, gli altri se ne vanno"),
+	HRU(1246, 0x5FFB6063, "Дедупликация|Находит и удаляет файлы-дубликаты в папке и во всём, что ниже.|ВНИМАНИЕ: операция разрушительная!|Папка, или папка и что искать: d c:\\dir\\*.mp4, или (как find) d c:\\dir\\ *.mp4|Из файлов с одинаковым содержимым остаётся первый по имени, остальные удаляются"),
+	HU(1247, "d", "-ssd", "Multithread run"),
+	HIT(1247, 0xE3CA2673, "Esecuzione multithread"),
+	HRU(1247, 0xE3CA2673, "Многопоточный запуск"),
+	HU(1248, "d", "-force", "Wet run (default: dry-run)"),
+	HIT(1248, 0x1DC51825, "Esecuzione vera (default: prova a secco)"),
+	HRU(1248, 0x1DC51825, "Настоящий прогон (по умолчанию: пробный)"),
+	HU(1249, "d", "-verbose", "Show the duplicated files in groups: the first (with its date) stays, the ==== ones go;|  then what the group gives back and its hash. Smallest saving first, biggest last.|  Hard links (names of the same file: nothing freed) in yellow, not counted in the total"),
+	HIT(1249, 0xCB47FFC4, "Mostra i file duplicati a gruppi: il primo (con la sua data) resta,|  quelli con ==== se ne vanno; poi cosa rende il gruppo e il suo|  hash. Prima il risparmio piu' piccolo, in fondo il piu' grande.|  Gli hard link (nomi dello stesso file: non si|  libera nulla) in giallo, non contati nel totale"),
+	HRU(1249, 0xCB47FFC4, "Показать дубликаты группами: первый (с датой) остаётся, помеченные ==== удаляются;|  затем, что даёт группа, и её хеш. Сначала наименьшая экономия, в конце наибольшая.|  Hard link (имена одного файла: ничего не освобождается) жёлтым, не входят в итог"),
+	HU(1250, "d", "-find X", "Only the files with X in the name (as find, grep -i)"),
+	HIT(1250, 0x05670318, "Solo i file con X nel nome (come find, grep -i)"),
+	HRU(1250, 0x05670318, "Только файлы с X в имени (как find, grep -i)"),
+	HU(1251, "d", "-minsize X", "Only the files from X bytes up (-maxsize: up to X); -only, -not, -datefrom, -dateto too"),
+	HIT(1251, 0xDC64137B, "Solo i file da X byte in su (-maxsize: fino a X); anche -only, -not, -datefrom, -dateto"),
+	HRU(1251, 0xDC64137B, "Только файлы от X байт (-maxsize: до X); также -only, -not, -datefrom, -dateto"),
+	HU(1252, "d", "-zero", "Leave the empty files alone (by default they are all duplicates of each other)"),
+	HIT(1252, 0x97171694, "Lascia stare i file vuoti (di default sono tutti duplicati l'uno dell'altro)"),
+	HRU(1252, 0x97171694, "Не трогать пустые файлы (по умолчанию все они дубликаты друг друга)"),
+	HU(1253, "d", "-norecursion", "Only that folder, not what is below"),
+	HIT(1253, 0xEA731236, "Solo quella cartella, non cio' che sta sotto"),
+	HRU(1253, 0xEA731236, "Только эта папка, без того, что ниже"),
+	HU(1254, "d", "-(somehash)", "Use (somehash), one of the available next two lines, for detection (default: xxh3)"),
+	HIT(1254, 0x9583A35B, "Usa (somehash), uno di quelli delle prossime|  due righe, per riconoscerli (default: xxh3)"),
+	HRU(1254, 0x9583A35B, "Использовать (somehash), один из указанных в двух|  следующих строках, для обнаружения (по умолчанию: xxh3)"),
+	HGENERA(0, "d", 'u', 'h', "", ""),
+	HESEMPI("d", 'b'),
+	HE(1255, "d", "Deduplicate d0 (dry run, w/xxh3)", "d c:\\d0\\"),
+	HIT(1255, 0x3372B847, "Deduplica d0 (prova a secco, con xxh3)"),
+	HRU(1255, 0x3372B847, "Дедупликация d0 (пробный прогон, xxh3)"),
+	HE(1256, "d", "Only the .mp4 of u: (dry run)", "d u:\\*.mp4"),
+	HIT(1256, 0x7138477A, "Solo gli .mp4 di u: (prova a secco)"),
+	HRU(1256, 0x7138477A, "Только .mp4 на u: (пробный прогон)"),
+	HE(1257, "d", "The same, the big ones, no empty files", "d u:\\ *.mp4 -minsize 100MB -zero"),
+	HIT(1257, 0x13BAA06D, "Lo stesso, quelli grandi, niente file vuoti"),
+	HRU(1257, 0x13BAA06D, "То же, большие файлы, без пустых"),
+	HE(1258, "d", "Deduplicate d0 (dry run,xxh3,M/T)", "d c:\\d0\\ -ssd"),
+	HIT(1258, 0x484228EF, "Deduplica d0 (prova a secco, xxh3, M/T)"),
+	HRU(1258, 0x484228EF, "Дедупликация d0 (пробный прогон, xxh3, M/T)"),
+	HE(1259, "d", "Deduplicate d0 WITHOUT MERCY (wet)", "d c:\\d0\\ -force"),
+	HIT(1259, 0x2E86F79E, "Deduplica d0 SENZA PIETA' (vera)"),
+	HRU(1259, 0x2E86F79E, "Дедупликация d0 БЕЗ ПОЩАДЫ (по-настоящему)"),
+	HE(1260, "d", "Dedup WITHOUT MERCY (wet run,sha256)", "d c:\\d0\\ -force -sha256"),
+	HIT(1260, 0xABDADADE, "Deduplica SENZA PIETA' (vera, sha256)"),
+	HRU(1260, 0xABDADADE, "Дедупликация БЕЗ ПОЩАДЫ (по-настоящему, sha256)"),
+	HBREVE(1261, "d", "Deduplicate file(s) in folder (no mercy)"),
+	HIT(1261, 0x166FE626, "Deduplica i file in una cartella (senza pieta')"),
+	HRU(1261, 0x166FE626, "Дедупликация файлов в папке (без пощады)"),
+	/// mysqldump
+	HU(1262, "mysqldump", "CMD mysqldump", "Dump all MySQL/MariaDB databases|Requires 'mysql' (or 'mariadb') and 'mysqldump' (or 'mariadb-dump')"),
+	HIT(1262, 0xCB6AFF61, "Dump di tutti i database MySQL/MariaDB|Servono 'mysql' (o 'mariadb') e 'mysqldump' (o 'mariadb-dump')"),
+	HRU(1262, 0xCB6AFF61, "Дамп всех баз данных MySQL/MariaDB|Нужны 'mysql' (или 'mariadb') и 'mysqldump' (или 'mariadb-dump')"),
+#ifdef _WIN32
+	HU(1263, "mysqldump", " ", "On Windows, append '.exe' to executable names [of course]"),
+	HIT(1263, 0xFEB669E4, "Su Windows, aggiungere '.exe' ai|  nomi degli eseguibili [ovviamente]"),
+	HRU(1263, 0xFEB669E4, "В Windows добавляйте '.exe' к именам|  исполняемых файлов [разумеется]"),
+#endif
+	HU(1264, "mysqldump", " ", "Use one of these methods to locate executables:"),
+	HIT(1264, 0x47923CAE, "Uno di questi modi per trovare gli eseguibili:"),
+	HRU(1264, 0x47923CAE, "Один из способов найти исполняемые файлы:"),
+	HU(1265, "mysqldump", " ", "- Specify path with -bin something"),
+	HIT(1265, 0xE3DA1F4E, "- Il percorso con -bin qualcosa"),
+	HRU(1265, 0xE3DA1F4E, "- Указать путь через -bin something"),
+	HU(1266, "mysqldump", " ", "- Let the program search automatically (default)"),
+	HIT(1266, 0xB0B4E8F7, "- Lasciare che il programma cerchi da solo (default)"),
+	HRU(1266, 0xB0B4E8F7, "- Позволить программе искать самой (по умолчанию)"),
+#ifdef _WIN32
+	HU(1267, "mysqldump", " ", "- Use -space to download from the Internet (Windows only)"),
+	HIT(1267, 0x724F2E83, "- -space per scaricarli da Internet (solo Windows)"),
+	HRU(1267, 0x724F2E83, "- -space для загрузки из Интернета (только Windows)"),
+#endif
+	HU(1268, "mysqldump", "-bin path", "Path where mysql/mariadb(.exe) and mysqldump/mariadb-dump(.exe) are located"),
+	HIT(1268, 0x0C3FF715, "Percorso dove stanno mysql/mariadb(.exe) e mysqldump/mariadb-dump(.exe)"),
+	HRU(1268, 0x0C3FF715, "Путь, где находятся mysql/mariadb(.exe) и mysqldump/mariadb-dump(.exe)"),
+#ifdef _WIN32
+	HU(1269, "mysqldump", "-space", "Download mysql.exe and mysqldump.exe from the Internet"),
+	HIT(1269, 0x08586B62, "Scarica mysql.exe e mysqldump.exe da Internet"),
+	HRU(1269, 0x08586B62, "Скачать mysql.exe и mysqldump.exe из Интернета"),
+#endif
+	HU(1270, "mysqldump", "-u user", "MySQL/MariaDB username"),
+	HIT(1270, 0x3BDFADF6, "Utente MySQL/MariaDB"),
+	HRU(1270, 0x3BDFADF6, "Имя пользователя MySQL/MariaDB"),
+	HU(1271, "mysqldump", "-p password", "MySQL/MariaDB password (use quotes if it contains spaces)"),
+	HIT(1271, 0xACFE92E2, "Password MySQL/MariaDB (tra virgolette se contiene spazi)"),
+	HRU(1271, 0xACFE92E2, "Пароль MySQL/MariaDB (в кавычках, если есть пробелы)"),
+	HU(1272, "mysqldump", "-h host", "MySQL/MariaDB host (e.g., localhost or IP address)"),
+	HIT(1272, 0xC6EC5EC4, "Host MySQL/MariaDB (es. localhost o un indirizzo IP)"),
+	HRU(1272, 0xC6EC5EC4, "Хост MySQL/MariaDB (напр. localhost или IP-адрес)"),
+	HU(1273, "mysqldump", "-P port", "MySQL/MariaDB port (default: 3306)"),
+	HIT(1273, 0x41E673E3, "Porta MySQL/MariaDB (default: 3306)"),
+	HRU(1273, 0x41E673E3, "Порт MySQL/MariaDB (по умолчанию: 3306)"),
+	HU(1274, "mysqldump", "-key pwd", "Password for encrypting the ZPAQ archive"),
+	HIT(1274, 0x44D542B9, "Password per cifrare l'archivio ZPAQ"),
+	HRU(1274, 0x44D542B9, "Пароль для шифрования архива ZPAQ"),
+	HU(1275, "mysqldump", "-mX", "ZPAQ compression method (X = 0-5, none to highest)"),
+	HIT(1275, 0x0B02DF83, "Metodo di compressione ZPAQ (X =|  0-5, da nessuna alla massima)"),
+	HRU(1275, 0x0B02DF83, "Метод сжатия ZPAQ (X = 0-5, от отсутствия до максимального)"),
+	HU(1276, "mysqldump", "-verbose", "Be... verbose"),
+	HIT(1276, 0x5F266848, "Sii... prolisso"),
+	HRU(1276, 0x5F266848, "Быть... многословным"),
+	HU(1277, "mysqldump", "-only", "pattern Select only databases containing the specified text or matching pattern|-only 2015 matches any DB containing '2015' (e.g., db2015, test2015prod)"),
+	HIT(1277, 0x982F95A5, "pattern Sceglie solo i database che contengono|il testo o corrispondono al pattern|-only 2015 prende ogni DB che contiene '2015' (es. db2015, test2015prod)"),
+	HRU(1277, 0x982F95A5, "pattern Выбрать только базы, содержащие текст или соответствующие шаблону|-only 2015 подходит любой БД с '2015' (напр. db2015, test2015prod)"),
+	HU(1278, "mysqldump", "-not", "pattern  Exclude databases containing the specified text or matching pattern|-not temp matches any DB containing 'temp' (e.g., temporary, temp_db)|*** Note: System databases (information_schema, performance_schema,|    sys) are automatically excluded"),
+	HIT(1278, 0xA02F805D, "pattern Esclude i database che contengono|il testo o corrispondono al pattern|-not temp prende ogni DB che contiene 'temp' (es. temporary, temp_db)|*** Nota: i database di sistema (information_schema, performance_schema,|    sys) sono esclusi da soli"),
+	HRU(1278, 0xA02F805D, "pattern  Исключить базы, содержащие текст или соответствующие шаблону|-not temp подходит любой БД с 'temp' (напр. temporary, temp_db)|*** Примечание: системные базы (information_schema, performance_schema,|    sys) исключаются автоматически"),
+	HESEMPI("mysqldump", 'b'),
+	HE(1279, "mysqldump", "Dump all databases (Windows)", "mysqldump z:\\1.zpaq -u root -p pluto -h 127.0.0.1 -P 3306 -key pippo -m2"),
+	HIT(1279, 0xB45D431E, "Dump di tutti i database (Windows)"),
+	HRU(1279, 0xB45D431E, "Дамп всех баз данных (Windows)"),
+	HE(1280, "mysqldump", "Get tools from Internet (Windows)", "mysqldump z:\\1.zpaq -u root -p pluto -space"),
+	HIT(1280, 0x173919FD, "Prende gli strumenti da Internet (Windows)"),
+	HRU(1280, 0x173919FD, "Взять утилиты из Интернета (Windows)"),
+	HE(1281, "mysqldump", "Auto-search on Linux", "mysqldump /tmp/test.zpaq -u root -p pluto"),
+	HIT(1281, 0x750C102C, "Ricerca automatica su Linux"),
+	HRU(1281, 0x750C102C, "Автопоиск в Linux"),
+	HE(1282, "mysqldump", "Specify path on Linux", "mysqldump /tmp/test.zpaq -u root -p pluto -bin \"/bin\""),
+	HIT(1282, 0x44A52576, "Percorso dato su Linux"),
+	HRU(1282, 0x44A52576, "Указать путь в Linux"),
+	HE(1283, "mysqldump", "Include databases with '2015'", "mysqldump test.zpaq -u root -p pluto -only 2015"),
+	HIT(1283, 0x8030F01F, "Include i database con '2015'"),
+	HRU(1283, 0x8030F01F, "Включить базы с '2015'"),
+	HE(1284, "mysqldump", "Exclude databases with 'geo'", "mysqldump test.zpaq -u root -p pluto -not geo"),
+	HIT(1284, 0x6DBFEA02, "Esclude i database con 'geo'"),
+	HRU(1284, 0x6DBFEA02, "Исключить базы с 'geo'"),
+	HE(1285, "mysqldump", "Multiple conditions", "mysqldump test.zpaq -u root -p pluto -only prod -not backup"),
+	HIT(1285, 0x23562585, "Piu' condizioni"),
+	HRU(1285, 0x23562585, "Несколько условий"),
+	HBREVE(1286, "mysqldump", "Dump all MySQL databases to .zpaq"),
+	HIT(1286, 0x6C888FFF, "Dump di tutti i database MySQL in un .zpaq"),
+	HRU(1286, 0x6C888FFF, "Дамп всех баз MySQL в .zpaq"),
+#ifdef _WIN32
+	/// image
+	HU(1287, "image", "CMD image", "Restore/export zpaqfranz images (RISKY: can overwrite drives; use with caution)"),
+	HIT(1287, 0xE65C64C9, "Ripristina/esporta le immagini di zpaqfranz|  (RISCHIOSO: puo' sovrascrivere unita'; con prudenza)"),
+	HRU(1287, 0xE65C64C9, "Восстановление/экспорт образов zpaqfranz|  (РИСКОВАННО: может перезаписать диски; осторожно)"),
+	HU(1288, "image", "-to x.vhd", "A .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount x.vhd)|  Up to 2040 GB: over that it becomes x.vhdx by itself (the command x too)"),
+	HIT(1288, 0xECBF096C, "Un .vhd che Windows monta (Gestione disco, Mount-DiskImage, mount x.vhd)|  Fino a 2040 GB: oltre diventa x.vhdx da solo (anche il comando x)"),
+	HRU(1288, 0xECBF096C, ".vhd, который монтирует Windows (Управление|  дисками, Mount-DiskImage, mount x.vhd)|  До 2040 GB: больше - сам становится x.vhdx (команда x тоже)"),
+	HU(1289, "image", "-to x.vhdx", "A .vhdx, mounted by Windows the same way, of any size (7-Zip opens it too)"),
+	HIT(1289, 0x92606A80, "Un .vhdx, montato da Windows allo stesso modo,|  di qualsiasi dimensione (lo apre anche 7-Zip)"),
+	HRU(1289, 0x92606A80, ".vhdx, монтируется Windows так же, любого размера (открывает и 7-Zip)"),
+	HU(1290, "image", "-to folder", "image_X.vhd in it (a name without extension is a folder)"),
+	HIT(1290, 0xF4E088DA, "image_X.vhd dentro (un nome senza|  estensione e' una cartella)"),
+	HRU(1290, 0xF4E088DA, "image_X.vhd внутри (имя без расширения - это папка)"),
+	HU(1291, "image", "-to x.vmdk", "A .vmdk for VMware Workstation, VirtualBox, QEMU/Proxmox (7-Zip opens it too)|  One sparse file: the zeros are not in it (a thin image: about the used data)|  With -raw a flat one: x.vmdk (a text) and x-flat.vmdk, the disk byte by byte|  Over 2032 GB the sparse one is in more files, as VMware makes it: x.vmdk (a text),|  x-s001.vmdk, x-s002.vmdk... Sectors of 512 only. A partition over 2 TB: in a GPT"),
+	HIT(1291, 0x8196E1AC, "Un .vmdk per VMware Workstation, VirtualBox, QEMU/Proxmox (lo apre anche 7-Zip)|  Un file sparse: gli zeri non ci sono (un'immagine sottile: circa i dati usati)|  Con -raw uno flat: x.vmdk (un testo) e x-flat.vmdk, il disco byte per byte|  Oltre 2032 GB quello sparse e' in piu' file, come lo fa|  VMware: x.vmdk (un testo), x-s001.vmdk, x-s002.vmdk...|  Solo settori da 512. Una partizione oltre 2 TB: in un GPT"),
+	HRU(1291, 0x8196E1AC, ".vmdk для VMware Workstation, VirtualBox, QEMU/Proxmox (открывает и 7-Zip)|  Один разреженный файл: нулей в нём нет|  (тонкий образ: примерно используемые данные)|  С -raw плоский: x.vmdk (текст) и x-flat.vmdk, диск побайтно|  Больше 2032 GB разреженный разбит на файлы, как у VMware: x.vmdk (текст),|  x-s001.vmdk, x-s002.vmdk... Только секторы 512. Раздел больше 2 TB: в GPT"),
+	HU(1292, "image", "-to x.raw", "The partition byte by byte (any other extension too: .img, .bin...)"),
+	HIT(1292, 0x51552461, "La partizione byte per byte (anche qualsiasi|  altra estensione: .img, .bin...)"),
+	HRU(1292, 0x51552461, "Раздел побайтно (любое другое расширение тоже: .img, .bin...)"),
+	HU(1293, "image", "-to G: -image", "Write on the partition G: (-image is the consent: G: is overwritten)|  The archive says what the image is: used clusters (NTFS, FAT, exFAT) or raw|  A disk number (3:): the image of a whole disk, to a .vhd, a .vmdk or a raw file|  A *nix device (/dev/sda, imaged there with a -image): to a raw file only"),
+	HIT(1293, 0xFE50CA4E, "Scrive sulla partizione G: (-image e' il consenso: G: viene sovrascritta)|  L'archivio dice cos'e' l'immagine: cluster usati (NTFS, FAT, exFAT) o raw|  Un numero di disco (3:): l'immagine di un disco|  intero, in un .vhd, un .vmdk o un file raw|  Un dispositivo *nix (/dev/sda, salvato li' con un -image): solo in un file raw"),
+	HRU(1293, 0xFE50CA4E, "Запись на раздел G: (-image - это согласие: G: перезаписывается)|  Архив знает, что за образ: используемые кластеры (NTFS, FAT, exFAT) или raw|  Номер диска (3:): образ целого диска, в .vhd, .vmdk или raw-файл|  Устройство *nix (/dev/sda, снятое там с -image): только в raw-файл"),
+	HU(1294, "image", "-raw", "Write the unused part too, as zeros: the whole partition is written|  (-to x.vmdk -raw: a flat .vmdk)"),
+	HIT(1294, 0x0F43E472, "Scrive anche la parte non usata, come zeri: si scrive|  tutta la partizione (-to x.vmdk -raw: un .vmdk flat)"),
+	HRU(1294, 0x0F43E472, "Записать и неиспользуемую часть нулями: записывается весь раздел|  (-to x.vmdk -raw: плоский .vmdk)"),
+	HU(1295, "image", "-until N", "The image of version N (default: the last one)"),
+	HIT(1295, 0x40F568D1, "L'immagine della versione N (default: l'ultima)"),
+	HRU(1295, 0x40F568D1, "Образ версии N (по умолчанию: последний)"),
+	HU(1296, "image", "-space", "Do not ask when the destination partition is not empty"),
+	HIT(1296, 0x0CE906C7, "Non chiede niente quando la partizione|  di destinazione non e' vuota"),
+	HRU(1296, 0x0CE906C7, "Не спрашивать, если раздел назначения не пуст"),
+	HU(1297, "image", "-force", "Overwrite an existing destination file"),
+	HIT(1297, 0x11646B5C, "Sovrascrive un file di destinazione esistente"),
+	HRU(1297, 0x11646B5C, "Перезаписать существующий файл назначения"),
+	HESEMPI("image", 'b'),
+	HTESTO(1298, "image", 'e', 'c', "Restore to file"),
+	HIT(1298, 0xD3AA8BAC, "Ripristina in un file"),
+	HRU(1298, 0xD3AA8BAC, "Восстановить в файл"),
+	HE(1299, "image", "Image to VHD", "image i5.zpaq f: -to d:\\3.vhd"),
+	HIT(1299, 0xD99898A1, "Immagine in VHD"),
+	HRU(1299, 0xD99898A1, "Образ в VHD"),
+	HE(1300, "image", "Image of disk 3 in a folder", "image i5.zpaq 3: -to d:\\folderone"),
+	HIT(1300, 0x5388670D, "Immagine del disco 3 in una cartella"),
+	HRU(1300, 0x5388670D, "Образ диска 3 в папку"),
+	HE(1301, "image", "Image to raw file", "image i2.zpaq f: -to d:\\1.raw"),
+	HIT(1301, 0x64E7F561, "Immagine in un file raw"),
+	HRU(1301, 0x64E7F561, "Образ в raw-файл"),
+	HE(1302, "image", "Image to VHDX (any size)", "image i5.zpaq f: -to d:\\3.vhdx"),
+	HIT(1302, 0x47F8884B, "Immagine in VHDX (qualsiasi dimensione)"),
+	HRU(1302, 0x47F8884B, "Образ в VHDX (любой размер)"),
+	HE(1303, "image", "Image to VMDK (sparse)", "image i5.zpaq f: -to d:\\3.vmdk"),
+	HIT(1303, 0xE3CCF294, "Immagine in VMDK (sparse)"),
+	HRU(1303, 0xE3CCF294, "Образ в VMDK (разреженный)"),
+	HE(1304, "image", "Image to VMDK (flat)", "image i5.zpaq f: -to d:\\3.vmdk -raw"),
+	HIT(1304, 0x52D7A099, "Immagine in VMDK (flat)"),
+	HRU(1304, 0x52D7A099, "Образ в VMDK (плоский)"),
+	HE(1305, "image", "An older version", "image i5.zpaq f: -to d:\\old.vhd -until 3"),
+	HIT(1305, 0xE0CC33A0, "Una versione piu' vecchia"),
+	HRU(1305, 0xE0CC33A0, "Более старая версия"),
+	HTESTO(1306, "image", 'e', 'c', "Restore to drive"),
+	HIT(1306, 0xD5823BAE, "Ripristina su un'unita'"),
+	HRU(1306, 0xD5823BAE, "Восстановить на диск"),
+	HE(1307, "image", "Restore f: on the partition i:", "image i1.zpaq f: -to i: -image"),
+	HIT(1307, 0x941C4A28, "Ripristina f: sulla partizione i:"),
+	HRU(1307, 0x941C4A28, "Восстановить f: на раздел i:"),
+	HE(1308, "image", "Restore f: on i:, every sector", "image i1.zpaq f: -to i: -image -raw"),
+	HIT(1308, 0xB47A6250, "Ripristina f: su i:, ogni settore"),
+	HRU(1308, 0xB47A6250, "Восстановить f: на i:, каждый сектор"),
+	HTESTO(1309, "image", 'e', 'c', "See also"),
+	HIT(1309, 0x81CE86AF, "Vedi anche"),
+	HRU(1309, 0x81CE86AF, "См. также"),
+	HE(1310, "image", "Mount VHD (read-only)", "mount d:\\3.vhd"),
+	HIT(1310, 0x816383C8, "Monta un VHD (sola lettura)"),
+	HRU(1310, 0x816383C8, "Смонтировать VHD (только чтение)"),
+	HE(1311, "image", "Partition/drive list", "drives"),
+	HIT(1311, 0x53642D1E, "Elenco di partizioni/unita'"),
+	HRU(1311, 0x53642D1E, "Список разделов/дисков"),
+	HBREVE(1312, "image", "Restore/export zpaqfranz images"),
+	HIT(1312, 0xEFF52393, "Ripristina/esporta le immagini di zpaqfranz"),
+	HRU(1312, 0xEFF52393, "Восстановление/экспорт образов zpaqfranz"),
+#else
+	/// image
+	HU(1313, "image", "CMD image", "Restore the image of a device (made by a /dev/sdX -image) to a raw file"),
+	HIT(1313, 0x068FA7CF, "Ripristina l'immagine di un dispositivo (fatta|  con un /dev/sdX -image) in un file raw"),
+	HRU(1313, 0x068FA7CF, "Восстановить образ устройства (снятый /dev/sdX -image) в raw-файл"),
+	HU(1314, "image", "-to x.raw", "The device byte by byte (any name: put it back with dd, mount it with losetup)"),
+	HIT(1314, 0x5DB84320, "Il dispositivo byte per byte (qualsiasi nome:|  si rimette con dd, si monta con losetup)"),
+	HRU(1314, 0x5DB84320, "Устройство побайтно (любое имя: вернуть через dd, смонтировать через losetup)"),
+	HU(1315, "image", "-to folder", "_dev_sdX.raw in it (an existing folder, or a name with a final /)"),
+	HIT(1315, 0xEF80772D, "_dev_sdX.raw dentro (una cartella|  esistente, o un nome con / finale)"),
+	HRU(1315, 0xEF80772D, "_dev_sdX.raw внутри (существующая папка или имя с / в конце)"),
+	HU(1316, "image", "-until N", "The image of version N (default: the last one)"),
+	HIT(1316, 0x40F568D1, "L'immagine della versione N (default: l'ultima)"),
+	HRU(1316, 0x40F568D1, "Образ версии N (по умолчанию: последний)"),
+	HU(1317, "image", "-force", "Overwrite an existing destination file|The images of Windows drives (used clusters, .vhd) are restored on Windows"),
+	HIT(1317, 0xC03A01C1, "Sovrascrive un file di destinazione esistente|Le immagini delle unita' Windows (cluster|usati, .vhd) si ripristinano su Windows"),
+	HRU(1317, 0xC03A01C1, "Перезаписать существующий файл назначения|Образы дисков Windows (используемые|кластеры, .vhd) восстанавливаются в Windows"),
+	HESEMPI("image", 'b'),
+	HE(1318, "image", "Image of a device", "a /tmp/i1.zpaq /dev/sda1 -image"),
+	HIT(1318, 0x8B692E36, "Immagine di un dispositivo"),
+	HRU(1318, 0x8B692E36, "Образ устройства"),
+	HE(1319, "image", "Restore to a raw file", "image /tmp/i1.zpaq /dev/sda1 -to /tmp/sda1.raw"),
+	HIT(1319, 0xB3C7FDFF, "Ripristina in un file raw"),
+	HRU(1319, 0xB3C7FDFF, "Восстановить в raw-файл"),
+	HE(1320, "image", "An older version", "image /tmp/i1.zpaq /dev/sda1 -to /tmp/old.raw -until 3"),
+	HIT(1320, 0xE0CC33A0, "Una versione piu' vecchia"),
+	HRU(1320, 0xE0CC33A0, "Более старая версия"),
+	HBREVE(1321, "image", "Restore zpaqfranz images"),
+	HIT(1321, 0x2C832360, "Ripristina le immagini di zpaqfranz"),
+	HRU(1321, 0x2C832360, "Восстановление образов zpaqfranz"),
 #endif
 #ifdef _WIN32
-string help_drive(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		if (i_usage)
-		{
-			scrivi_riga("CMD drive", "Show Windows' drive(s)");
-		}
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Show drives", "drive");
-		scrivi_esempio("Show drives", "drives");
-	}
-	return ("List Windows drives");
-}
+	/// drive
+	HU(1322, "drive", "CMD drive", "Show Windows' drive(s)"),
+	HIT(1322, 0x1C073CF2, "Mostra le unita' di Windows"),
+	HRU(1322, 0x1C073CF2, "Показать диски Windows"),
+	HESEMPI("drive", 'b'),
+	HE(1323, "drive", "Show drives", "drive"),
+	HIT(1323, 0x15AE5C5D, "Mostra le unita'"),
+	HRU(1323, 0x15AE5C5D, "Показать диски"),
+	HE(1324, "drive", "Show drives", "drives"),
+	HIT(1324, 0x15AE5C5D, "Mostra le unita'"),
+	HRU(1324, 0x15AE5C5D, "Показать диски"),
+	HBREVE(1325, "drive", "List Windows drives"),
+	HIT(1325, 0x07126CB9, "Elenca le unita' di Windows"),
+	HRU(1325, 0x07126CB9, "Список дисков Windows"),
 #endif
-
-string help_utf(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD utf", "deal with strange filenames");
-		scrivi_riga(" ", "Check (or sanitize) paths with non-latin chars");
-		scrivi_riga(" ", "Can become a real problem extracting on different filesystems (ex. *nix => NTFS)");
-		scrivi_riga("-kill", "Wet run (default dry run)");
-		scrivi_riga("-verbose", "Show what is running");
-		scrivi_riga("-fix255", "Show files too long");
+	/// utf
+	HU(1326, "utf", "CMD utf", "deal with strange filenames|Check (or sanitize) paths with non-latin chars|Can become a real problem extracting on different filesystems (ex. *nix => NTFS)"),
+	HIT(1326, 0x7027FF74, "gestisce i nomi di file strani|Controlla (o ripulisce) i percorsi con caratteri non latini|Possono diventare un vero problema estraendo|su filesystem diversi (es. *nix => NTFS)"),
+	HRU(1326, 0x7027FF74, "работа со странными именами файлов|Проверить (или исправить) пути с нелатинскими символами|Может стать настоящей проблемой при извлечении на другие ФС (напр. *nix => NTFS)"),
+	HU(1327, "utf", "-kill", "Wet run (default dry run)"),
+	HIT(1327, 0xF9C9F5FE, "Esecuzione vera (default prova a secco)"),
+	HRU(1327, 0xF9C9F5FE, "Настоящий прогон (по умолчанию пробный)"),
+	HU(1328, "utf", "-verbose", "Show what is running"),
+	HIT(1328, 0x6A52B5D1, "Mostra cosa sta facendo"),
+	HRU(1328, 0x6A52B5D1, "Показать, что выполняется"),
+	HU(1329, "utf", "-fix255", "Show files too long"),
+	HIT(1329, 0x95A05769, "Mostra i file troppo lunghi"),
+	HRU(1329, 0x95A05769, "Показать слишком длинные файлы"),
 		/*
 		scrivi_riga("-utf", "Sanitize filenames (strip non-latin)");
 		scrivi_riga("-fix255", "Sanitize file length and filecase collisions pippo.txt PIPPO.txt)");
@@ -155844,491 +157964,2581 @@ string help_utf(bool i_usage, bool i_example)
 		scrivi_riga("-dirlength", "X  Set the 'fix' limit");
 		scrivi_riga("-filelength", "Y Set the 'fix' limit");
 		*/
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Check UTF-filenames (dry run)", "utf z:\\knb");
-		scrivi_esempio("Sanitize UTF-filenames (wet run)", "utf z:\\knb -kill");
+	HESEMPI("utf", 'b'),
+	HE(1330, "utf", "Check UTF-filenames (dry run)", "utf z:\\knb"),
+	HIT(1330, 0x475225CE, "Controlla i nomi UTF (prova a secco)"),
+	HRU(1330, 0x475225CE, "Проверить UTF-имена (пробный прогон)"),
+	HE(1331, "utf", "Sanitize UTF-filenames (wet run)", "utf z:\\knb -kill"),
+	HIT(1331, 0x62EF19B4, "Ripulisce i nomi UTF (esecuzione vera)"),
+	HRU(1331, 0x62EF19B4, "Исправить UTF-имена (настоящий прогон)"),
 		/*
 		moreprint("Check >255 and case collisions:      utf z:\\knb -fix255");
 		moreprint("Fix .eml filenames (dry run):        utf z:\\knb -fixeml");
 		*/
-	}
-	return ("Fix long names, convert to Latin charset");
-}
-string help_f(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD f", "(fill, or wipe)");
-		scrivi_riga(" ", "Fill (wipe) 99% of free disk space in 500MB chunks");
-		scrivi_riga(" ", "Stress-testing a storage subsystem (disk,controller,cache,cables)");
-		scrivi_riga(" ", "Live map and report as -test: written and read back block by block,");
-		scrivi_riga(" ", "without the cache of the system (-buffer X: the block, default 1MB)");
-		scrivi_riga("-gui", "(Windows) A guide to everything below: what to do, how and where");
-		scrivi_riga(" ", "are asked one at a time (the last: the list of disks and volumes),");
-		scrivi_riga(" ", "the command is shown and RUN. Its captcha is always asked; a disk");
-		scrivi_riga(" ", "that is not USB is written only with -debug, the system one never");
-		scrivi_riga("-nodashboard", "No map: the classic lines, a 512MB chunk at a time");
-		scrivi_riga("-verbose", "With -nodashboard: a line for every chunk (speed consistency)");
-		scrivi_riga("-force", "Do NOT delete (after run) the temporary filename. By default free");
-		scrivi_riga("-zero", "Zero-fill instead of random. Use to prepare a thin VMDK shrink");
-		scrivi_riga("-verify", "For -zero: do a verify.");
-		scrivi_riga("-test", "Surface test of a whole device, raw (like HD Tune): READ ONLY");
-		scrivi_riga(" ", "Windows: a letter or a disk number (see drive). *nix: b = /dev/sdb, or /dev/...");
-		scrivi_riga(" ", "Live map: cyan now, green ok, yellow slow, red stall/error, grey to do");
-		scrivi_riga(" ", "Then: speed per band (min/avg/max), median, p5, p95, CV, slow blocks, stalls");
-		scrivi_riga(" ", "Slow blocks are read again: slow again = the device, fast = a hiccup");
-		scrivi_riga(" ", "At the end a conclusion in words: from practically perfect to serious failure");
-		scrivi_riga("-buffer X", "Block size (default 1MB, rounded up to the sector)");
-		scrivi_riga("-test -force -paranoid", "The TRIPLET (Windows only): DESTROYS EVERYTHING on the device");
-		scrivi_riga(" ", "Writes every block (data never repeated), then reads back and compares");
-		scrivi_riga(" ", "Finds wrong data, fake capacity (wrap around), lost writes, write cache");
-		scrivi_riga(" ", "Writing is judged with wider limits (cache, short stops of the flash)");
-		scrivi_riga(" ", "USB devices only (-debug: any disk); never the system disk");
-		scrivi_riga(" ", "Asks the captcha 'nomercy' (even with -nocaptcha)");
-		scrivi_riga(" ", "At the end the device has NO partitions: initialize it again");
-		scrivi_riga("-quick", "With the triplet: write only, no read back");
-		scrivi_riga("-zero", "With the triplet: zeros on the whole device, and zeros expected back");
-		scrivi_riga("-zero -ntfs", "With -test -force (Windows): zeros in the FREE clusters of an NTFS");
-		scrivi_riga(" ", "volume (a letter), the files are not touched: for a thin image of a VM");
-		scrivi_riga(" ", "The volume is locked meanwhile: not the system one, no open files");
-		scrivi_riga(" ", "(there: f X:\\ -zero). -verify: the free clusters are read back");
-		scrivi_riga(" ", "The shadow copies of the volume (restore points), if any, can be lost");
-		scrivi_riga("-n NN", "Read/write only NN% of the blocks (1..99), equispaced: faster, less coverage");
-		scrivi_riga("-nuke NN", "FAST NTFS sanitize of a USB stick (Windows): f X: -nuke NN -force");
-		scrivi_riga(" ", "1) what NTFS points at is overwritten: the whole $MFT (names, small files),");
-		scrivi_riga(" ", "   every file it knows, the DELETED ones too (the first 16 MB and the");
-		scrivi_riga(" ", "   last MB of each: up to 16 MB a file is wiped whole), the folders;");
-		scrivi_riga(" ", "   also for an older MFT left by a format. As long as the data, not the stick");
-		scrivi_riga(" ", "2) the volume is formatted: an empty NTFS (same label), ready to be used");
-		scrivi_riga(" ", "3) NN% (1..100) of its free space is overwritten: what is left of the big");
-		scrivi_riga(" ", "   files and of what was deleted long ago. Ctrl+C here: the stick is good");
-		scrivi_riga(" ", "-nuke 100: in 1) the big files whole too (the old data first), in 3) all");
-		scrivi_riga(" ", "Not zeros: every sector says where it is and which step wrote it; -verify");
-		scrivi_riga(" ", "reads back and checks it (a stick that drops or misplaces writes is seen)");
-		scrivi_riga(" ", "Below 100 NOT a secure erase. Do not format the stick before: its MFT is");
-		scrivi_riga(" ", "the map of what to wipe. Only a removable USB NTFS volume, never the system");
-		scrivi_riga("Ctrl+C", "Stop, the report of what is done; again to quit");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("The guide (Windows): what, how, where", "f -gui");
-		scrivi_esempio("Fill (wipe) almost all free space", "f z:\\");
-		scrivi_esempio("Fill (wipe) keep temp files", "f z:\\ -force -verbose");
-		scrivi_esempio("Zero free space (VM shrink)", "f z:\\ -zero");
-		scrivi_esempio("Zero free space (WITH verify)", "f z:\\ -zero -verify");
-		scrivi_esempio("Fill, the classic lines (no map)", "f z:\\ -nodashboard");
-		scrivi_esempio("Read test of the USB stick E:", "f E: -test");
-		scrivi_esempio("Read test of disk 3, blocks of 4MB", "f 3 -test -buffer 4194304");
-		scrivi_esempio("Read test (Linux) of /dev/sdb", "f b -test");
-		scrivi_esempio("Write+verify disk 3 (DESTROYS IT)", "f 3 -test -force -paranoid");
-		scrivi_esempio("Write only (DESTROYS IT)", "f E: -test -force -paranoid -quick");
-		scrivi_esempio("Zeros on all of disk 3 (DESTROYS IT)", "f 3 -test -force -paranoid -zero");
-		scrivi_esempio("Zero the free clusters of E: (NTFS)", "f E: -test -force -zero -ntfs");
-		scrivi_esempio("The same, and read them back", "f E: -test -force -zero -ntfs -verify");
-		scrivi_esempio("Read test, only 30% of the blocks", "f 3 -test -n 30");
-		scrivi_esempio("Fast NTFS sanitize of E: (30%)", "f E: -nuke 30 -force");
-		scrivi_esempio("Fastest NTFS sanitize of E:", "f E: -nuke 1 -force");
-		scrivi_esempio("Sanitize: the old data, then all the rest", "f E: -nuke 100 -force");
-		scrivi_esempio("The same, everything read back", "f E: -nuke 100 -force -verify");
-	}
-	return ("Fill/wipe disk (for reliability/privacy)");
-}
-string help_summa(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD sum", "");
-		scrivi_riga("CMD sha1", "(retained for historical reasons, 7.15 always uses SHA-1 only)");
-		scrivi_riga(" ", "Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256");
-		scrivi_riga(" ", "(If two directories have the same GLOBAL SHA256 they are ==)");
-		scrivi_riga(" ", "Default: -sha1 | Faster: -blake3 | Fastest: -xxh3 | Safer: -sha256");
-		scrivi_riga(" ", "BTW use 'hash' (not 'sum') for md5sum/sha1sum-like output format");
-		scrivi_riga(" ", "Use -out to save hashes to a .sfv-style file for later verification");
-		help_printhash(false);
-		scrivi_riga("-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
-		scrivi_riga("-mm", "use memory mapped file instead of 'regular' fread");
-		scrivi_riga("-kill", "show the files to be deleted to manually deduplicate");
-		scrivi_riga("-home", "get a 1-level checksum, for comparing hierarchically user-organized folders.");
-		scrivi_riga("-summary", "show only GLOBAL (fast manual compare of directories)");
-		scrivi_riga("-rename", "rename all files with the hash");
-		scrivi_riga("-forcezfs", "force .zfs path (DEFAULT: skip)");
-		scrivi_riga("-kill -force", "runs a deduplication without ask anything!");
-		help_size();
-		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-checktxt kaj", "Check MD5 against kaj file. For rsync/rclone sync");
-		scrivi_riga("-hashdeep", "Make (into mandatory -out) hashdeep-compatible output");
-		scrivi_riga("-zeta", "Make the ZETA hash");
-		scrivi_riga("-zetaenc", "Make the ZETA-encrypted hash");
-		help_orderby();
-		scrivi_riga("-last", "Get only the last file");
-		scrivi_riga("-norecursion", "Disable recursion");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("SHA1 of all files (and duplicated)", "sum z:\\knb");
-		scrivi_esempio("SHA1 multithread, only summary", "sum z:\\knb -ssd -summary");
-		scrivi_esempio("XXH3 multithread", "sum z:\\knb -ssd -xxh3");
-		scrivi_esempio("CRC-32c HW accelerated", "sum z:\\knb -crc32c -pakka -noeta");
-		scrivi_esempio("Hashes to be compared (dir1)", "sum c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt");
-		scrivi_esempio("Hashes to be compared (dir2)", "sum z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
-		scrivi_esempio("Duplicated files with sha256", "sum z:\\knb -kill -sha256");
-		scrivi_esempio("Duplicated files minsize 1000000", "sum z:\\knb -kill -ssd -minsize 1000000");
-		scrivi_esempio("MAGIC cumulative hashes of 1-level", "sum p:\\staff -xxh3 -home -ssd");
-		scrivi_esempio("BLAKE3 multithread from memory map", "sum z:\\knb -ssd -blake3 -mm");
-		scrivi_esempio("MD5 quick check", "sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
-		scrivi_esempio("hashdeep-compatible (multithread)", "sum *.jpg *.cpp -md5 -hashdeep -ssd -out z:\\thehash.txt");
-		scrivi_esempio("like md5sum", "sum *.txt -md5 -pakka -noeta -stdout -nosort");
-		scrivi_esempio("Order the output", "sum z:\\ -xxh3 -orderby size -desc -only *.cpp");
-		scrivi_esempio("ZETA multithread", "sum z:\\knb -ssd -zeta");
-		scrivi_esempio("ZETA on last", "sum z:\\knb -zeta -last");
-		scrivi_esempio("Silently create SFV-style hash file", "sum c:\\nz -ssd -xxh3 -out Z:\\pippo.txt -silent");
-		scrivi_esempio("Verify SFV file (multi-thread)", "versum Z:\\pippo.txt -ssd");
-		scrivi_esempio("Only current files", "sum * -norecursion");
-	}
-	return ("Calculate hashes, find duplicate file(s)");
-}
-string help_hasha(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD hash", "Calculate hash of files/dirs");
-		scrivi_riga(" ", "With no switches, by default, use SHA-1 (reliable, but not very fast)");
-		help_printhash(false);
-		scrivi_riga("-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
-		scrivi_riga("-mm", "use memory mapped file instead of 'regular' fread");
-		scrivi_riga("-forcezfs", "force .zfs path (DEFAULT: skip)");
-		help_size();
-		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-verbose", "Show more infos");
-		scrivi_riga("-stdout", "Do not mess the output");
-		scrivi_riga("-pakka", "Do not mess the output");
-		scrivi_riga("-noeta", "Do not show ETA");
-		scrivi_riga("-last", "Get only the last file");
-		scrivi_riga("-franzhash", "Use franzhash on a single file with multithread");
-		scrivi_riga("-franzhash -frugal", "franzhash with a single thread");
-		scrivi_riga("-norecursion", "Disable recursion");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("SHA1 of all files", "hash z:\\knb");
-		scrivi_esempio("SHA1 of all files, multithread", "hash z:\\knb -ssd");
-		scrivi_esempio("XXH3 multithreaded", "hash z:\\knb -ssd -xxh3");
-		scrivi_esempio("SHA256 to file", "hash z:\\knb -ssd -sha256 -stdout -out 1.txt");
-		scrivi_esempio("SHA1 of the last file", "hash z:\\knb -last");
-		scrivi_esempio("franzhash 4 parts/4 threads", "hash z:\\pippo.zpaq -franzhash -blake3 -t4");
-		scrivi_esempio("franzhash 4 parts/1 thread", "hash z:\\pippo.zpaq -franzhash -blake3 -t4 -frugal");
-		scrivi_esempio("only files in c:\\nz", "hash c:\\nz -norecursion");
-	}
-	return ("Calculate file hash");
-}
-
-string help_dir(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD dir", "(yes, dir as in Windows, even better)");
-		scrivi_riga("CMD tree", "(yes, tree as in Windows, even better)");
-		scrivi_riga(" ", "'Mini clone' of Windows's dir/tree commands, with cumulative file sizes");
-		scrivi_riga(" ", "Windows-style switches (e.g., /s) must be placed before other switches");
-		scrivi_riga(" ", "Supports wildcard patterns as first argument (e.g., dir *.zpaq /s)");
-		scrivi_riga("   /s", "Recursive");
-		scrivi_riga("   /a", "Show all (hidden)");
-		scrivi_riga("   /tree", "Show directory tree structure (-summary)");
-		scrivi_riga("   /on", "Order by name");
-		scrivi_riga("   /os", "Order by size (ascending)");
-		scrivi_riga("   /od", "Order by date (oldest first)");
-		scrivi_riga("   /oe", "Order by extension");
-		scrivi_riga("   /og", "Order directories first");
-		scrivi_riga("   /o-s", "Order by size (descending)");
-		scrivi_riga("   /o-d", "Order by date (newest first)");
-		scrivi_riga("   /age+N","Show files older than N days");
-		scrivi_riga("   /age-N","SShow files newer than N days");
-		scrivi_riga("-checksum", "Show hashes for every file");
-		scrivi_riga("-(somehash)", "Use (somehash) to find duplicate/show checksums");
-		help_printhash(false);
-		scrivi_riga("-n X", "like |tail -X");
-		scrivi_riga("-summary", "In /tree mode, show folder sizes");
-		help_size();
-		scrivi_riga("-nodir", "Shows only files");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Windows-dir command clone", "dir /root/script /od");
-		scrivi_esempio("Show the 10 largest .mp4 file in c:\\", "dir c:\\ /s /os -n 10 -find .mp4");
-		scrivi_esempio("Find .mp4 duplicate in C:\\", "dir c:\\ /s -crc32 -find .mp4");
-		scrivi_esempio("How big is c:\\z,with subdirs?", "dir c:\\z /s -n 1");
-		scrivi_esempio("100 biggest dup. files in c:\\z?", "dir c:\\z /s -crc32 -n 100");
-		scrivi_esempio("Show -md5 checksum, recurse by size", "dir z:\\cb /s /os -checksum -md5");
-		scrivi_esempio("Find duplicate, recurse by size", "dir z:\\cb /s /os -xxh3");
-		scrivi_esempio("Like dir", "dir z:\\cb\\*.avi");
-		scrivi_esempio("Like dir (pattern first)", "dir *.zpaq /s");
-		scrivi_esempio("Better than dir", "dir c:\\*.cpp /s /os -n 100");
-		scrivi_esempio("Get last 5 backup files", "dir c:\\backup\\*.zpaq /on -n 5 -terse");
-		scrivi_esempio("Show newer files", "dir c:\\backup\\*.zpaq /s -datefrom 2025 -nodir");
-		scrivi_esempio("Show files older than 30 days", "dir c:\\temp /s /age+30");
-		scrivi_esempio("Show files from last week", "dir c:\\downloads /age-7");
-		scrivi_esempio("100 newest large files", "dir c:\\ /s /o-d -n 100");
-		scrivi_esempio("Show directory tree", "dir c:\\projects /s /tree");
-		scrivi_esempio("Tree with folder sizes", "dir c:\\projects /s /tree -summary");
-		scrivi_esempio("Tree", "tree u:\\");
-	}
-	return ("Enhanced dir/tree (better than Windows')");
-}
-string help_k(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD k", "(kill, risky!)");
-		scrivi_riga(" ", "Kill (delete) all files and directories that aren't in an archive");
-		scrivi_riga(" ", "removing excess files");
-		scrivi_riga("-to X", "MANDATORY: the folder to be cleaned (without it: error, nothing deleted)");
-		scrivi_riga(" ", "A confirmation is asked before deleting");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Create an archive", "a z:\\1.zpaq c:\\z");
-		scrivi_esempio("Extract into z:\\knb", "x z:\\1.zpaq c:\\z -to z:\\knb");
-		scrivi_esempio(" ", "... something happens (change) in");
-		scrivi_esempio(" ", "z:\\knb and we want to turn back");
-		scrivi_esempio(" ", "WITHOUT delete everything and ");
-		scrivi_esempio("extract again (maybe it's huge)", "k z:\\1.zpaq c:\\z -to z:\\knb");
-	}
-	return ("Delete file(s) not in archive (RISKY!)");
-}
-
+	HBREVE(1332, "utf", "Fix long names, convert to Latin charset"),
+	HIT(1332, 0xFBCA3950, "Sistema i nomi lunghi, converte in caratteri latini"),
+	HRU(1332, 0xFBCA3950, "Исправить длинные имена, перевести в латиницу"),
+	/// f
+	HU(1333, "f", "CMD f", "(fill, or wipe)|Fill (wipe) 99% of free disk space in 500MB chunks|Stress-testing a storage subsystem (disk,controller,cache,cables)|Live map and report as -test: written and read back block by block,|without the cache of the system (-buffer X: the block, default 1MB)"),
+	HIT(1333, 0x4757B73B, "(riempie, o pulisce)|Riempie (pulisce) il 99% dello spazio libero a pezzi da 500MB|Stress test di un sottosistema di|storage (disco, controller, cache, cavi)|Mappa dal vivo e report come -test: scritto e|riletto blocco per blocco, senza la cache del|sistema (-buffer X: il blocco, default 1MB)"),
+	HRU(1333, 0x4757B73B, "(заполнение или затирание)|Заполнить (затереть) 99% свободного места кусками по 500MB|Стресс-тест подсистемы хранения (диск, контроллер, кеш, кабели)|Живая карта и отчёт как у -test: запись и обратное чтение блок за|блоком, без системного кеша (-buffer X: блок, по умолчанию 1MB)"),
+#ifdef _WIN32 /// 65.14d: Windows only, not in the help of *nix (-helpcheck)
+	HU(1334, "f", "-gui", "(Windows) A guide to everything below: what to do, how and where|are asked one at a time (the last: the list of disks and volumes),|the command is shown and RUN. Its captcha is always asked; a disk|that is not USB is written only with -debug, the system one never"),
+	HIT(1334, 0x77D607BA, "(Windows) Una guida a tutto quanto sotto: cosa fare, come e|dove vengono chiesti uno alla volta (l'ultimo: l'elenco di|dischi e volumi), il comando viene mostrato ed ESEGUITO. Il|suo captcha si chiede sempre; un disco che non e' USB si|scrive solo con -debug, quello di sistema mai"),
+	HRU(1334, 0x77D607BA, "(Windows) Мастер для всего, что ниже: что делать, как и где|спрашиваются по очереди (последним: список дисков и томов),|команда показывается и ВЫПОЛНЯЕТСЯ. Её капча спрашивается всегда;|диск, который не USB, пишется только с -debug, системный - никогда"),
+#endif
+	HU(1335, "f", "-nodashboard", "No map: the classic lines, a 512MB chunk at a time"),
+	HIT(1335, 0x303900E8, "Niente mappa: le righe classiche,|  un pezzo da 512MB alla volta"),
+	HRU(1335, 0x303900E8, "Без карты: классические строки, по куску 512MB за раз"),
+	HU(1336, "f", "-verbose", "With -nodashboard: a line for every chunk (speed consistency)"),
+	HIT(1336, 0x30210DF1, "Con -nodashboard: una riga per ogni|  pezzo (costanza della velocita')"),
+	HRU(1336, 0x30210DF1, "С -nodashboard: строка на каждый|  кусок (стабильность скорости)"),
+	HU(1337, "f", "-force", "Do NOT delete (after run) the temporary filename. By default free"),
+	HIT(1337, 0x384A26C9, "NON cancella (alla fine) il file temporaneo. Di default libera"),
+	HRU(1337, 0x384A26C9, "НЕ удалять (в конце) временный файл. По умолчанию освобождает"),
+	HU(1338, "f", "-zero", "Zero-fill instead of random. Use to prepare a thin VMDK shrink"),
+	HIT(1338, 0x0CA5139F, "Riempie di zeri invece che a caso. Per preparare|  il restringimento di un VMDK sottile"),
+	HRU(1338, 0x0CA5139F, "Заполнять нулями, а не случайными|  данными. Для сжатия тонкого VMDK"),
+	HU(1339, "f", "-verify", "For -zero: do a verify."),
+	HIT(1339, 0x1EEF30F8, "Per -zero: fa una verifica."),
+	HRU(1339, 0x1EEF30F8, "Для -zero: выполнить проверку."),
+	HU(1340, "f", "-test", "Surface test of a whole device, raw (like HD Tune): READ ONLY|Windows: a letter or a disk number (see drive). *nix: b = /dev/sdb, or /dev/...|Live map: cyan now, green ok, yellow slow, red stall/error, grey to do|Then: speed per band (min/avg/max), median, p5, p95, CV, slow blocks, stalls|Slow blocks are read again: slow again = the device, fast = a hiccup|At the end a conclusion in words: from practically perfect to serious failure"),
+	HIT(1340, 0xA75A91CB, "Test di superficie di un intero dispositivo, raw (come HD Tune): SOLA LETTURA|Windows: una lettera o un numero di disco|(vedi drive). *nix: b = /dev/sdb, o /dev/...|Mappa dal vivo: ciano adesso, verde ok, giallo|lento, rosso stallo/errore, grigio da fare|Poi: velocita' per fascia (min/media/max),|mediana, p5, p95, CV, blocchi lenti, stalli|I blocchi lenti vengono riletti: di nuovo|lenti = il dispositivo, veloci = un singhiozzo|Alla fine una conclusione a parole: da praticamente perfetto a guasto serio"),
+	HRU(1340, 0xA75A91CB, "Тест поверхности всего устройства, raw (как HD Tune): ТОЛЬКО ЧТЕНИЕ|Windows: буква или номер диска (см. drive). *nix: b = /dev/sdb или /dev/...|Живая карта: голубой сейчас, зелёный ok, жёлтый|медленно, красный зависание/ошибка, серый впереди|Затем: скорость по зонам (мин/сред/макс),|медиана, p5, p95, CV, медленные блоки, зависания|Медленные блоки перечитываются: снова медленно|= устройство, быстро = случайная заминка|В конце вывод словами: от практически идеального до серьёзной неисправности"),
+	HU(1341, "f", "-buffer X", "Block size (default 1MB, rounded up to the sector)"),
+	HIT(1341, 0x616FA639, "Dimensione del blocco (default 1MB, arrotondata al settore)"),
+	HRU(1341, 0x616FA639, "Размер блока (по умолчанию 1MB, округляется до сектора)"),
+	HU(1342, "f", "-test -force -paranoid", "The TRIPLET (Windows only): DESTROYS EVERYTHING on the device|Writes every block (data never repeated), then reads back and compares|Finds wrong data, fake capacity (wrap around), lost writes, write cache|Writing is judged with wider limits (cache, short stops of the flash)|USB devices only (-debug: any disk); never the system disk|Asks the captcha 'nomercy' (even with -nocaptcha)|At the end the device has NO partitions: initialize it again"),
+	HIT(1342, 0xF0BEFB71, "La TRIPLETTA (solo Windows): DISTRUGGE TUTTO sul dispositivo|Scrive ogni blocco (dati mai ripetuti), poi rilegge e confronta|Trova dati sbagliati, capacita' finta (che ricomincia|da capo), scritture perse, cache di scrittura|La scrittura e' giudicata con limiti piu'|larghi (cache, brevi soste della flash)|Solo dispositivi USB (-debug: qualsiasi disco); mai il disco di sistema|Chiede il captcha 'nomercy' (anche con -nocaptcha)|Alla fine il dispositivo NON ha partizioni: va inizializzato di nuovo"),
+	HRU(1342, 0xF0BEFB71, "ТРИПЛЕТ (только Windows): УНИЧТОЖАЕТ ВСЁ на устройстве|Пишет каждый блок (данные не повторяются),|затем читает обратно и сравнивает|Находит неверные данные, поддельную ёмкость|(заворачивание), потерянные записи, кеш записи|Запись оценивается с более широкими пределами|(кеш, короткие остановки флеш-памяти)|Только USB-устройства (-debug: любой диск); никогда системный диск|Спрашивает капчу 'nomercy' (даже с -nocaptcha)|В конце на устройстве НЕТ разделов: его нужно заново инициализировать"),
+	HU(1343, "f", "-quick", "With the triplet: write only, no read back"),
+	HIT(1343, 0xECCFBDC3, "Con la tripletta: solo scrittura, niente rilettura"),
+	HRU(1343, 0xECCFBDC3, "С триплетом: только запись, без обратного чтения"),
+	HU(1344, "f", "-zero", "With the triplet: zeros on the whole device, and zeros expected back"),
+	HIT(1344, 0x7988BC43, "Con la tripletta: zeri su tutto il|  dispositivo, e zeri attesi in rilettura"),
+	HRU(1344, 0x7988BC43, "С триплетом: нули на всё устройство, и при чтении ожидаются нули"),
+#ifdef _WIN32 /// 65.14d: Windows only
+	HU(1345, "f", "-zero -ntfs", "With -test -force (Windows): zeros in the FREE clusters of an NTFS|volume (a letter), the files are not touched: for a thin image of a VM|The volume is locked meanwhile: not the system one, no open files|(there: f X:\\ -zero). -verify: the free clusters are read back|The shadow copies of the volume (restore points), if any, can be lost"),
+	HIT(1345, 0xC86054BC, "Con -test -force (Windows): zeri nei cluster LIBERI di un volume|NTFS (una lettera), i file non vengono|toccati: per un'immagine sottile di una VM|Il volume e' bloccato nel frattempo: non quello|di sistema, niente file aperti (li': f X:\\|-zero). -verify: i cluster liberi vengono riletti|Le copie shadow del volume (punti di|ripristino), se ci sono, possono andare perse"),
+	HRU(1345, 0xC86054BC, "С -test -force (Windows): нули в СВОБОДНЫХ кластерах тома|NTFS (буква), файлы не трогаются: для тонкого образа VM|Том на это время блокируется: не системный, без открытых файлов|(там: f X:\\ -zero). -verify: свободные кластеры перечитываются|Теневые копии тома (точки восстановления),|если есть, могут быть потеряны"),
+#endif
+	HU(1346, "f", "-n NN", "Read/write only NN% of the blocks (1..99), equispaced: faster, less coverage"),
+	HIT(1346, 0xBA484BA8, "Legge/scrive solo l'NN% dei blocchi (1..99),|  equidistanti: piu' veloce, meno copertura"),
+	HRU(1346, 0xBA484BA8, "Читать/писать только NN% блоков (1..99), равномерно: быстрее, меньше охват"),
+	HU(1347, "f", "-nuke NN", "FAST NTFS sanitize of a USB stick (Windows): f X: -nuke NN -force|1) what NTFS points at is overwritten: the whole $MFT (names, small files),|   every file it knows, the DELETED ones too (the first 16 MB and the|   last MB of each: up to 16 MB a file is wiped whole), the folders;|   also for an older MFT left by a format. As long as the data, not the stick|2) the volume is formatted: an empty NTFS (same label), ready to be used|3) NN% (1..100) of its free space is overwritten: what is left of the big|   files and of what was deleted long ago. Ctrl+C here: the stick is good|-nuke 100: in 1) the big files whole too (the old data first), in 3) all|Not zeros: every sector says where it is and which step wrote it; -verify|reads back and checks it (a stick that drops or misplaces writes is seen)|Below 100 NOT a secure erase. Do not format the stick before: its MFT is|the map of what to wipe. Only a removable USB NTFS volume, never the system"),
+	HIT(1347, 0x55E7D93B, "Pulizia NTFS VELOCE di una chiavetta USB (Windows): f X: -nuke NN -force|1) si sovrascrive cio' a cui punta NTFS: tutta la $MFT (nomi, file|piccoli), ogni file che conosce, anche quelli CANCELLATI (i primi 16 MB e|l'ultimo MB di ognuno: fino a 16 MB un file viene pulito tutto), le|cartelle; anche per una MFT piu' vecchia lasciata da una formattazione.|Quanto i dati, non la chiavetta 2) il volume viene formattato: un NTFS|vuoto (stessa etichetta), pronto all'uso 3) si sovrascrive l'NN% (1..100)|del suo spazio libero: cio' che resta dei file grandi e di cio' che e'|stato cancellato tanto tempo fa. Ctrl+C qui: la chiavetta e' buona|-nuke 100: in 1) anche i file grandi per|intero (prima i dati vecchi), in 3) tutto|Non zeri: ogni settore dice dov'e' e quale passo|l'ha scritto; -verify lo rilegge e lo controlla (si|vede una chiavetta che perde o sposta le scritture)|Sotto 100 NON e' una cancellazione sicura. Non formattare|la chiavetta prima: la sua MFT e' la mappa di cosa pulire.|Solo un volume NTFS USB rimovibile, mai quello di sistema"),
+	HRU(1347, 0x55E7D93B, "БЫСТРАЯ очистка NTFS на USB-флешке (Windows): f X: -nuke NN -force 1)|затирается то, на что указывает NTFS: вся $MFT (имена, мелкие файлы),|каждый известный ей файл, и УДАЛЁННЫЕ тоже (первые 16 MB и последний|MB каждого: до 16 MB файл затирается целиком), папки; также для|старой MFT, оставшейся от форматирования. По объёму данных, а не|флешки 2) том форматируется: пустой NTFS (та же метка), готов к|работе 3) затирается NN% (1..100) свободного места: остатки больших|файлов и того, что удалено давно. Ctrl+C здесь: флешка в порядке|-nuke 100: в 1) большие файлы тоже целиком (сначала старые данные), в 3) всё|Не нули: каждый сектор говорит, где он и какой шаг его записал; -verify|перечитывает и проверяет (видна флешка, которая теряет или путает записи)|Меньше 100 - НЕ безопасное стирание. Не форматируйте флешку заранее: её MFT -|карта того, что затирать. Только съёмный USB-том NTFS, никогда системный"),
+	HU(1348, "f", "Ctrl+C", "Stop, the report of what is done; again to quit"),
+	HIT(1348, 0x85097B50, "Ferma, il report di cio' che e' fatto; di nuovo per uscire"),
+	HRU(1348, 0x85097B50, "Стоп, отчёт о сделанном; ещё раз - выход"),
+	HESEMPI("f", 'b'),
+#ifdef _WIN32 /// 65.14d: Windows only
+	HE(1349, "f", "The guide (Windows): what, how, where", "f -gui"),
+	HIT(1349, 0x337E256D, "La guida (Windows): cosa, come, dove"),
+	HRU(1349, 0x337E256D, "Мастер (Windows): что, как, где"),
+#endif
+	HE(1350, "f", "Fill (wipe) almost all free space", "f z:\\"),
+	HIT(1350, 0x30EC71E1, "Riempie (pulisce) quasi tutto lo spazio libero"),
+	HRU(1350, 0x30EC71E1, "Заполнить (затереть) почти всё свободное место"),
+	HE(1351, "f", "Fill (wipe) keep temp files", "f z:\\ -force -verbose"),
+	HIT(1351, 0xA991E9C0, "Riempie (pulisce) tenendo i file temporanei"),
+	HRU(1351, 0xA991E9C0, "Заполнить (затереть), оставив временные файлы"),
+	HE(1352, "f", "Zero free space (VM shrink)", "f z:\\ -zero"),
+	HIT(1352, 0xFC4893BC, "Azzera lo spazio libero (restringere una VM)"),
+	HRU(1352, 0xFC4893BC, "Обнулить свободное место (сжатие VM)"),
+	HE(1353, "f", "Zero free space (WITH verify)", "f z:\\ -zero -verify"),
+	HIT(1353, 0xA789079D, "Azzera lo spazio libero (CON verifica)"),
+	HRU(1353, 0xA789079D, "Обнулить свободное место (С проверкой)"),
+	HE(1354, "f", "Fill, the classic lines (no map)", "f z:\\ -nodashboard"),
+	HIT(1354, 0xF4340288, "Riempie, le righe classiche (niente mappa)"),
+	HRU(1354, 0xF4340288, "Заполнить, классические строки (без карты)"),
+	HE(1355, "f", "Read test of the USB stick E:", "f E: -test"),
+	HIT(1355, 0x840B7F9C, "Test di lettura della chiavetta USB E:"),
+	HRU(1355, 0x840B7F9C, "Тест чтения USB-флешки E:"),
+	HE(1356, "f", "Read test of disk 3, blocks of 4MB", "f 3 -test -buffer 4194304"),
+	HIT(1356, 0xD5699BD8, "Test di lettura del disco 3, blocchi da 4MB"),
+	HRU(1356, 0xD5699BD8, "Тест чтения диска 3, блоки по 4MB"),
+	HE(1357, "f", "Read test (Linux) of /dev/sdb", "f b -test"),
+	HIT(1357, 0x3359EC25, "Test di lettura (Linux) di /dev/sdb"),
+	HRU(1357, 0x3359EC25, "Тест чтения (Linux) /dev/sdb"),
+	HE(1358, "f", "Write+verify disk 3 (DESTROYS IT)", "f 3 -test -force -paranoid"),
+	HIT(1358, 0xE116440F, "Scrive+verifica il disco 3 (LO DISTRUGGE)"),
+	HRU(1358, 0xE116440F, "Запись+проверка диска 3 (УНИЧТОЖАЕТ ЕГО)"),
+	HE(1359, "f", "Write only (DESTROYS IT)", "f E: -test -force -paranoid -quick"),
+	HIT(1359, 0xA32DE695, "Solo scrittura (LO DISTRUGGE)"),
+	HRU(1359, 0xA32DE695, "Только запись (УНИЧТОЖАЕТ ЕГО)"),
+	HE(1360, "f", "Zeros on all of disk 3 (DESTROYS IT)", "f 3 -test -force -paranoid -zero"),
+	HIT(1360, 0xEBD8804A, "Zeri su tutto il disco 3 (LO DISTRUGGE)"),
+	HRU(1360, 0xEBD8804A, "Нули на весь диск 3 (УНИЧТОЖАЕТ ЕГО)"),
+#ifdef _WIN32 /// 65.14d: Windows only
+	HE(1361, "f", "Zero the free clusters of E: (NTFS)", "f E: -test -force -zero -ntfs"),
+	HIT(1361, 0xAB4CDC87, "Azzera i cluster liberi di E: (NTFS)"),
+	HRU(1361, 0xAB4CDC87, "Обнулить свободные кластеры E: (NTFS)"),
+	HE(1362, "f", "The same, and read them back", "f E: -test -force -zero -ntfs -verify"),
+	HIT(1362, 0x0ED8DE08, "Lo stesso, e li rilegge"),
+	HRU(1362, 0x0ED8DE08, "То же, и перечитать их"),
+#endif
+	HE(1363, "f", "Read test, only 30% of the blocks", "f 3 -test -n 30"),
+	HIT(1363, 0xCD57C56F, "Test di lettura, solo il 30% dei blocchi"),
+	HRU(1363, 0xCD57C56F, "Тест чтения, только 30% блоков"),
+	HE(1364, "f", "Fast NTFS sanitize of E: (30%)", "f E: -nuke 30 -force"),
+	HIT(1364, 0x341C1B4E, "Pulizia NTFS veloce di E: (30%)"),
+	HRU(1364, 0x341C1B4E, "Быстрая очистка NTFS на E: (30%)"),
+	HE(1365, "f", "Fastest NTFS sanitize of E:", "f E: -nuke 1 -force"),
+	HIT(1365, 0x68A305D5, "Pulizia NTFS velocissima di E:"),
+	HRU(1365, 0x68A305D5, "Самая быстрая очистка NTFS на E:"),
+	HE(1366, "f", "Sanitize: the old data, then all the rest", "f E: -nuke 100 -force"),
+	HIT(1366, 0xCD192209, "Pulizia: i dati vecchi, poi tutto il resto"),
+	HRU(1366, 0xCD192209, "Очистка: старые данные, затем всё остальное"),
+	HE(1367, "f", "The same, everything read back", "f E: -nuke 100 -force -verify"),
+	HIT(1367, 0x63AABF68, "Lo stesso, tutto riletto"),
+	HRU(1367, 0x63AABF68, "То же, всё перечитывается"),
+	HBREVE(1368, "f", "Fill/wipe disk (for reliability/privacy)"),
+	HIT(1368, 0xB21C0828, "Riempie/pulisce un disco (affidabilita'/privacy)"),
+	HRU(1368, 0xB21C0828, "Заполнить/затереть диск (надёжность/конфиденциальность)"),
+	/// summa
+	HU(0, "summa", "CMD sum", ""),
+	HU(1369, "summa", "CMD sha1", "(retained for historical reasons, 7.15 always uses SHA-1 only)|Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256|(If two directories have the same GLOBAL SHA256 they are ==)|Default: -sha1 || Faster: -blake3 || Fastest: -xxh3 || Safer: -sha256|BTW use 'hash' (not 'sum') for md5sum/sha1sum-like output format|Use -out to save hashes to a .sfv-style file for later verification"),
+	HIT(1369, 0xB03CBB13, "(tenuto per ragioni storiche, la 7.15 usa sempre solo SHA-1)|Calcola hash/cksum di file/cartelle, duplicati e SHA256 GLOBALE|cumulativo (Se due cartelle hanno lo stesso SHA256 GLOBALE sono ==)|Default: -sha1 || Piu' veloce: -blake3 || Il|piu' veloce: -xxh3 || Piu' sicuro: -sha256|Peraltro usare 'hash' (non 'sum') per un output stile md5sum/sha1sum|-out salva gli hash in un file stile .sfv per verificarli dopo"),
+	HRU(1369, 0xB03CBB13, "(оставлено по историческим причинам,|7.15 всегда использует только SHA-1)|Вычислить хеш/контрольную сумму файлов/папок, дубликаты и суммарный|ОБЩИЙ SHA256 (Если у двух папок одинаковый ОБЩИЙ SHA256, они ==)|По умолчанию: -sha1 || Быстрее: -blake3 |||Быстрее всего: -xxh3 || Надёжнее: -sha256|Кстати, для вывода в стиле md5sum/sha1sum|используйте 'hash' (а не 'sum')|-out сохраняет хеши в файл в стиле .sfv для последующей проверки"),
+	HGENERA(0, "summa", 'u', 'h', "", ""),
+	HU(1370, "summa", "-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)"),
+	HIT(1370, 0x536F1B4E, "usa N thread (non con dischi meccanici, ma con SSD e NVMe)"),
+	HRU(1370, 0x536F1B4E, "N потоков (не для HDD, а для SSD и NVMe)"),
+	HU(1371, "summa", "-mm", "use memory mapped file instead of 'regular' fread"),
+	HIT(1371, 0xD82082C1, "usa un file mappato in memoria invece della fread 'normale'"),
+	HRU(1371, 0xD82082C1, "использовать отображение файла в|  память вместо 'обычного' fread"),
+	HU(1372, "summa", "-kill", "show the files to be deleted to manually deduplicate"),
+	HIT(1372, 0xE0E65731, "mostra i file da cancellare per deduplicare a mano"),
+	HRU(1372, 0xE0E65731, "показать файлы для удаления при ручной дедупликации"),
+	HU(1373, "summa", "-home", "get a 1-level checksum, for comparing hierarchically user-organized folders."),
+	HIT(1373, 0xE17758EA, "un checksum di 1o livello, per confrontare cartelle organizzate dall'utente."),
+	HRU(1373, 0xE17758EA, "контрольная сумма 1-го уровня, для сравнения|  иерархически организованных папок."),
+	HU(1374, "summa", "-summary", "show only GLOBAL (fast manual compare of directories)"),
+	HIT(1374, 0x04BF4D11, "mostra solo il GLOBALE (confronto|  manuale rapido di cartelle)"),
+	HRU(1374, 0x04BF4D11, "показать только ОБЩИЙ (быстрое ручное сравнение папок)"),
+	HU(1375, "summa", "-rename", "rename all files with the hash"),
+	HIT(1375, 0x54481F76, "rinomina tutti i file con l'hash"),
+	HRU(1375, 0x54481F76, "переименовать все файлы по хешу"),
+	HU(1376, "summa", "-forcezfs", "force .zfs path (DEFAULT: skip)"),
+	HIT(1376, 0x5B4D34FD, "forza i percorsi .zfs (DEFAULT: saltati)"),
+	HRU(1376, 0x5B4D34FD, "включить пути .zfs (ПО УМОЛЧАНИЮ: пропуск)"),
+	HU(1377, "summa", "-kill -force", "runs a deduplication without ask anything!"),
+	HIT(1377, 0xD7835509, "esegue una deduplica senza chiedere nulla!"),
+	HRU(1377, 0xD7835509, "выполняет дедупликацию, ничего не спрашивая!"),
+	HINCLUDI("summa", 'u', "@size", 'b'),
+	HU(1378, "summa", "-715", "Work as 7.15 (with .zfs and ADS)"),
+	HIT(1378, 0x6CCEBA80, "Lavora come la 7.15 (con .zfs e ADS)"),
+	HRU(1378, 0x6CCEBA80, "Работать как 7.15 (с .zfs и ADS)"),
+	HU(1379, "summa", "-checktxt kaj", "Check MD5 against kaj file. For rsync/rclone sync"),
+	HIT(1379, 0x1A2A579D, "Controlla gli MD5 col file kaj. Per|  sincronizzare con rsync/rclone"),
+	HRU(1379, 0x1A2A579D, "Проверить MD5 по файлу kaj. Для синхронизации rsync/rclone"),
+	HU(1380, "summa", "-hashdeep", "Make (into mandatory -out) hashdeep-compatible output"),
+	HIT(1380, 0x379C67CA, "Output compatibile con hashdeep (nell'obbligatorio -out)"),
+	HRU(1380, 0x379C67CA, "Вывод, совместимый с hashdeep (в обязательный -out)"),
+	HU(1381, "summa", "-zeta", "Make the ZETA hash"),
+	HIT(1381, 0xB3171ED6, "Calcola l'hash ZETA"),
+	HRU(1381, 0xB3171ED6, "Вычислить хеш ZETA"),
+	HU(1382, "summa", "-zetaenc", "Make the ZETA-encrypted hash"),
+	HIT(1382, 0xFC307F89, "Calcola l'hash ZETA cifrato"),
+	HRU(1382, 0xFC307F89, "Вычислить зашифрованный хеш ZETA"),
+	HINCLUDI("summa", 'u', "@orderby", 'b'),
+	HU(1383, "summa", "-last", "Get only the last file"),
+	HIT(1383, 0x01D6EBAA, "Solo l'ultimo file"),
+	HRU(1383, 0x01D6EBAA, "Только последний файл"),
+	HU(1384, "summa", "-norecursion", "Disable recursion"),
+	HIT(1384, 0x19A6BB43, "Disattiva la ricorsione"),
+	HRU(1384, 0x19A6BB43, "Отключить рекурсию"),
+	HESEMPI("summa", 'b'),
+	HE(1385, "summa", "SHA1 of all files (and duplicated)", "sum z:\\knb"),
+	HIT(1385, 0xC429E330, "SHA1 di tutti i file (e duplicati)"),
+	HRU(1385, 0xC429E330, "SHA1 всех файлов (и дубликаты)"),
+	HE(1386, "summa", "SHA1 multithread, only summary", "sum z:\\knb -ssd -summary"),
+	HIT(1386, 0xB21B1D67, "SHA1 multithread, solo il riepilogo"),
+	HRU(1386, 0xB21B1D67, "SHA1 многопоточно, только итог"),
+	HE(1387, "summa", "XXH3 multithread", "sum z:\\knb -ssd -xxh3"),
+	HIT(1387, 0xB67540ED, "XXH3 multithread"),
+	HRU(1387, 0xB67540ED, "XXH3 многопоточно"),
+	HE(1388, "summa", "CRC-32c HW accelerated", "sum z:\\knb -crc32c -pakka -noeta"),
+	HIT(1388, 0x37342D84, "CRC-32c accelerato in HW"),
+	HRU(1388, 0x37342D84, "CRC-32c с аппаратным ускорением"),
+	HE(1389, "summa", "Hashes to be compared (dir1)", "sum c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt"),
+	HIT(1389, 0x72A5E305, "Hash da confrontare (dir1)"),
+	HRU(1389, 0x72A5E305, "Хеши для сравнения (dir1)"),
+	HE(1390, "summa", "Hashes to be compared (dir2)", "sum z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt"),
+	HIT(1390, 0x8AA3CA36, "Hash da confrontare (dir2)"),
+	HRU(1390, 0x8AA3CA36, "Хеши для сравнения (dir2)"),
+	HE(1391, "summa", "Duplicated files with sha256", "sum z:\\knb -kill -sha256"),
+	HIT(1391, 0x4C3DE9CA, "File duplicati con sha256"),
+	HRU(1391, 0x4C3DE9CA, "Дубликаты по sha256"),
+	HE(1392, "summa", "Duplicated files minsize 1000000", "sum z:\\knb -kill -ssd -minsize 1000000"),
+	HIT(1392, 0x56B954A3, "File duplicati, minsize 1000000"),
+	HRU(1392, 0x56B954A3, "Дубликаты, minsize 1000000"),
+	HE(1393, "summa", "MAGIC cumulative hashes of 1-level", "sum p:\\staff -xxh3 -home -ssd"),
+	HIT(1393, 0x5012568E, "Hash cumulativi MAGICI del 1o livello"),
+	HRU(1393, 0x5012568E, "ВОЛШЕБНЫЕ суммарные хеши 1-го уровня"),
+	HE(1394, "summa", "BLAKE3 multithread from memory map", "sum z:\\knb -ssd -blake3 -mm"),
+	HIT(1394, 0x2D3CA347, "BLAKE3 multithread da memory map"),
+	HRU(1394, 0x2D3CA347, "BLAKE3 многопоточно через отображение в память"),
+	HE(1395, "summa", "MD5 quick check", "sum z:\\knb.zpaq -checktxt z:\\pippo.txt"),
+	HIT(1395, 0x39D82818, "Controllo rapido MD5"),
+	HRU(1395, 0x39D82818, "Быстрая проверка MD5"),
+	HE(1396, "summa", "hashdeep-compatible (multithread)", "sum *.jpg *.cpp -md5 -hashdeep -ssd -out z:\\thehash.txt"),
+	HIT(1396, 0xD833A76C, "Compatibile con hashdeep (multithread)"),
+	HRU(1396, 0xD833A76C, "Совместимо с hashdeep (многопоточно)"),
+	HE(1397, "summa", "like md5sum", "sum *.txt -md5 -pakka -noeta -stdout -nosort"),
+	HIT(1397, 0xFCCB8D25, "come md5sum"),
+	HRU(1397, 0xFCCB8D25, "как md5sum"),
+	HE(1398, "summa", "Order the output", "sum z:\\ -xxh3 -orderby size -desc -only *.cpp"),
+	HIT(1398, 0x980E2EC9, "Ordina l'output"),
+	HRU(1398, 0x980E2EC9, "Упорядочить вывод"),
+	HE(1399, "summa", "ZETA multithread", "sum z:\\knb -ssd -zeta"),
+	HIT(1399, 0x531FE1DE, "ZETA multithread"),
+	HRU(1399, 0x531FE1DE, "ZETA многопоточно"),
+	HE(1400, "summa", "ZETA on last", "sum z:\\knb -zeta -last"),
+	HIT(1400, 0x5B1B4228, "ZETA sull'ultimo"),
+	HRU(1400, 0x5B1B4228, "ZETA для последнего"),
+	HE(1401, "summa", "Silently create SFV-style hash file", "sum c:\\nz -ssd -xxh3 -out Z:\\pippo.txt -silent"),
+	HIT(1401, 0x11C3D67A, "Crea in silenzio un file di hash stile SFV"),
+	HRU(1401, 0x11C3D67A, "Тихо создать файл хешей в стиле SFV"),
+	HE(1402, "summa", "Verify SFV file (multi-thread)", "versum Z:\\pippo.txt -ssd"),
+	HIT(1402, 0x93282E24, "Verifica un file SFV (multithread)"),
+	HRU(1402, 0x93282E24, "Проверить файл SFV (многопоточно)"),
+	HE(1403, "summa", "Only current files", "sum * -norecursion"),
+	HIT(1403, 0x292742F1, "Solo i file correnti"),
+	HRU(1403, 0x292742F1, "Только текущие файлы"),
+	HBREVE(1404, "summa", "Calculate hashes, find duplicate file(s)"),
+	HIT(1404, 0x0CA02709, "Calcola gli hash, trova i file duplicati"),
+	HRU(1404, 0x0CA02709, "Вычислить хеши, найти дубликаты"),
+	/// hasha
+	HU(1405, "hasha", "CMD hash", "Calculate hash of files/dirs|With no switches, by default, use SHA-1 (reliable, but not very fast)"),
+	HIT(1405, 0xFFD42BEB, "Calcola l'hash di file/cartelle|Senza switch, di default, usa SHA-1 (affidabile, ma non velocissimo)"),
+	HRU(1405, 0xFFD42BEB, "Вычислить хеш файлов/папок|Без ключей по умолчанию SHA-1 (надёжно, но не очень быстро)"),
+	HGENERA(0, "hasha", 'u', 'h', "", ""),
+	HU(1406, "hasha", "-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)"),
+	HIT(1406, 0x536F1B4E, "usa N thread (non con dischi meccanici, ma con SSD e NVMe)"),
+	HRU(1406, 0x536F1B4E, "N потоков (не для HDD, а для SSD и NVMe)"),
+	HU(1407, "hasha", "-mm", "use memory mapped file instead of 'regular' fread"),
+	HIT(1407, 0xD82082C1, "usa un file mappato in memoria invece della fread 'normale'"),
+	HRU(1407, 0xD82082C1, "использовать отображение файла в|  память вместо 'обычного' fread"),
+	HU(1408, "hasha", "-forcezfs", "force .zfs path (DEFAULT: skip)"),
+	HIT(1408, 0x5B4D34FD, "forza i percorsi .zfs (DEFAULT: saltati)"),
+	HRU(1408, 0x5B4D34FD, "включить пути .zfs (ПО УМОЛЧАНИЮ: пропуск)"),
+	HINCLUDI("hasha", 'u', "@size", 'b'),
+	HU(1409, "hasha", "-715", "Work as 7.15 (with .zfs and ADS)"),
+	HIT(1409, 0x6CCEBA80, "Lavora come la 7.15 (con .zfs e ADS)"),
+	HRU(1409, 0x6CCEBA80, "Работать как 7.15 (с .zfs и ADS)"),
+	HU(1410, "hasha", "-verbose", "Show more infos"),
+	HIT(1410, 0x9CFF89B0, "Mostra piu' informazioni"),
+	HRU(1410, 0x9CFF89B0, "Показать больше сведений"),
+	HU(1411, "hasha", "-stdout", "Do not mess the output"),
+	HIT(1411, 0x9CC224E1, "Non sporca l'output"),
+	HRU(1411, 0x9CC224E1, "Не засорять вывод"),
+	HU(1412, "hasha", "-pakka", "Do not mess the output"),
+	HIT(1412, 0x9CC224E1, "Non sporca l'output"),
+	HRU(1412, 0x9CC224E1, "Не засорять вывод"),
+	HS("hasha", "-noeta"),
+	HU(1413, "hasha", "-last", "Get only the last file"),
+	HIT(1413, 0x01D6EBAA, "Solo l'ultimo file"),
+	HRU(1413, 0x01D6EBAA, "Только последний файл"),
+	HU(1414, "hasha", "-franzhash", "Use franzhash on a single file with multithread"),
+	HIT(1414, 0x3006C84E, "franzhash su un singolo file in multithread"),
+	HRU(1414, 0x3006C84E, "franzhash для одного файла многопоточно"),
+	HU(1415, "hasha", "-franzhash -frugal", "franzhash with a single thread"),
+	HIT(1415, 0xB995712F, "franzhash con un solo thread"),
+	HRU(1415, 0xB995712F, "franzhash в один поток"),
+	HU(1416, "hasha", "-norecursion", "Disable recursion"),
+	HIT(1416, 0x19A6BB43, "Disattiva la ricorsione"),
+	HRU(1416, 0x19A6BB43, "Отключить рекурсию"),
+	HESEMPI("hasha", 'b'),
+	HE(1417, "hasha", "SHA1 of all files", "hash z:\\knb"),
+	HIT(1417, 0xE52DCC29, "SHA1 di tutti i file"),
+	HRU(1417, 0xE52DCC29, "SHA1 всех файлов"),
+	HE(1418, "hasha", "SHA1 of all files, multithread", "hash z:\\knb -ssd"),
+	HIT(1418, 0x4E6A2DBE, "SHA1 di tutti i file, multithread"),
+	HRU(1418, 0x4E6A2DBE, "SHA1 всех файлов, многопоточно"),
+	HE(1419, "hasha", "XXH3 multithreaded", "hash z:\\knb -ssd -xxh3"),
+	HIT(1419, 0xCBE8E534, "XXH3 in multithread"),
+	HRU(1419, 0xCBE8E534, "XXH3 многопоточно"),
+	HE(1420, "hasha", "SHA256 to file", "hash z:\\knb -ssd -sha256 -stdout -out 1.txt"),
+	HIT(1420, 0xCCB99EAF, "SHA256 su file"),
+	HRU(1420, 0xCCB99EAF, "SHA256 в файл"),
+	HE(1421, "hasha", "SHA1 of the last file", "hash z:\\knb -last"),
+	HIT(1421, 0x5AA49978, "SHA1 dell'ultimo file"),
+	HRU(1421, 0x5AA49978, "SHA1 последнего файла"),
+	HE(1422, "hasha", "franzhash 4 parts/4 threads", "hash z:\\pippo.zpaq -franzhash -blake3 -t4"),
+	HIT(1422, 0x99A7BE3C, "franzhash 4 parti/4 thread"),
+	HRU(1422, 0x99A7BE3C, "franzhash 4 части/4 потока"),
+	HE(1423, "hasha", "franzhash 4 parts/1 thread", "hash z:\\pippo.zpaq -franzhash -blake3 -t4 -frugal"),
+	HIT(1423, 0x180B415E, "franzhash 4 parti/1 thread"),
+	HRU(1423, 0x180B415E, "franzhash 4 части/1 поток"),
+	HE(1424, "hasha", "only files in c:\\nz", "hash c:\\nz -norecursion"),
+	HIT(1424, 0x3821844C, "solo i file in c:\\nz"),
+	HRU(1424, 0x3821844C, "только файлы в c:\\nz"),
+	HBREVE(1425, "hasha", "Calculate file hash"),
+	HIT(1425, 0xF8B7398D, "Calcola l'hash di un file"),
+	HRU(1425, 0xF8B7398D, "Вычислить хеш файла"),
+	/// dir
+	HU(1426, "dir", "CMD dir", "(yes, dir as in Windows, even better)"),
+	HIT(1426, 0x44BA33BE, "(si', dir come in Windows, anzi meglio)"),
+	HRU(1426, 0x44BA33BE, "(да, dir как в Windows, даже лучше)"),
+	HU(1427, "dir", "CMD tree", "(yes, tree as in Windows, even better)|'Mini clone' of Windows's dir/tree commands, with cumulative file sizes|Windows-style switches (e.g., /s) must be placed before other switches|Supports wildcard patterns as first argument (e.g., dir *.zpaq /s)"),
+	HIT(1427, 0xD62A1D00, "(si', tree come in Windows, anzi meglio) 'Mini clone' dei|comandi dir/tree di Windows, con le dimensioni cumulative|Gli switch stile Windows (es. /s) vanno messi prima degli altri switch|Accetta caratteri jolly come primo argomento (es. dir *.zpaq /s)"),
+	HRU(1427, 0xD62A1D00, "(да, tree как в Windows, даже лучше)|'Мини-клон' команд dir/tree Windows, с суммарными размерами|Ключи в стиле Windows (напр. /s) ставятся перед остальными ключами|Принимает шаблоны первым аргументом (напр. dir *.zpaq /s)"),
+	HU(1428, "dir", "   /s", "Recursive"),
+	HIT(1428, 0x5403F917, "Ricorsivo"),
+	HRU(1428, 0x5403F917, "Рекурсивно"),
+	HU(1429, "dir", "   /a", "Show all (hidden)"),
+	HIT(1429, 0x3346F7A2, "Mostra tutto (nascosti)"),
+	HRU(1429, 0x3346F7A2, "Показать всё (скрытые)"),
+	HU(1430, "dir", "   /tree", "Show directory tree structure (-summary)"),
+	HIT(1430, 0x54FB90E4, "Mostra la struttura ad albero delle cartelle (-summary)"),
+	HRU(1430, 0x54FB90E4, "Показать дерево папок (-summary)"),
+	HU(1431, "dir", "   /on", "Order by name"),
+	HIT(1431, 0x4B079A47, "Ordina per nome"),
+	HRU(1431, 0x4B079A47, "Сортировать по имени"),
+	HU(1432, "dir", "   /os", "Order by size (ascending)"),
+	HIT(1432, 0x07686788, "Ordina per dimensione (crescente)"),
+	HRU(1432, 0x07686788, "Сортировать по размеру (по возрастанию)"),
+	HU(1433, "dir", "   /od", "Order by date (oldest first)"),
+	HIT(1433, 0x59064D08, "Ordina per data (prima i piu' vecchi)"),
+	HRU(1433, 0x59064D08, "Сортировать по дате (сначала старые)"),
+	HU(1434, "dir", "   /oe", "Order by extension"),
+	HIT(1434, 0x6C86B5B1, "Ordina per estensione"),
+	HRU(1434, 0x6C86B5B1, "Сортировать по расширению"),
+	HU(1435, "dir", "   /og", "Order directories first"),
+	HIT(1435, 0xA3F5AA9A, "Prima le cartelle"),
+	HRU(1435, 0xA3F5AA9A, "Сначала папки"),
+	HU(1436, "dir", "   /o-s", "Order by size (descending)"),
+	HIT(1436, 0x1DDEC9E6, "Ordina per dimensione (decrescente)"),
+	HRU(1436, 0x1DDEC9E6, "Сортировать по размеру (по убыванию)"),
+	HU(1437, "dir", "   /o-d", "Order by date (newest first)"),
+	HIT(1437, 0xCDB32BF3, "Ordina per data (prima i piu' nuovi)"),
+	HRU(1437, 0xCDB32BF3, "Сортировать по дате (сначала новые)"),
+	HU(1438, "dir", "   /age+N", "Show files older than N days"),
+	HIT(1438, 0xF2696565, "Mostra i file piu' vecchi di N giorni"),
+	HRU(1438, 0xF2696565, "Показать файлы старше N дней"),
+	HU(1439, "dir", "   /age-N", "SShow files newer than N days"),
+	HIT(1439, 0x798043D1, "Mostra i file piu' nuovi di N giorni"),
+	HRU(1439, 0x798043D1, "Показать файлы новее N дней"),
+	HU(1440, "dir", "-checksum", "Show hashes for every file"),
+	HIT(1440, 0x0D4FE3F2, "Mostra gli hash di ogni file"),
+	HRU(1440, 0x0D4FE3F2, "Показать хеши каждого файла"),
+	HU(1441, "dir", "-(somehash)", "Use (somehash) to find duplicate/show checksums"),
+	HIT(1441, 0xE07AE7B2, "Usa (somehash) per trovare duplicati/mostrare i checksum"),
+	HRU(1441, 0xE07AE7B2, "Использовать (somehash) для поиска|  дубликатов/вывода контрольных сумм"),
+	HGENERA(0, "dir", 'u', 'h', "", ""),
+	HU(1442, "dir", "-n X", "like ||tail -X"),
+	HIT(1442, 0x7ED86391, "come ||tail -X"),
+	HRU(1442, 0x7ED86391, "как ||tail -X"),
+	HU(1443, "dir", "-summary", "In /tree mode, show folder sizes"),
+	HIT(1443, 0x57E711AF, "In modalita' /tree, mostra la dimensione delle cartelle"),
+	HRU(1443, 0x57E711AF, "В режиме /tree показывать размеры папок"),
+	HINCLUDI("dir", 'u', "@size", 'b'),
+	HU(1444, "dir", "-nodir", "Shows only files"),
+	HIT(1444, 0xA98DD342, "Mostra solo i file"),
+	HRU(1444, 0xA98DD342, "Показывать только файлы"),
+	HESEMPI("dir", 'b'),
+	HE(1445, "dir", "Windows-dir command clone", "dir /root/script /od"),
+	HIT(1445, 0xDCE8584C, "Clone del comando dir di Windows"),
+	HRU(1445, 0xDCE8584C, "Клон команды dir Windows"),
+	HE(1446, "dir", "Show the 10 largest .mp4 file in c:\\", "dir c:\\ /s /os -n 10 -find .mp4"),
+	HIT(1446, 0x4AE423AF, "Mostra i 10 .mp4 piu' grandi in c:\\"),
+	HRU(1446, 0x4AE423AF, "Показать 10 самых больших .mp4 в c:\\"),
+	HE(1447, "dir", "Find .mp4 duplicate in C:\\", "dir c:\\ /s -crc32 -find .mp4"),
+	HIT(1447, 0x162DC756, "Trova i .mp4 duplicati in C:\\"),
+	HRU(1447, 0x162DC756, "Найти дубликаты .mp4 в C:\\"),
+	HE(1448, "dir", "How big is c:\\z,with subdirs?", "dir c:\\z /s -n 1"),
+	HIT(1448, 0x8D0B181F, "Quanto e' grande c:\\z, con le sottocartelle?"),
+	HRU(1448, 0x8D0B181F, "Насколько велик c:\\z с подпапками?"),
+	HE(1449, "dir", "100 biggest dup. files in c:\\z?", "dir c:\\z /s -crc32 -n 100"),
+	HIT(1449, 0x81D8D638, "I 100 file duplicati piu' grandi in c:\\z?"),
+	HRU(1449, 0x81D8D638, "100 самых больших дубликатов в c:\\z?"),
+	HE(1450, "dir", "Show -md5 checksum, recurse by size", "dir z:\\cb /s /os -checksum -md5"),
+	HIT(1450, 0x76FD38B3, "Mostra il checksum -md5, ricorsivo per dimensione"),
+	HRU(1450, 0x76FD38B3, "Показать контрольную сумму -md5, рекурсивно по размеру"),
+	HE(1451, "dir", "Find duplicate, recurse by size", "dir z:\\cb /s /os -xxh3"),
+	HIT(1451, 0x5B05E562, "Trova i duplicati, ricorsivo per dimensione"),
+	HRU(1451, 0x5B05E562, "Найти дубликаты, рекурсивно по размеру"),
+	HE(1452, "dir", "Like dir", "dir z:\\cb\\*.avi"),
+	HIT(1452, 0x3EEAC669, "Come dir"),
+	HRU(1452, 0x3EEAC669, "Как dir"),
+	HE(1453, "dir", "Like dir (pattern first)", "dir *.zpaq /s"),
+	HIT(1453, 0x818836D6, "Come dir (prima il pattern)"),
+	HRU(1453, 0x818836D6, "Как dir (шаблон первым)"),
+	HE(1454, "dir", "Better than dir", "dir c:\\*.cpp /s /os -n 100"),
+	HIT(1454, 0x63976A2D, "Meglio di dir"),
+	HRU(1454, 0x63976A2D, "Лучше, чем dir"),
+	HE(1455, "dir", "Get last 5 backup files", "dir c:\\backup\\*.zpaq /on -n 5 -terse"),
+	HIT(1455, 0x3D9F5DA7, "Gli ultimi 5 file di backup"),
+	HRU(1455, 0x3D9F5DA7, "Последние 5 файлов backup"),
+	HE(1456, "dir", "Show newer files", "dir c:\\backup\\*.zpaq /s -datefrom 2025 -nodir"),
+	HIT(1456, 0x8D9B9DE6, "Mostra i file piu' nuovi"),
+	HRU(1456, 0x8D9B9DE6, "Показать новые файлы"),
+	HE(1457, "dir", "Show files older than 30 days", "dir c:\\temp /s /age+30"),
+	HIT(1457, 0x02D20AB6, "Mostra i file piu' vecchi di 30 giorni"),
+	HRU(1457, 0x02D20AB6, "Показать файлы старше 30 дней"),
+	HE(1458, "dir", "Show files from last week", "dir c:\\downloads /age-7"),
+	HIT(1458, 0xE7616D59, "Mostra i file dell'ultima settimana"),
+	HRU(1458, 0xE7616D59, "Показать файлы за последнюю неделю"),
+	HE(1459, "dir", "100 newest large files", "dir c:\\ /s /o-d -n 100"),
+	HIT(1459, 0xFA68866A, "I 100 file grandi piu' nuovi"),
+	HRU(1459, 0xFA68866A, "100 самых новых больших файлов"),
+	HE(1460, "dir", "Show directory tree", "dir c:\\projects /s /tree"),
+	HIT(1460, 0x64FCC87D, "Mostra l'albero delle cartelle"),
+	HRU(1460, 0x64FCC87D, "Показать дерево папок"),
+	HE(1461, "dir", "Tree with folder sizes", "dir c:\\projects /s /tree -summary"),
+	HIT(1461, 0x14E9AC47, "Albero con le dimensioni delle cartelle"),
+	HRU(1461, 0x14E9AC47, "Дерево с размерами папок"),
+	HE(1462, "dir", "Tree", "tree u:\\"),
+	HIT(1462, 0xEDB780F5, "Albero"),
+	HRU(1462, 0xEDB780F5, "Дерево"),
+	HBREVE(1463, "dir", "Enhanced dir/tree (better than Windows')"),
+	HIT(1463, 0x68338793, "dir/tree migliorati (meglio di quelli di Windows)"),
+	HRU(1463, 0x68338793, "Улучшенные dir/tree (лучше, чем в Windows)"),
+	/// k
+	HU(1464, "k", "CMD k", "(kill, risky!)|Kill (delete) all files and directories that aren't in an archive|removing excess files"),
+	HIT(1464, 0x9356A144, "(kill, rischioso!)|Uccide (cancella) tutti i file e le cartelle che|non sono in un archivio togliendo i file in piu'"),
+	HRU(1464, 0x9356A144, "(kill, рискованно!)|Уничтожает (удаляет) все файлы и папки, которых нет в архиве,|убирая лишние файлы"),
+	HU(1465, "k", "-to X", "MANDATORY: the folder to be cleaned (without it: error, nothing deleted)|A confirmation is asked before deleting"),
+	HIT(1465, 0x09E7D5F6, "OBBLIGATORIO: la cartella da pulire|(senza: errore, non si cancella nulla)|Prima di cancellare viene chiesta una conferma"),
+	HRU(1465, 0x09E7D5F6, "ОБЯЗАТЕЛЬНО: папка для очистки (без неё: ошибка, ничего не удаляется)|Перед удалением запрашивается подтверждение"),
+	HESEMPI("k", 'b'),
+	HE(1466, "k", "Create an archive", "a z:\\1.zpaq c:\\z"),
+	HIT(1466, 0xE1018F82, "Crea un archivio"),
+	HRU(1466, 0xE1018F82, "Создать архив"),
+	HE(1467, "k", "Extract into z:\\knb", "x z:\\1.zpaq c:\\z -to z:\\knb"),
+	HIT(1467, 0x2F6336D9, "Estrae in z:\\knb"),
+	HRU(1467, 0x2F6336D9, "Извлечь в z:\\knb"),
+	HE(0, "k", " ", "... something happens (change) in"),
+	HE(0, "k", " ", "z:\\knb and we want to turn back"),
+	HE(0, "k", " ", "WITHOUT delete everything and "),
+	HE(1468, "k", "extract again (maybe it's huge)", "k z:\\1.zpaq c:\\z -to z:\\knb"),
+	HIT(1468, 0x391B4F27, "estrae di nuovo (magari e' enorme)"),
+	HRU(1468, 0x391B4F27, "извлечь снова (может, он огромный)"),
+	HBREVE(1469, "k", "Delete file(s) not in archive (RISKY!)"),
+	HIT(1469, 0xCE6387EA, "Cancella i file che non sono nell'archivio (RISCHIOSO!)"),
+	HRU(1469, 0xCE6387EA, "Удалить файлы, которых нет в архиве (РИСКОВАННО!)"),
 #ifdef ZPAQFULL /// NOSFTPSTART
-string help_n(bool i_usage, bool i_example)
-{
-	if (i_usage)
-	{
-		scrivi_riga("CMD n", "(decimatioN)");
-		scrivi_riga(" ", "Keep -n X files in a folder (NO recursive scan), delete all the others");
-		scrivi_riga(" ", "At least one * must be used to filter.");
-		scrivi_riga(" ", "with -exec execute external command");
-		scrivi_riga("-kill", "Do a wet run (default dry run)");
-		scrivi_riga("-exec", "p.bat   Instead of delete launch p.bat with parameter");
-		scrivi_riga(" ", "/od           Order by date (default)");
-		scrivi_riga(" ", "/on           Order by name");
-		scrivi_riga("-verbose", "Show infos");
-		scrivi_riga("-force", "Continue even if >50 files founded");
-	}
-	if (i_usage && i_example)
-		scrivi_examples();
-	if (i_example)
-	{
-		scrivi_esempio("Keep 10 newest files in z:\\1\\", "n z:\\1\\*.txt -n 10 -kill");
-		scrivi_esempio("Keep 20 ordered by name", "n z:\\1\\dumpy_*.sql -n 20 -kill -force /on");
-		scrivi_esempio("Keep 30 txt ordered by name", "n z:\\1\\*.txt -n 30 -kill -force /on");
-		scrivi_esempio("Check the last file with ugo.bat", "n z:\\1\\*.txt -kill -exec ugo.bat");
-	}
-	return ("Delete older file(s), keep newest X");
-}
+	/// n
+	HU(1470, "n", "CMD n", "(decimatioN)|Keep -n X files in a folder (NO recursive scan), delete all the others|At least one * must be used to filter.|with -exec execute external command"),
+	HIT(1470, 0xCE70247A, "(decimatioN)|Tiene -n X file in una cartella (scansione|NON ricorsiva), cancella tutti gli altri|Bisogna usare almeno un * per filtrare.|con -exec esegue un comando esterno"),
+	HRU(1470, 0xCE70247A, "(decimatioN)|Оставить -n X файлов в папке (НЕрекурсивно), остальные удалить|Нужно использовать хотя бы одну * для фильтра.|с -exec выполнить внешнюю команду"),
+	HU(1471, "n", "-kill", "Do a wet run (default dry run)"),
+	HIT(1471, 0x3329A01E, "Esecuzione vera (default prova a secco)"),
+	HRU(1471, 0x3329A01E, "Настоящий прогон (по умолчанию пробный)"),
+	HU(1472, "n", "-exec", "p.bat   Instead of delete launch p.bat with parameter|/od           Order by date (default)|/on           Order by name"),
+	HIT(1472, 0xCF8C7EC8, "p.bat   Invece di cancellare lancia p.bat col parametro|/od           Ordina per data (default)|/on           Ordina per nome"),
+	HRU(1472, 0xCF8C7EC8, "p.bat   Вместо удаления запустить p.bat с параметром|/od           Сортировать по дате (по умолчанию)|/on           Сортировать по имени"),
+	HU(1473, "n", "-verbose", "Show infos"),
+	HIT(1473, 0x7E887D21, "Mostra informazioni"),
+	HRU(1473, 0x7E887D21, "Показать сведения"),
+	HU(1474, "n", "-force", "Continue even if >50 files founded"),
+	HIT(1474, 0x13E5D132, "Continua anche se trova >50 file"),
+	HRU(1474, 0x13E5D132, "Продолжать, даже если найдено >50 файлов"),
+	HESEMPI("n", 'b'),
+	HE(1475, "n", "Keep 10 newest files in z:\\1\\", "n z:\\1\\*.txt -n 10 -kill"),
+	HIT(1475, 0x6AF6B4C4, "Tiene i 10 file piu' nuovi in z:\\1\\"),
+	HRU(1475, 0x6AF6B4C4, "Оставить 10 самых новых файлов в z:\\1\\"),
+	HE(1476, "n", "Keep 20 ordered by name", "n z:\\1\\dumpy_*.sql -n 20 -kill -force /on"),
+	HIT(1476, 0xE1DC2DA7, "Ne tiene 20 ordinati per nome"),
+	HRU(1476, 0xE1DC2DA7, "Оставить 20, по имени"),
+	HE(1477, "n", "Keep 30 txt ordered by name", "n z:\\1\\*.txt -n 30 -kill -force /on"),
+	HIT(1477, 0x4B64F28E, "Tiene 30 txt ordinati per nome"),
+	HRU(1477, 0x4B64F28E, "Оставить 30 txt, по имени"),
+	HE(1478, "n", "Check the last file with ugo.bat", "n z:\\1\\*.txt -kill -exec ugo.bat"),
+	HIT(1478, 0x5381975E, "Controlla l'ultimo file con ugo.bat"),
+	HRU(1478, 0x5381975E, "Проверить последний файл через ugo.bat"),
+	HBREVE(1479, "n", "Delete older file(s), keep newest X"),
+	HIT(1479, 0xB51869FB, "Cancella i file piu' vecchi, tiene i piu' nuovi X"),
+	HRU(1479, 0xB51869FB, "Удалить старые файлы, оставить X самых новых"),
 #endif /// NOSFTPEND
-string help_mainswitches(bool i_usage, bool i_example)
-{
-	if ((i_usage) || (i_example))
-	{
-		scrivi_riga("-all [N]", "All versions (default 4 digits)");
-		scrivi_riga("-key X", "Archive (AES) password X");
-		scrivi_riga("", "env var FRANZKEY used as fallback if -key is not given");
-		scrivi_riga("-franzen X", "Franzen (ChaCha20) password X");
-		scrivi_riga("", "env var FRANZFRANZEN used as fallback if -franzen is not given");
-		/// 65.11e/f: the methods, a line each, for who has to choose. The texts are the
-		/// author's; the numbers behind them are in zpaqmount/compressor.txt
+	/// *main
+	HRIGA(1480, "*main", 'o', "-all [N]", "All versions (default 4 digits)"),
+	HIT(1480, 0xC02DC39F, "Tutte le versioni (default 4 cifre)"),
+	HRU(1480, 0xC02DC39F, "Все версии (по умолчанию 4 цифры)"),
+	HRIGA(1481, "*main", 'o', "-key X", "Archive (AES) password X|env var FRANZKEY used as fallback if -key is not given"),
+	HIT(1481, 0x92F6A9FC, "Password X dell'archivio (AES)|la variabile FRANZKEY viene usata se -key non c'e'"),
+	HRU(1481, 0x92F6A9FC, "Пароль архива (AES) X|переменная FRANZKEY используется, если -key не задан"),
+	HRIGA(1482, "*main", 'o', "-keyfile F", "xxxyyy With -key: the content of the file F is part of the password|xxxyyy (-key is needed; the command password refuses it)"), /// 65.14d
+	HIT(1482, 0x44D18851, "xxxyyy Con -key: il contenuto del file F fa parte della password|xxxyyy (serve -key; il comando password lo rifiuta)"),
+	HRU(1482, 0x44D18851, "xxxyyy С -key: содержимое файла F становится частью пароля|xxxyyy (нужен -key; команда password его отвергает)"),
+	HRIGA(1483, "*main", 'o', "-franzen X", "Franzen (ChaCha20) password X|env var FRANZFRANZEN used as fallback if -franzen is not given"),
+	HIT(1483, 0x556B0665, "Password X di Franzen (ChaCha20)|la variabile FRANZFRANZEN viene usata se -franzen non c'e'"),
+	HRU(1483, 0x556B0665, "Пароль Franzen (ChaCha20) X|переменная FRANZFRANZEN используется, если -franzen не задан"),
+	/// 65.11e/f: the methods, a line each, for who has to choose. The texts are the
+	/// author's; the numbers behind them are in zpaqmount/compressor.txt
 #if defined(ZPAQZSTD) && !defined(ANCIENT)
-		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..9 = see below");
+	HRIGA(1484, "*main", 'o', "-mN -method N", "compression method: 0 = none, 1..9 = see below"),
+	HIT(1484, 0x29C1EC88, "metodo di compressione: 0 = nessuna, 1..9 = vedi sotto"),
+	HRU(1484, 0x29C1EC88, "метод сжатия: 0 = нет, 1..9 = см. ниже"),
 #elif defined(ZPAQZSTD)
-		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..9 = see below (default 1)");
+	HRIGA(1485, "*main", 'o', "-mN -method N", "compression method: 0 = none, 1..9 = see below (default 1)"),
+	HIT(1485, 0xA325D7A1, "metodo di compressione: 0 = nessuna,|  1..9 = vedi sotto (default 1)"),
+	HRU(1485, 0xA325D7A1, "метод сжатия: 0 = нет, 1..9 = см. ниже (по умолчанию 1)"),
 #else
-		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..6 = see below (default 1)");
+	HRIGA(1486, "*main", 'o', "-mN -method N", "compression method: 0 = none, 1..6 = see below (default 1)"),
+	HIT(1486, 0xEAB50F64, "metodo di compressione: 0 = nessuna,|  1..6 = vedi sotto (default 1)"),
+	HRU(1486, 0xEAB50F64, "метод сжатия: 0 = нет, 1..6 = см. ниже (по умолчанию 1)"),
 #endif
-		scrivi_riga("-m1", "zpaq default: fast, fast extraction");
-		scrivi_riga("-m2", "smaller than -m1, a lot slower to add, fast extraction");
-		scrivi_riga("-m3", "efficient, extraction not that fast");
-		scrivi_riga("-m4", "very efficient, slower, slow extraction");
-		scrivi_riga("-m5", "the smallest, very slow to add AND to extract");
-		scrivi_riga("-m6", "enhanced -m4: smaller, slower, slow extraction");
+	HRIGA(1487, "*main", 'o', "-m1", "zpaq default: fast, fast extraction"),
+	HIT(1487, 0x27A4AF2B, "default di zpaq: veloce, estrazione veloce"),
+	HRU(1487, 0x27A4AF2B, "по умолчанию в zpaq: быстро, быстрое извлечение"),
+	HRIGA(1488, "*main", 'o', "-m2", "smaller than -m1, a lot slower to add, fast extraction"),
+	HIT(1488, 0xD5E890B8, "piu' piccolo di -m1, molto piu'|  lento in add, estrazione veloce"),
+	HRU(1488, 0xD5E890B8, "меньше -m1, гораздо медленнее|  добавление, быстрое извлечение"),
+	HRIGA(1489, "*main", 'o', "-m3", "efficient, extraction not that fast"),
+	HIT(1489, 0x78D0E401, "efficiente, estrazione non cosi' veloce"),
+	HRU(1489, 0x78D0E401, "эффективно, извлечение не очень быстрое"),
+	HRIGA(1490, "*main", 'o', "-m4", "very efficient, slower, slow extraction"),
+	HIT(1490, 0xE85BB9C6, "molto efficiente, piu' lento, estrazione lenta"),
+	HRU(1490, 0xE85BB9C6, "очень эффективно, медленнее, медленное извлечение"),
+	HRIGA(1491, "*main", 'o', "-m5", "the smallest, very slow to add AND to extract"),
+	HIT(1491, 0x31C4246B, "il piu' piccolo, molto lento in add E in estrazione"),
+	HRU(1491, 0x31C4246B, "самый маленький, очень медленно и добавление, И извлечение"),
+	HRIGA(1492, "*main", 'o', "-m6", "enhanced -m4: smaller, slower, slow extraction"),
+	HIT(1492, 0x9977A8B3, "-m4 migliorato: piu' piccolo, piu' lento, estrazione lenta"),
+	HRU(1492, 0x9977A8B3, "улучшенный -m4: меньше, медленнее, медленное извлечение"),
 #ifdef ZPAQZSTD
-		scrivi_riga("-m7", "~as small as -m3, slow to add, very fast extraction");
+	HRIGA(1493, "*main", 'o', "-m7", "~as small as -m3, slow to add, very fast extraction"),
+	HIT(1493, 0xBEEA4075, "~piccolo come -m3, lento in add, estrazione velocissima"),
+	HRU(1493, 0xBEEA4075, "~размер как у -m3, медленное|  добавление, очень быстрое извлечение"),
 #if !defined(ANCIENT)
-		scrivi_riga("-m8", "zpaqfranz default: very fast, very fast extraction");
+	HRIGA(1494, "*main", 'o', "-m8", "zpaqfranz default: very fast, very fast extraction"),
+	HIT(1494, 0xF9B03CB8, "default di zpaqfranz: velocissimo, estrazione velocissima"),
+	HRU(1494, 0xF9B03CB8, "по умолчанию в zpaqfranz: очень|  быстро, очень быстрое извлечение"),
 #else
-		scrivi_riga("-m8", "very fast, very fast extraction");
+	HRIGA(1495, "*main", 'o', "-m8", "very fast, very fast extraction"),
+	HIT(1495, 0xBCDC507E, "velocissimo, estrazione velocissima"),
+	HRU(1495, 0xBCDC507E, "очень быстро, очень быстрое извлечение"),
 #endif
-		scrivi_riga("-m9", "a bit slower than -m8 but smaller, very fast extraction");
-		scrivi_riga("-m8[hN|aN]", "-m7 -m8 -m9 are zstd (any zpaq, 7.15 too, extracts them). By hand:");
-		scrivi_riga(" ", "  -m8 level 3, -m8h19 level 1..22, -m8a5 fast level -5, -m86: 64 MB blocks");
+	HRIGA(1496, "*main", 'o', "-m9", "a bit slower than -m8 but smaller, very fast extraction"),
+	HIT(1496, 0x895E6B18, "un po' piu' lento di -m8 ma piu'|  piccolo, estrazione velocissima"),
+	HRU(1496, 0x895E6B18, "чуть медленнее -m8, но меньше, очень быстрое извлечение"),
+	HRIGA(1497, "*main", 'o', "-m8[hN|aN]", "-m7 -m8 -m9 are zstd (any zpaq, 7.15 too, extracts them). By hand:|  -m8 level 3, -m8h19 level 1..22, -m8a5 fast level -5, -m86: 64 MB blocks"),
+	HIT(1497, 0x4F14B557, "-m7 -m8 -m9 sono zstd (qualsiasi zpaq, anche la 7.15, li estrae). A mano:|  -m8 livello 3, -m8h19 livello 1..22, -m8a5|  livello veloce -5, -m86: blocchi da 64 MB"),
+	HRU(1497, 0x4F14B557, "-m7 -m8 -m9 - это zstd (их извлекает любой zpaq, и 7.15). Вручную:|  -m8 уровень 3, -m8h19 уровень 1..22, -m8a5|  быстрый уровень -5, -m86: блоки 64 MB"),
 #endif // ZPAQZSTD
-		scrivi_riga("-force", "Overwrite");
-		scrivi_riga("-test", "Verify (extract/add)");
-		scrivi_riga("-kill", "Allow destructive operations ('wet runs')");
-		scrivi_riga("-to out...", "Prefix files to out");
-		scrivi_riga("-until N", "Roll back to N'th version");
+	HRIGA(1498, "*main", 'o', "-force", "Overwrite"),
+	HIT(1498, 0x78FF0E92, "Sovrascrive"),
+	HRU(1498, 0x78FF0E92, "Перезаписывать"),
+	HRIGA(1499, "*main", 'o', "-test", "Verify (extract/add)"),
+	HIT(1499, 0x130C62D4, "Verifica (estrazione/add)"),
+	HRU(1499, 0x130C62D4, "Проверка (извлечение/add)"),
+	HRIGA(1500, "*main", 'o', "-kill", "Allow destructive operations ('wet runs')"),
+	HIT(1500, 0x6B3EC3AF, "Permette operazioni distruttive ('esecuzioni vere')"),
+	HRU(1500, 0x6B3EC3AF, "Разрешить разрушительные операции ('настоящие прогоны')"),
+	HRIGA(1501, "*main", 'o', "-to out...", "Prefix files to out"),
+	HIT(1501, 0x1170515B, "Prefisso dei file in output"),
+	HRU(1501, 0x1170515B, "Префикс файлов на выходе"),
+	HRIGA(1502, "*main", 'o', "-until N", "Roll back to N'th version"),
+	HIT(1502, 0x74FAC0E9, "Torna alla N-esima versione"),
+	HRU(1502, 0x74FAC0E9, "Откат к N-й версии"),
+	HRIGA(1503, "*main", 'o', "-ini X", "Switches from the text file X, as if typed (more -ini: in order)|the same switch typed on the command line wins over the one of X|-not -only -always add up. In X: # :: rem comments, \"a b\" for blanks"),
+	HIT(1503, 0xE39923B9, "Switch dal file di testo X, come se fossero|scritti (piu' -ini: in ordine) lo stesso switch|scritto sulla riga di comando vince su quello di X|-not -only -always si sommano. In X:|commenti # :: rem, \"a b\" per gli spazi"),
+	HRU(1503, 0xE39923B9, "Ключи из текстового файла X, как если бы их набрали (несколько|-ini: по порядку) тот же ключ в командной строке важнее, чем в X|-not -only -always суммируются. В X:|комментарии # :: rem, \"a b\" для пробелов"),
+	HRIGA(1504, "*main", 'o', "-writeini X", "Write the switches of this command line into X, then go on|a password (-key -franzen) goes there in clear text: protect X"),
+	HIT(1504, 0x5FE2048D, "Scrive in X gli switch di questa riga di|comando, poi prosegue una password (-key|-franzen) ci finisce in chiaro: proteggere X"),
+	HRU(1504, 0x5FE2048D, "Записать ключи этой командной строки в X,|затем продолжить пароль (-key -franzen)|попадает туда открытым текстом: защитите X"),
 #ifdef HWSHA1
-		scrivi_riga("-hw", "Hardware-accelerated SHA1 code    (not in all CPUs)");
+	HRIGA(1505, "*main", 'o', "-hw", "Hardware-accelerated SHA1 code    (not in all CPUs)"),
+	HIT(1505, 0x1FBA0DBE, "Codice SHA1 accelerato in hardware (non su tutte le CPU)"),
+	HRU(1505, 0x1FBA0DBE, "Аппаратно ускоренный SHA1         (не на всех CPU)"),
 #endif // corresponds to #ifdef (#ifdef HWSHA1)
-	}
-	return ("Frequently used switches");
-}
-string help_switches(bool i_usage, bool i_example)
-{
-	if ((i_usage) || (i_example))
-	{
-		char	buffer[200];
-		time_t	nowz= time(NULL);
-		tm	   *t	= gmtime(&nowz);
-		int64_t date= (t->tm_year + 1900) * 10000000000LL + (t->tm_mon + 1) * 100000000LL + t->tm_mday * 1000000 + t->tm_hour * 10000 + t->tm_min * 100 + t->tm_sec;
-		snprintf(buffer, sizeof(buffer), "%s   Set date, roll back (UT, default time: 235959)", dateToString(flagutc, date).c_str());
-		scrivi_riga("-until", buffer);
-		scrivi_riga("-not files... ", "Exclude. * and ? match any string or char");
-		scrivi_riga("     =[+-#^?] ", "List: exclude by comparison result");
-		scrivi_riga("-only files...", "Include only matches (default: *) example *pippo*.mp4");
-		scrivi_riga("-always files ", "Always (force) adding some file");
-		scrivi_riga("-noattributes ", "Ignore/don't save file attributes or permissions");
-		scrivi_riga("-index F      ", "Extract: create index F for archive");
-		scrivi_riga("              ", "Add: create suffix for archive indexed by F, update F");
-		scrivi_riga("-sN -summary N", "If >0 show only summary (sha1())");
-	}
-	return ("Standard switches");
-}
-string help_commonswitches(bool i_usage, bool i_example)
-{
-	if ((i_usage) || (i_example))
-		g_programflags.tutti();
-
-	return ("Most common switches");
-}
-
-string help_franzswitches(bool i_usage, bool i_example)
-{
-	if ((i_usage) || (i_example))
-	{
-		///	-all [N]             All version
-		scrivi_riga("-715", "Works just about like v7.15 (-m1, no -turbo, no -fast)");
-		scrivi_riga("-all [N]", "All versions (default 4 digits)");
-		scrivi_riga("-big", "ASCII art on final result");
-		scrivi_riga("-checksum", "Store SHA1+CRC32 for every file");
-		scrivi_riga("-comment", "foo  Add/find ASCII comment string to versions");
-		scrivi_riga("-debug", "Show lot of infos (superverbose)");
-		scrivi_riga("-dirlength X", "Utf command: find dirs with length>X, extract maxdirlen");
-		scrivi_riga("-fast", "Store the history inside the archive, for a fast l (default, not in ESX/NAS)");
-		scrivi_riga("-filelength X", "Utf command: find file with length>X, extract maxfilelen");
-		scrivi_riga("-find X", "Search for X in full filename (ex. list)");
-		scrivi_riga("-fix255", "Shrink total file length and case collisions (NTFS)");
-		scrivi_riga("-fixeml", "Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
-		scrivi_riga("-flat", "Everything in single path (emergency extract of strange files)");
-		scrivi_riga("-forcewindows", "Take $DATA$ and System Volume Information");
-		scrivi_riga("-forcezfs", "Force paths including .zfs");
-		scrivi_riga("-kill", "In extraction write 0-bytes file instead of data");
-		scrivi_riga("-kill", "Show 'script-ready' log of dup files");
-		scrivi_riga("-limit X", "(like -n)");
-		scrivi_riga("-n", "X Only print last X lines in dir (like tail)/first X (list)");
-		scrivi_riga("-nocolor", "disable colors");
-		scrivi_riga("-nodedup", "Disabling deduplication");
-		scrivi_riga("-noeta", "Do not show ETA");
-		scrivi_riga("-nomac", "Skip ._something and .DS_Store and Thumbs.db");
-		scrivi_riga("-nopath", "Do not store path");
-		scrivi_riga("-noqnap", "Skip path including @Recently-Snapshot and @Recycle");
-		scrivi_riga("-norecursion", "Do not recurse into folders (default: YES)");
-		scrivi_riga("-nosort", "Do not sort file when adding or listing");
-		scrivi_riga("-nosynology", "Skip #snapshot, #recycle etc");
-		scrivi_riga("-output", "s.txt Output on s.txt too (alias: -out)");
-		scrivi_riga("-pakka", "Output for PAKKA (briefly)");
-		scrivi_riga("-replace Y", "Replace X with Y in full filename (ex. list)");
-		scrivi_riga("-silent", "Be mute (!)");
-		scrivi_riga("-store", "Store mode: turn off deduplication and compression");
-		scrivi_riga("-summary", "Concise output");
-		scrivi_riga("-timestamp X", "Set version datetime@X 14 digit (2021-12-30_01:03:04)"); // force the timestamp
-		scrivi_riga("-utc", "Do not convert to localtime (use UTC, like 715)");
-		scrivi_riga("-utf", "Remove non-utf8 chars");
-		scrivi_riga("-utf8", "Like -utf");
-		help_date();
-		scrivi_riga("-verbose", "Show more");
-		scrivi_riga("-verify", "Force re-read of file during t (test command) or c");
-		scrivi_riga("-xls", "Do NOT always force XLS/PPT");
-		scrivi_riga("-zfs", "Skip paths including .zfs");
-		help_size();
+	HBREVE(1506, "*main", "Frequently used switches"),
+	HIT(1506, 0x28069133, "Switch usati spesso"),
+	HRU(1506, 0x28069133, "Часто используемые ключи"),
+	/// *normal
+	HGENERA(1507, "*normal", 'o', 'd', "-until", "%s   Set date, roll back (UT, default time: 235959)"),
+	HIT(1507, 0xF10BCCB8, "%s   Fissa la data, torna indietro (UT, default: 235959)"),
+	HRU(1507, 0xF10BCCB8, "%s   Задать дату, откат (UT, время по умолчанию: 235959)"),
+	HRIGA(1508, "*normal", 'o', "-not files... ", "Exclude. * and ? match any string or char"),
+	HIT(1508, 0x178634D6, "Esclude. * e ? corrispondono a una|  stringa o un carattere qualsiasi"),
+	HRU(1508, 0x178634D6, "Исключить. * и ? - любая строка или символ"),
+	HRIGA(1509, "*normal", 'o', "     =[+-#^?] ", "List: exclude by comparison result"),
+	HIT(1509, 0xFDF0F8FE, "Elenco: esclude per risultato del confronto"),
+	HRU(1509, 0xFDF0F8FE, "Список: исключить по результату сравнения"),
+	HRIGA(1510, "*normal", 'o', "-only files...", "Include only matches (default: *) example *pippo*.mp4"),
+	HIT(1510, 0x7806BB67, "Include solo le corrispondenze|  (default: *) esempio *pippo*.mp4"),
+	HRU(1510, 0x7806BB67, "Включить только совпадения (по|  умолчанию: *) пример *pippo*.mp4"),
+	HRIGA(1511, "*normal", 'o', "-always files ", "Always (force) adding some file"),
+	HIT(1511, 0xCA0ABA41, "Aggiunge sempre (a forza) certi file"),
+	HRU(1511, 0xCA0ABA41, "Всегда (принудительно) добавлять некоторые файлы"),
+	HRIGA(1512, "*normal", 'o', "-noattributes ", "Ignore/don't save file attributes or permissions"),
+	HIT(1512, 0x3E81B535, "Ignora/non salva attributi o permessi dei file"),
+	HRU(1512, 0x3E81B535, "Игнорировать/не сохранять атрибуты или права файлов"),
+	HRIGA(1513, "*normal", 'o', "-index F      ", "Extract: create index F for archive|Add: create suffix for archive indexed by F, update F"),
+	HIT(1513, 0x9CF1BFB9, "Estrazione: crea l'indice F dell'archivio|Add: crea il suffisso per l'archivio|indicizzato da F, aggiorna F"),
+	HRU(1513, 0x9CF1BFB9, "Извлечение: создать индекс F для архива|Add: создать суффикс для архива,|индексированного F, обновить F"),
+	HRIGA(1514, "*normal", 'o', "-summary N", "If >0 show only summary (sha1())"), /// 65.14d: it was -sN -summary N, -s5 is not taken
+	HIT(1514, 0x22D307AA, "Se >0 mostra solo il riepilogo (sha1())"),
+	HRU(1514, 0x22D307AA, "Если >0, показать только итог (sha1())"),
+	HBREVE(1515, "*normal", "Standard switches"),
+	HIT(1515, 0x7EABF420, "Switch standard"),
+	HRU(1515, 0x7EABF420, "Стандартные ключи"),
+	/// *common
+	HGENERA(0, "*common", 'o', 'f', "", ""),
+	HBREVE(1516, "*common", "Most common switches"),
+	HIT(1516, 0x6D2859BD, "Gli switch piu' comuni"),
+	HRU(1516, 0x6D2859BD, "Самые распространённые ключи"),
+	/// *franz
+	///	-all [N]             All version
+	HRIGA(1517, "*franz", 'o', "-715", "Works just about like v7.15 (-m1, no -turbo, no -fast)"),
+	HIT(1517, 0xE8787C1A, "Funziona quasi come la v7.15 (-m1,|  niente -turbo, niente -fast)"),
+	HRU(1517, 0xE8787C1A, "Работает почти как v7.15 (-m1, без -turbo, без -fast)"),
+	HRIGA(1518, "*franz", 'o', "-all [N]", "All versions (default 4 digits)"),
+	HIT(1518, 0xC02DC39F, "Tutte le versioni (default 4 cifre)"),
+	HRU(1518, 0xC02DC39F, "Все версии (по умолчанию 4 цифры)"),
+	HRIGA(1519, "*franz", 'o', "-big", "ASCII art on final result"),
+	HIT(1519, 0x45629F47, "Arte ASCII sul risultato finale"),
+	HRU(1519, 0x45629F47, "ASCII-арт для итогового результата"),
+	HRIGA(1520, "*franz", 'o', "-checksum", "Store SHA1+CRC32 for every file"),
+	HIT(1520, 0x6555C23F, "Salva SHA1+CRC32 per ogni file"),
+	HRU(1520, 0x6555C23F, "Хранить SHA1+CRC32 для каждого файла"),
+	HRIGA(1521, "*franz", 'o', "-comment", "foo  Add/find ASCII comment string to versions"),
+	HIT(1521, 0x495F339D, "foo  Aggiunge/cerca un commento ASCII nelle versioni"),
+	HRU(1521, 0x495F339D, "foo  Добавить/найти ASCII-комментарий у версий"),
+	HRIGA(1522, "*franz", 'o', "-debug", "Show lot of infos (superverbose)"),
+	HIT(1522, 0xA804EAB5, "Mostra tante informazioni (superverbose)"),
+	HRU(1522, 0xA804EAB5, "Показать много сведений (сверхподробно)"),
+	HRIGA(1523, "*franz", 'o', "-dirlength X", "Utf command: find dirs with length>X, extract maxdirlen"),
+	HIT(1523, 0x88F0C735, "Comando utf: trova cartelle con|  lunghezza>X, estrae maxdirlen"),
+	HRU(1523, 0x88F0C735, "Команда utf: найти папки длиной>X, извлечь maxdirlen"),
+	HRIGA(1524, "*franz", 'o', "-fast", "Store the history inside the archive, for a fast l (default, not in ESX/NAS)"),
+	HIT(1524, 0xD7625BCB, "Salva la storia dentro l'archivio, per un l veloce (default, non in ESX/NAS)"),
+	HRU(1524, 0xD7625BCB, "Хранить историю внутри архива для быстрого l (по умолчанию, не в ESX/NAS)"),
+	HRIGA(1525, "*franz", 'o', "-filelength X", "Utf command: find file with length>X, extract maxfilelen"),
+	HIT(1525, 0xF3D3FDA6, "Comando utf: trova file con lunghezza>X, estrae maxfilelen"),
+	HRU(1525, 0xF3D3FDA6, "Команда utf: найти файлы длиной>X, извлечь maxfilelen"),
+	HRIGA(1526, "*franz", 'o', "-findhash X", "xxxyyy (alias -searchhash) taken, but nothing uses it"), /// 65.14d
+	HIT(1526, 0x5D1385D8, "xxxyyy (alias -searchhash) accettato, ma non lo usa nessuno"),
+	HRU(1526, 0x5D1385D8, "xxxyyy (псевдоним -searchhash)|  принимается, но ничем не используется"),
+	HRIGA(1527, "*franz", 'o', "-find X", "Search for X in full filename (ex. list)"),
+	HIT(1527, 0xF5789153, "Cerca X nel nome completo del file (es. list)"),
+	HRU(1527, 0xF5789153, "Искать X в полном имени файла (напр. list)"),
+	HRIGA(1528, "*franz", 'o', "-fix255", "Shrink total file length and case collisions (NTFS)"),
+	HIT(1528, 0x93E94C84, "Accorcia la lunghezza totale dei nomi|  e le collisioni di maiuscole (NTFS)"),
+	HRU(1528, 0x93E94C84, "Сократить общую длину имён и коллизии регистра (NTFS)"),
+	HRIGA(1529, "*franz", 'o', "-fixeml", "Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)"),
+	HIT(1529, 0x331CC77B, "Comprime euristicamente i nomi dei .eml (Fwd Fwd Fwd =>Fwd)"),
+	HRU(1529, 0x331CC77B, "Эвристически сжимать имена .eml (Fwd Fwd Fwd =>Fwd)"),
+	HRIGA(1530, "*franz", 'o', "-flat", "Everything in single path (emergency extract of strange files)"),
+	HIT(1530, 0x8B2AA9C9, "Tutto in un unico percorso (estrazione|  d'emergenza di file strani)"),
+	HRU(1530, 0x8B2AA9C9, "Всё в один путь (аварийное извлечение странных файлов)"),
+	HRIGA(1531, "*franz", 'o', "-forcewindows", "Take $DATA$ and System Volume Information"),
+	HIT(1531, 0x8ABEBD7C, "Prende $DATA$ e System Volume Information"),
+	HRU(1531, 0x8ABEBD7C, "Брать $DATA$ и System Volume Information"),
+	HRIGA(1532, "*franz", 'o', "-forcezfs", "Force paths including .zfs"),
+	HIT(1532, 0xA24FC49A, "Forza i percorsi che contengono .zfs"),
+	HRU(1532, 0xA24FC49A, "Включить пути, содержащие .zfs"),
+	HRIGA(1533, "*franz", 'o', "-kill", "In extraction write 0-bytes file instead of data"),
+	HIT(1533, 0x6087D695, "In estrazione scrive file da 0 byte invece dei dati"),
+	HRU(1533, 0x6087D695, "При извлечении писать файлы по 0 байт вместо данных"),
+	HRIGA(1534, "*franz", 'o', "-kill", "Show 'script-ready' log of dup files"),
+	HIT(1534, 0x3AF3E8E2, "Mostra un log 'pronto per script' dei file duplicati"),
+	HRU(1534, 0x3AF3E8E2, "Показать журнал дубликатов 'для скриптов'"),
+	HRIGA(1535, "*franz", 'o', "-eng -it -ru", "The help in English, Italian or Russian|Default: ZPAQFRANZ_LANG (en it ru), else the language of the system"), /// 65.14m: it was -lang X
+	HIT(1535, 0x2F9B18FA, "L'help in inglese, italiano o russo|Default: ZPAQFRANZ_LANG (en it ru), se no la lingua del sistema"),
+	HRU(1535, 0x2F9B18FA, "Справка на английском, итальянском или русском|По умолчанию: ZPAQFRANZ_LANG (en it ru), иначе язык системы"),
+	HRIGA(1536, "*franz", 'o', "-helpid", "Show the number of every line of the help (for who translates it)"), /// 65.14l
+	HIT(1536, 0x728DA36B, "Mostra il numero di ogni riga dell'help (per chi lo traduce)"),
+	HRU(1536, 0x728DA36B, "Показывать номер каждой строки справки (для переводчиков)"),
+#ifndef NOEMAIL
+	HRIGA(1537, "*franz", 'o', "-maila X", "xxxyyy Not used anymore: only a warning (the e-mails: h mailreport)"), /// 65.14d
+	HIT(1537, 0x65433387, "xxxyyy Non piu' usato: solo un avviso (le e-mail: h mailreport)"),
+	HRU(1537, 0x65433387, "xxxyyy Больше не используется: только|  предупреждение (письма: h mailreport)"),
+#endif
+	HRIGA(1538, "*franz", 'o', "-limit X", "(like -n)"),
+	HIT(1538, 0x4D7F7FEA, "(come -n)"),
+	HRU(1538, 0x4D7F7FEA, "(как -n)"),
+	HRIGA(1539, "*franz", 'o', "-n", "X Only print last X lines in dir (like tail)/first X (list)"),
+	HIT(1539, 0x5A661C19, "X Stampa solo le ultime X righe in|  dir (come tail)/le prime X (list)"),
+	HRU(1539, 0x5A661C19, "X Печатать только последние X строк|  в dir (как tail)/первые X (list)"),
+	HRIGA(1540, "*franz", 'o', "-nocolor", "disable colors"),
+	HIT(1540, 0x2B1ECDDD, "disattiva i colori"),
+	HRU(1540, 0x2B1ECDDD, "отключить цвета"),
+	HRIGA(1541, "*franz", 'o', "-nodedup", "Disabling deduplication"),
+	HIT(1541, 0x862393F5, "Disattiva la deduplica"),
+	HRU(1541, 0x862393F5, "Отключение дедупликации"),
+	HRIGA(1542, "*franz", 'o', "-noeta", "Do not show ETA"),
+	HIT(1542, 0xB8BA933A, "Non mostra l'ETA"),
+	HRU(1542, 0xB8BA933A, "Не показывать ETA"),
+	HRIGA(1543, "*franz", 'o', "-nomac", "Skip ._something and .DS_Store and Thumbs.db"),
+	HIT(1543, 0xC56151A1, "Salta ._qualcosa e .DS_Store e Thumbs.db"),
+	HRU(1543, 0xC56151A1, "Пропускать ._something, .DS_Store и Thumbs.db"),
+	HRIGA(1544, "*franz", 'o', "-nopath", "Do not store path"),
+	HIT(1544, 0x7F6CD367, "Non salva il percorso"),
+	HRU(1544, 0x7F6CD367, "Не сохранять путь"),
+	HRIGA(1545, "*franz", 'o', "-noqnap", "Skip path including @Recently-Snapshot and @Recycle"),
+	HIT(1545, 0x774EED81, "Salta i percorsi che contengono|  @Recently-Snapshot e @Recycle"),
+	HRU(1545, 0x774EED81, "Пропускать пути с @Recently-Snapshot и @Recycle"),
+	HRIGA(1546, "*franz", 'o', "-norecursion", "Do not recurse into folders (default: YES)"),
+	HIT(1546, 0x3F15DF5C, "Non scende nelle cartelle (default: SI')"),
+	HRU(1546, 0x3F15DF5C, "Не заходить в папки (по умолчанию: ДА)"),
+	HRIGA(1547, "*franz", 'o', "-nosort", "Do not sort file when adding or listing"),
+	HIT(1547, 0x1DC4F6EF, "Non ordina i file in add o negli elenchi"),
+	HRU(1547, 0x1DC4F6EF, "Не сортировать файлы при добавлении и выводе списка"),
+	HRIGA(1548, "*franz", 'o', "-nosynology", "Skip #snapshot, #recycle etc"),
+	HIT(1548, 0x6AC141FF, "Salta #snapshot, #recycle ecc."),
+	HRU(1548, 0x6AC141FF, "Пропускать #snapshot, #recycle и т.п."),
+	HRIGA(1549, "*franz", 'o', "-output", "s.txt Output on s.txt too (alias: -out)"),
+	HIT(1549, 0x63E2EDC5, "s.txt Output anche su s.txt (alias: -out)"),
+	HRU(1549, 0x63E2EDC5, "s.txt Вывод также в s.txt (псевдоним: -out)"),
+	HRIGA(1550, "*franz", 'o', "-pakka", "Output for PAKKA (briefly)"),
+	HIT(1550, 0x410ED7C9, "Output per PAKKA (breve)"),
+	HRU(1550, 0x410ED7C9, "Вывод для PAKKA (кратко)"),
+	HRIGA(1551, "*franz", 'o', "-remotespeed X", "xxxyyy ssh/sftp: bytes per second of the remote hashing (the wait is size/X)"), /// 65.14d
+	HIT(1551, 0xA4D4FD65, "xxxyyy ssh/sftp: byte al secondo dell'hash remoto (l'attesa e' dimensione/X)"),
+	HRU(1551, 0xA4D4FD65, "xxxyyy ssh/sftp: байт в секунду для удалённого|  хеширования (ожидание = размер/X)"),
+	HRIGA(1552, "*franz", 'o', "-replace Y", "Replace X with Y in full filename (ex. list)"),
+	HIT(1552, 0xDAE874FF, "Sostituisce X con Y nel nome completo del file (es. list)"),
+	HRU(1552, 0xDAE874FF, "Заменить X на Y в полном имени файла (напр. list)"),
+	HRIGA(1553, "*franz", 'o', "-silent", "Be mute (!)"),
+	HIT(1553, 0xCF2FE6B3, "Muto (!)"),
+	HRU(1553, 0xCF2FE6B3, "Молчать (!)"),
+	HRIGA(1554, "*franz", 'o', "-store", "Store mode: turn off deduplication and compression"),
+	HIT(1554, 0xB3EF5D4F, "Modalita' store: spegne deduplica e compressione"),
+	HRU(1554, 0xB3EF5D4F, "Режим store: отключить дедупликацию и сжатие"),
+	HRIGA(1555, "*franz", 'o', "-summary", "Concise output"),
+	HIT(1555, 0x653DDB8C, "Output conciso"),
+	HRU(1555, 0x653DDB8C, "Краткий вывод"),
+	HRIGA(1556, "*franz", 'o', "-timestamp X", "Set version datetime@X 14 digit (2021-12-30_01:03:04)"), // force the timestamp
+	HIT(1556, 0x91F7B82F, "Data e ora della versione @X, 14|  cifre (2021-12-30_01:03:04)"),
+	HRU(1556, 0x91F7B82F, "Дата-время версии @X, 14 цифр (2021-12-30_01:03:04)"),
+	HRIGA(1557, "*franz", 'o', "-utc", "Do not convert to localtime (use UTC, like 715)"),
+	HIT(1557, 0xB9E219F1, "Non converte all'ora locale (usa UTC, come la 715)"),
+	HRU(1557, 0xB9E219F1, "Не переводить в местное время (UTC, как 715)"),
+	HRIGA(1558, "*franz", 'o', "-utf", "Remove non-utf8 chars"),
+	HIT(1558, 0xDEC63A3F, "Toglie i caratteri non utf8"),
+	HRU(1558, 0xDEC63A3F, "Удалить символы, не являющиеся UTF-8"),
+	HINCLUDI("*franz", 'o', "@date", 'b'),
+	HRIGA(1559, "*franz", 'o', "-verbose", "Show more"),
+	HIT(1559, 0xCDACAEDD, "Mostra di piu'"),
+	HRU(1559, 0xCDACAEDD, "Показать больше"),
+	HRIGA(1560, "*franz", 'o', "-verify", "Force re-read of file during t (test command) or c"),
+	HIT(1560, 0xFA112542, "Forza la rilettura dei file durante t (comando test) o c"),
+	HRU(1560, 0xFA112542, "Принудительно перечитывать файлы при t (команда test) или c"),
+	HRIGA(1561, "*franz", 'o', "-xls", "Do NOT always force XLS/PPT"),
+	HIT(1561, 0xDCA056F7, "NON forza sempre XLS/PPT"),
+	HRU(1561, 0xDCA056F7, "НЕ форсировать всегда XLS/PPT"),
+	HRIGA(1562, "*franz", 'o', "-zfs", "Skip paths including .zfs"),
+	HIT(1562, 0x28D1C268, "Salta i percorsi che contengono .zfs"),
+	HRU(1562, 0x28D1C268, "Пропускать пути с .zfs"),
+	HINCLUDI("*franz", 'o', "@size", 'b'),
 #if defined(_WIN32)
-		scrivi_riga("-open", "Check if .zpaq is already open => abort if yes");
-		scrivi_riga("-longpath", "add/extract on Windows filenames longer than 255");
-		scrivi_riga("-noconsole", "disable console manipulation (older Windows)");
-		scrivi_riga("", "support env variable NO_CONSOLE (no-color.org)");
+	HRIGA(1563, "*franz", 'o', "-open", "Check if .zpaq is already open => abort if yes"),
+	HIT(1563, 0x43A8CA57, "Controlla se il .zpaq e' gia' aperto => esce se si'"),
+	HRU(1563, 0x43A8CA57, "Проверить, не открыт ли уже .zpaq => прервать, если да"),
+	HRIGA(1564, "*franz", 'o', "-longpath", "add/extract on Windows filenames longer than 255"),
+	HIT(1564, 0xACAA6738, "add/estrazione su Windows di nomi piu' lunghi di 255"),
+	HRU(1564, 0xACAA6738, "add/извлечение в Windows имён длиннее 255"),
+	HRIGA(1565, "*franz", 'o', "-noconsole", "disable console manipulation (older Windows)|support env variable NO_CONSOLE (no-color.org)"),
+	HIT(1565, 0x45916F04, "disattiva la manipolazione della console (Windows vecchi)|supporta la variabile d'ambiente NO_CONSOLE (no-color.org)"),
+	HRU(1565, 0x45916F04, "отключить управление консолью (старые Windows)|поддерживает переменную окружения NO_CONSOLE (no-color.org)"),
 #endif // corresponds to #if (#if defined(_WIN32))
-		help_printhash(false);
+	HGENERA(0, "*franz", 'o', 'h', "", ""),
 #ifdef ZPAQFULL /// NOSFTPSTART
-		scrivi_riga("-exec_ok", "f.sh After OK launch f.sh");
-		scrivi_riga("-exec_error", "z After NOT OK launch z");
-		scrivi_riga("-exec_warn", "cz At Warn launch cz");
-		scrivi_riga("-exec", "pip.bat Launch pip.bat %1 with command n");
+	HRIGA(1566, "*franz", 'o', "-exec_ok", "f.sh After OK launch f.sh"),
+	HIT(1566, 0x92F93238, "f.sh Dopo un OK lancia f.sh"),
+	HRU(1566, 0x92F93238, "f.sh После OK запустить f.sh"),
+	HRIGA(1567, "*franz", 'o', "-exec_error", "z After NOT OK launch z"),
+	HIT(1567, 0xC28E9A29, "z Dopo un NON OK lancia z"),
+	HRU(1567, 0xC28E9A29, "z После НЕ OK запустить z"),
+	HRIGA(1568, "*franz", 'o', "-exec_warn", "cz At Warn launch cz"),
+	HIT(1568, 0x4D38D35B, "cz Con un avviso lancia cz"),
+	HRU(1568, 0x4D38D35B, "cz При предупреждении запустить cz"),
+	HRIGA(1569, "*franz", 'o', "-exec", "pip.bat Launch pip.bat %1 with command n"),
+	HIT(1569, 0xA719189F, "pip.bat Lancia pip.bat %1 col comando n"),
+	HRU(1569, 0xA719189F, "pip.bat Запустить pip.bat %1 с командой n"),
 #ifdef _WIN32
-		scrivi_riga("-vss", "Do a VSS for drive C: (Windows with administrative rights)");
+	HRIGA(1570, "*franz", 'o', "-vss", "Do a VSS for drive C: (Windows with administrative rights)"),
+	HIT(1570, 0x5AFD0D06, "Fa una VSS dell'unita' C: (Windows|  con diritti di amministratore)"),
+	HRU(1570, 0x5AFD0D06, "Сделать VSS для диска C: (Windows с правами администратора)"),
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 #endif /// NOSFTPEND
-
-		help_orderby();
-	}
-	return ("Advanced zpaqfranz switches");
-}
-string help_voodooswitches(bool i_usage, bool i_example)
-{
-	if ((i_usage) || (i_example))
-	{
-		scrivi_riga("-memzero", "Do memzero on libsodium (just placebo)");
-		scrivi_riga("-repack F [X]", "Extract to new archive F with key X (default: none)");
-		scrivi_riga("-tN -threads N", "Use N threads (default: 0 = all cores)");
-		scrivi_riga("-fragment N", "Use 2^N KiB average fragment size (default: 6)");
-		scrivi_riga("-mNB -method NB", "Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)");
-		scrivi_riga("-method", "{xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Advanced:");
-		scrivi_riga(" ", "x=journaling (default). s=streaming (no dedupe)");
-		scrivi_riga(" ", "  short form: -mx6.0ci1,1,1,1,2am = -method x6.0ci1,1,1,1,2am");
-		scrivi_riga(" ", "  N2: 0=no pre/post. 1,2=packed,byte LZ77. 3=BWT. 4..7=0..3 with E8E9");
-		scrivi_riga(" ", "  N3=LZ77 min match. N4=longer match to try first (0=none). 2^N5=search");
-		scrivi_riga(" ", "  depth. 2^N6=hash table size (N6=B+21: suffix array). N7=lookahead");
-		scrivi_riga(" ", "  Context modeling defaults shown below:");
-		scrivi_riga(" ", "c0,0,0: context model. N1: 0=ICM, 1..256=CM max count. 1000..1256 halves");
-		scrivi_riga(" ", "  memory. N2: 1..255=offset mod N2, 1000..1255=offset from N2-1000 byte");
-		scrivi_riga(" ", "  N3...: order 0... context masks (0..255). 256..511=mask+byte LZ77");
-		scrivi_riga(" ", "  parse state, >1000: gap of N3-1000 zeros");
-		scrivi_riga(" ", "i: ISSE chain. N1=context order. N2...=order increment");
-		scrivi_riga(" ", "a24,0,0: MATCH: N1=hash multiplier. N2=halve buffer. N3=halve hash tab");
-		scrivi_riga(" ", "w1,65,26,223,20,0: Order 0..N1-1 word ISSE chain. A word is bytes");
-		scrivi_riga(" ", "  N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N6");
-		scrivi_riga(" ", "m8,24: MIX all previous models, N1 context bits, learning rate N2");
-		scrivi_riga(" ", "s8,32,255: SSE last model. N1 context bits, count range N2..N3");
-		scrivi_riga(" ", "t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
-		scrivi_riga("-m6[B]", "-m4 plus three sparse contexts in its CM: c0,2,0,255 c0,3,0,0,255");
-		scrivi_riga(" ", "  c0,4,0,0,0,255 (the byte 2/3/4 back, aligned: 16/32 bit integers,");
-		scrivi_riga(" ", "  tables, x86 code). Everything else is -m4 (the pre-check, LZ77/BWT");
-		scrivi_riga(" ", "  for some blocks, E8E9, the word model on text, 64 MB blocks)");
-		scrivi_riga(" ", "  -1..-5% of -m4, ~+25% of time; -m5 is -3..-11% at 3-5 times the time");
-		scrivi_riga(" ", "  Any zpaq extracts it: standard components only");
+	HINCLUDI("*franz", 'o', "@orderby", 'b'),
+	HBREVE(1571, "*franz", "Advanced zpaqfranz switches"),
+	HIT(1571, 0x75164918, "Switch avanzati di zpaqfranz"),
+	HRU(1571, 0x75164918, "Расширенные ключи zpaqfranz"),
+	/// *voodoo
+	HRIGA(1572, "*voodoo", 'o', "-memzero", "Do memzero on libsodium (just placebo)"),
+	HIT(1572, 0xC51E8E51, "memzero su libsodium (solo placebo)"),
+	HRU(1572, 0xC51E8E51, "memzero в libsodium (просто плацебо)"),
+	HRIGA(1573, "*voodoo", 'o', "-repack F [X]", "Extract to new archive F with key X (default: none)"),
+	HIT(1573, 0x29A65CCC, "Estrae in un nuovo archivio F con|  la chiave X (default: nessuna)"),
+	HRU(1573, 0x29A65CCC, "Извлечь в новый архив F с ключом X (по умолчанию: без)"),
+	HRIGA(1574, "*voodoo", 'o', "-tN -threads N", "Use N threads (default: 0 = all cores)"),
+	HIT(1574, 0xF8D6A225, "Usa N thread (default: 0 = tutti i core)"),
+	HRU(1574, 0xF8D6A225, "Использовать N потоков (по умолчанию: 0 = все ядра)"),
+	HRIGA(1575, "*voodoo", 'o', "-fragment N", "Use 2^N KiB average fragment size (default: 6)"),
+	HIT(1575, 0x80C60A50, "Frammenti in media da 2^N KiB (default: 6)"),
+	HRU(1575, 0x80C60A50, "Средний размер фрагмента 2^N KiB (по умолчанию: 6)"),
+	HRIGA(1576, "*voodoo", 'o', "-mNB -method NB", "Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)"),
+	HIT(1576, 0xCD3AF326, "Blocchi da 2^B MiB (0..11, default: 04, 14, 26..56)"),
+	HRU(1576, 0xCD3AF326, "Блоки по 2^B MiB (0..11, по умолчанию: 04, 14, 26..56)"),
+	HRIGA(1577, "*voodoo", 'o', "-method", "{xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Advanced:|x=journaling (default). s=streaming (no dedupe)|  short form: -mx6.0ci1,1,1,1,2am = -method x6.0ci1,1,1,1,2am|  N2: 0=no pre/post. 1,2=packed,byte LZ77. 3=BWT. 4..7=0..3 with E8E9|  N3=LZ77 min match. N4=longer match to try first (0=none). 2^N5=search|  depth. 2^N6=hash table size (N6=B+21: suffix array). N7=lookahead|  Context modeling defaults shown below:|c0,0,0: context model. N1: 0=ICM, 1..256=CM max count. 1000..1256 halves|  memory. N2: 1..255=offset mod N2, 1000..1255=offset from N2-1000 byte|  N3...: order 0... context masks (0..255). 256..511=mask+byte LZ77|  parse state, >1000: gap of N3-1000 zeros|i: ISSE chain. N1=context order. N2...=order increment|a24,0,0: MATCH: N1=hash multiplier. N2=halve buffer. N3=halve hash tab|w1,65,26,223,20,0: Order 0..N1-1 word ISSE chain. A word is bytes|  N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N6|m8,24: MIX all previous models, N1 context bits, learning rate N2|s8,32,255: SSE last model. N1 context bits, count range N2..N3|t8,24: MIX2 last 2 models, N1 context bits, learning rate N2"),
+	HIT(1577, 0xCDA89CD3, "{xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Avanzato:|x=journaling (default). s=streaming (niente deduplica)|  forma corta: -mx6.0ci1,1,1,1,2am = -method x6.0ci1,1,1,1,2am|  N2: 0=niente pre/post. 1,2=LZ77 a|  pacchetti,byte. 3=BWT. 4..7=0..3 con E8E9|  N3=match minimo LZ77. N4=match piu' lungo da provare prima|  (0=nessuno). 2^N5=profondita' di ricerca. 2^N6=dimensione|  della tabella hash (N6=B+21: suffix array). N7=lookahead|  I default del context modeling sono qui sotto:|c0,0,0: modello di contesto. N1: 0=ICM, 1..256=CM|  conteggio max. 1000..1256 dimezza la memoria. N2:|  1..255=offset mod N2, 1000..1255=offset dal byte N2-1000|  N3...: maschere di contesto di ordine 0...|  (0..255). 256..511=maschera+stato del parse|  LZ77 a byte, >1000: buco di N3-1000 zeri|i: catena ISSE. N1=ordine del contesto. N2...=incremento|dell'ordine a24,0,0: MATCH: N1=moltiplicatore dell'hash. N2=dimezza|il buffer. N3=dimezza la tabella hash w1,65,26,223,20,0: catena|ISSE di parole di ordine 0..N1-1. Una parola sono i byte|  N2..N2+N3-1 in AND con N4, moltiplicatore|  dell'hash N5, memoria dimezzata da N6|m8,24: MIX di tutti i modelli precedenti, N1 bit di contesto,|velocita' di apprendimento N2 s8,32,255: SSE dell'ultimo modello. N1|bit di contesto, intervallo dei conteggi N2..N3 t8,24: MIX2 degli|ultimi 2 modelli, N1 bit di contesto, velocita' di apprendimento N2"),
+	HRU(1577, 0xCDA89CD3, "{xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Для опытных:|x=журналирование (по умолчанию). s=потоковый (без дедупликации)|  краткая форма: -mx6.0ci1,1,1,1,2am = -method x6.0ci1,1,1,1,2am|  N2: 0=без пре/пост. 1,2=упакованный,байтовый|  LZ77. 3=BWT. 4..7=0..3 с E8E9|  N3=мин. совпадение LZ77. N4=сначала пробовать более|  длинное (0=нет). 2^N5=глубина поиска. 2^N6=размер|  хеш-таблицы (N6=B+21: суффиксный массив). N7=упреждение|  Значения контекстного моделирования по умолчанию ниже:|c0,0,0: контекстная модель. N1: 0=ICM, 1..256=CM макс.|  счётчик. 1000..1256 вдвое меньше памяти. N2: 1..255=смещение|  mod N2, 1000..1255=смещение от байта N2-1000|  N3...: маски контекста порядка 0... (0..255). 256..511=маска+состояние|  разбора байтового LZ77, >1000: промежуток из N3-1000 нулей|i: цепочка ISSE. N1=порядок контекста. N2...=приращение|порядка a24,0,0: MATCH: N1=множитель хеша. N2=вдвое меньше|буфер. N3=вдвое меньше хеш-таблица w1,65,26,223,20,0:|цепочка ISSE слов порядка 0..N1-1. Слово - это байты|  N2..N2+N3-1 по AND с N4, множитель|  хеша N5, память делится пополам N6 раз|m8,24: MIX всех предыдущих моделей, N1 бит контекста,|скорость обучения N2 s8,32,255: SSE последней модели. N1|бит контекста, диапазон счётчиков N2..N3 t8,24: MIX2 двух|последних моделей, N1 бит контекста, скорость обучения N2"),
+	HRIGA(1578, "*voodoo", 'o', "-m6[B]", "-m4 plus three sparse contexts in its CM: c0,2,0,255 c0,3,0,0,255|  c0,4,0,0,0,255 (the byte 2/3/4 back, aligned: 16/32 bit integers,|  tables, x86 code). Everything else is -m4 (the pre-check, LZ77/BWT|  for some blocks, E8E9, the word model on text, 64 MB blocks)|  -1..-5% of -m4, ~+25% of time; -m5 is -3..-11% at 3-5 times the time|  Any zpaq extracts it: standard components only"),
+	HIT(1578, 0x03B4E227, "-m4 piu' tre contesti sparsi nel suo CM: c0,2,0,255 c0,3,0,0,255|  c0,4,0,0,0,255 (il byte 2/3/4 indietro, allineato: interi da|  16/32 bit, tabelle, codice x86). Tutto il resto e' -m4 (il|  controllo preliminare, LZ77/BWT per alcuni blocchi, E8E9, il|  modello delle parole sul testo, blocchi da 64 MB)|  -1..-5% di -m4, ~+25% di tempo; -m5 e' -3..-11% a 3-5 volte il tempo|  Qualsiasi zpaq lo estrae: solo componenti standard"),
+	HRU(1578, 0x03B4E227, "-m4 плюс три разреженных контекста в его CM: c0,2,0,255 c0,3,0,0,255|  c0,4,0,0,0,255 (байт 2/3/4 назад, выровненный: 16/32-битные целые,|  таблицы, код x86). Всё остальное как в -m4 (предпроверка, LZ77/BWT|  для некоторых блоков, E8E9, модель слов для текста, блоки 64 MB)|  -1..-5% от -m4, ~+25% времени; -m5 даёт|  -3..-11% за 3-5 раз больше времени|  Извлекает любой zpaq: только стандартные компоненты"),
 #ifdef ZPAQZSTD
-		scrivi_riga("-m8[B][hN|aN]", "zstd 1.5.7: stored block + zstd decoder in ZPAQL");
-		scrivi_riga(" ", "  inside it, so ANY zpaq (7.15 too) extracts it; zpaqfranz decodes it");
-		scrivi_riga(" ", "  natively. B: 2^B MiB blocks (default 4, -m8 = -m84). hN: zstd level");
-		scrivi_riga(" ", "  1..22 (default 3), aN: fast level -N (bigger = faster, larger). The");
-		scrivi_riga(" ", "  window is the whole block; the pcomp needs a block-sized buffer + 2 MB");
-		scrivi_riga(" ", "  Ex: -m8 -m8h1 -m8h19 -m8a3 -m86h9");
-		scrivi_riga("-m7[B] -m9[B]", "Two zstd by name: -m7 = -m86h19 (level 19, 64 MB blocks),");
-		scrivi_riga(" ", "  -m9 = -m8h9 (level 9, 16 MB blocks). A block size and a level of");
-		scrivi_riga(" ", "  one's own win: -m78 = -m88h19, -m96 = -m86h9, -m9h12 = -m8h12");
+	HRIGA(1579, "*voodoo", 'o', "-m8[B][hN|aN]", "zstd 1.5.7: stored block + zstd decoder in ZPAQL|  inside it, so ANY zpaq (7.15 too) extracts it; zpaqfranz decodes it|  natively. B: 2^B MiB blocks (default 4, -m8 = -m84). hN: zstd level|  1..22 (default 3), aN: fast level -N (bigger = faster, larger). The|  window is the whole block; the pcomp needs a block-sized buffer + 2 MB|  Ex: -m8 -m8h1 -m8h19 -m8a3 -m86h9"),
+	HIT(1579, 0x3F004A23, "zstd 1.5.7: blocco salvato + decoder zstd in ZPAQL dentro, cosi'|  QUALSIASI zpaq (anche la 7.15) lo estrae; zpaqfranz lo decodifica|  da se'. B: blocchi da 2^B MiB (default 4, -m8 = -m84). hN:|  livello zstd 1..22 (default 3), aN: livello veloce -N (piu'|  grande = piu' veloce, piu' grosso). La finestra e' l'intero|  blocco; il pcomp vuole un buffer grande quanto il blocco + 2 MB|  Es: -m8 -m8h1 -m8h19 -m8a3 -m86h9"),
+	HRU(1579, 0x3F004A23, "zstd 1.5.7: хранимый блок + декодер zstd на ZPAQL внутри, поэтому|  ЛЮБОЙ zpaq (и 7.15) его извлекает; zpaqfranz декодирует сам. B:|  блоки по 2^B MiB (по умолчанию 4, -m8 = -m84). hN: уровень zstd|  1..22 (по умолчанию 3), aN: быстрый уровень -N (больше = быстрее,|  крупнее). Окно - весь блок; pcomp нужен буфер размером с блок + 2 MB|  Напр.: -m8 -m8h1 -m8h19 -m8a3 -m86h9"),
+	HRIGA(1580, "*voodoo", 'o', "-m7[B] -m9[B]", "Two zstd by name: -m7 = -m86h19 (level 19, 64 MB blocks),|  -m9 = -m8h9 (level 9, 16 MB blocks). A block size and a level of|  one's own win: -m78 = -m88h19, -m96 = -m86h9, -m9h12 = -m8h12"),
+	HIT(1580, 0xA7FCBB38, "Due zstd per nome: -m7 = -m86h19 (livello 19, blocchi da 64 MB),|  -m9 = -m8h9 (livello 9, blocchi da 16 MB). Una|  dimensione di blocco e un livello propri vincono:|  -m78 = -m88h19, -m96 = -m86h9, -m9h12 = -m8h12"),
+	HRU(1580, 0xA7FCBB38, "Два zstd по имени: -m7 = -m86h19 (уровень 19, блоки 64 MB),|  -m9 = -m8h9 (уровень 9, блоки 16 MB). Свои размер блока и|  уровень важнее: -m78 = -m88h19, -m96 = -m86h9, -m9h12 = -m8h12"),
 #endif // ZPAQZSTD
+	HBREVE(1581, "*voodoo", "Expert-level (nerd) switches"),
+	HIT(1581, 0xD3BAFFAC, "Switch da esperti (nerd)"),
+	HRU(1581, 0xD3BAFFAC, "Ключи для экспертов (нёрдов)"),
+	/// 65.14l @frasi: the texts written by code (usage, h, h h, the categories...), found by their English (help_t)
+	HTESTO(1582, "@frasi", 'a', 0, "DLL archiver"),
+	HIT(1582, 0xF595E729, "Archiviatore DLL"),
+	HRU(1582, 0xF595E729, "DLL-архиватор"),
+	HTESTO(1583, "@frasi", 'a', 0, "Top tier archiver w/dedup"),
+	HIT(1583, 0x2A3E7746, "Archiviatore di prima classe con deduplica"),
+	HRU(1583, 0x2A3E7746, "Первоклассный архиватор с дедупликацией"),
+	HTESTO(1584, "@frasi", 'a', 0, "Secure archiver w/dedup"),
+	HIT(1584, 0xB217138E, "Archiviatore sicuro con deduplica"),
+	HRU(1584, 0xB217138E, "Надёжный архиватор с дедупликацией"),
+	HTESTO(1585, "@frasi", 'a', 0, "Help"),
+	HIT(1585, 0xB89DF01A, "Aiuto"),
+	HRU(1585, 0xB89DF01A, "Справка"),
+	HTESTO(1586, "@frasi", 'a', 0, "<command>"),
+	HIT(1586, 0x44F06912, "<comando>"),
+	HRU(1586, 0x44F06912, "<команда>"),
+	HTESTO(1587, "@frasi", 'a', 0, "(single)"),
+	HIT(1587, 0x46E26702, "(singolo)"),
+	HRU(1587, 0x46E26702, "(одна)"),
+	HTESTO(1588, "@frasi", 'a', 0, "(full)"),
+	HIT(1588, 0x46B463A1, "(completo)"),
+	HRU(1588, 0x46B463A1, "(полная)"),
+	HTESTO(1589, "@frasi", 'a', 0, "Switches"),
+	HIT(1589, 0xD9CB2FBD, "Switch"),
+	HRU(1589, 0xD9CB2FBD, "Ключи"),
+	HTESTO(1590, "@frasi", 'a', 0, "Search"),
+	HIT(1590, 0xC646A2C9, "Cerca"),
+	HRU(1590, 0xC646A2C9, "Поиск"),
+	HTESTO(1591, "@frasi", 'a', 0, "(switches in every command)"),
+	HIT(1591, 0x961ADA7B, "(switch in ogni comando)"),
+	HRU(1591, 0x961ADA7B, "(ключи во всех командах)"),
+	HTESTO(1592, "@frasi", 'a', 0, "Chooser"),
+	HIT(1592, 0x534ACF56, "Scelta"),
+	HRU(1592, 0x534ACF56, "Выбор"),
+	HTESTO(1593, "@frasi", 'a', 0, "(or x l i v e w zip image...) with no archive: pick it on a screen"),
+	HIT(1593, 0x38B21CE3, "(o x l i v e w zip image...) senza archivio: si sceglie a video"),
+	HRU(1593, 0x38B21CE3, "(или x l i v e w zip image...) без архива: выбор на экране"),
+	HTESTO(1594, "@frasi", 'a', 0, "Force hardware SHA1 (fails if unsupported by CPU)"),
+	HIT(1594, 0xFFDFBC24, "Forza lo SHA1 in hardware (fallisce se la CPU non lo supporta)"),
+	HRU(1594, 0xFFDFBC24, "Принудительно аппаратный SHA1 (ошибка, если CPU не поддерживает)"),
+	HTESTO(1595, "@frasi", 'a', 0, "Update"),
+	HIT(1595, 0x6E230E94, "Aggiorna"),
+	HRU(1595, 0x6E230E94, "Обновить"),
+	HTESTO(1596, "@frasi", 'a', 0, "Look for newer version  (Internet):"),
+	HIT(1596, 0x003BFE5E, "Cerca una versione nuova  (Internet):"),
+	HRU(1596, 0x003BFE5E, "Поиск новой версии  (Интернет):"),
+	HTESTO(1597, "@frasi", 'a', 0, "Core"),
+	HIT(1597, 0x5D8AAC9E, "Base"),
+	HRU(1597, 0x5D8AAC9E, "Основа"),
+	HTESTO(0, "@frasi", 'a', 0, "Backup"),
+	HTESTO(1598, "@frasi", 'a', 0, "Restore"),
+	HIT(1598, 0x0FF87F71, "Ripristino"),
+	HRU(1598, 0x0FF87F71, "Восстановление"),
+	HTESTO(1599, "@frasi", 'a', 0, "Info/list"),
+	HIT(1599, 0x75B5CFCA, "Info/elenco"),
+	HRU(1599, 0x75B5CFCA, "Инфо/список"),
+	HTESTO(1600, "@frasi", 'a', 0, "File"),
+	HIT(1600, 0x2B183663, "File"),
+	HRU(1600, 0x2B183663, "Файлы"),
+	HTESTO(1601, "@frasi", 'a', 0, "Admin"),
+	HIT(1601, 0xDCFFA3B4, "Admin"),
+	HRU(1601, 0xDCFFA3B4, "Админ."),
+	HTESTO(1602, "@frasi", 'a', 0, "Utils"),
+	HIT(1602, 0x3B0C166E, "Utilita'"),
+	HRU(1602, 0x3B0C166E, "Утилиты"),
+	HTESTO(1603, "@frasi", 'a', 0, "Archive"),
+	HIT(1603, 0x73690B65, "Archivio"),
+	HRU(1603, 0x73690B65, "Архив"),
+	HTESTO(1604, "@frasi", 'a', 0, "Cloud"),
+	HIT(1604, 0xC0821B1E, "Cloud"),
+	HRU(1604, 0xC0821B1E, "Облако"),
+	HTESTO(1605, "@frasi", 'a', 0, "Test"),
+	HIT(1605, 0x2FFCBE05, "Test"),
+	HRU(1605, 0x2FFCBE05, "Тест"),
+	HTESTO(1606, "@frasi", 'a', 0, "provided as-is,no warranty whatsoever"),
+	HIT(1606, 0xCED4BF78, "fornito cosi' com'e', senza alcuna garanzia"),
+	HRU(1606, 0xCED4BF78, "предоставляется как есть, без каких-либо гарантий"),
+	HTESTO(1607, "@frasi", 'a', 0, "          Swiss army knife for backup and disaster recovery"),
+	HIT(1607, 0x9393BF44, "          Un coltellino svizzero per backup e disaster recovery"),
+	HRU(1607, 0x9393BF44, "          Швейцарский нож для backup и аварийного восстановления"),
+	HTESTO(1608, "@frasi", 'a', 0, "  Like 7z or RAR on steroids,with deduplicated \"snapshots\" (versions)"),
+	HIT(1608, 0xAD8CDA38, "  Come 7z o RAR dopato, con \"snapshot\" (versioni) deduplicati"),
+	HRU(1608, 0xAD8CDA38, "  Как 7z или RAR на стероидах, с дедуплицированными \"снимками\" (версиями)"),
+	HTESTO(1609, "@frasi", 'a', 0, "  Conceptually similar to Mac time machine, but much more efficiently"),
+	HIT(1609, 0x91B47AA0, "  Simile in teoria al Time Machine del Mac, ma molto piu' efficiente"),
+	HRU(1609, 0x91B47AA0, "  По идее похож на Time Machine в Mac, но гораздо эффективнее"),
+	HTESTO(1610, "@frasi", 'a', 0, "  Keeps backup always-to-always,no need to prune (bye bye Ransomware)"),
+	HIT(1610, 0x87FAAD3E, "  Tiene i backup per sempre, senza sfoltirli (ciao ciao Ransomware)"),
+	HRU(1610, 0x87FAAD3E, "  Хранит backup всегда, без чистки (прощай, Ransomware)"),
+	HTESTO(1611, "@frasi", 'a', 0, "  Easily handles millions of files and TBs of data, non-latin support"),
+	HIT(1611, 0x6A90F48A, "  Gestisce senza fatica milioni di file e TB di dati, caratteri non latini"),
+	HRU(1611, 0x6A90F48A, "  Легко справляется с миллионами файлов и TB данных, нелатинские имена"),
+	HTESTO(1612, "@frasi", 'a', 0, "  Multithreaded HW accelerations, full encryption, multipart archives"),
+	HIT(1612, 0x0AB270BE, "  Accelerazioni HW multithread, cifratura completa, archivi multiparte"),
+	HRU(1612, 0x0AB270BE, "  Многопоточное аппаратное ускорение, полное шифрование, многотомные архивы"),
+	HTESTO(1613, "@frasi", 'a', 0, "  Minimal data transfer => low bandwidth Virtual Machine Cloud backup"),
+	HIT(1613, 0xE876BB88, "  Minimo trasferimento di dati => backup cloud di VM con poca banda"),
+	HRU(1613, 0xE876BB88, "  Минимум передачи данных => backup VM в облако по узкому каналу"),
+	HTESTO(1614, "@frasi", 'a', 0, "Data integrity check"),
+	HIT(1614, 0x882A85AA, "Controllo d'integrita'"),
+	HRU(1614, 0x882A85AA, "Проверка целостности"),
+	HTESTO(1615, "@frasi", 'a', 0, "  Specific zfs handling functions,full multiplatform interoperability"),
+	HIT(1615, 0xA3E66D81, "  Funzioni specifiche per zfs, piena interoperabilita' fra sistemi"),
+	HRU(1615, 0xA3E66D81, "  Функции для zfs, полная совместимость между платформами"),
+	HTESTO(1616, "@frasi", 'a', 0, "  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others"),
+	HIT(1616, 0x8AA2CF3B, "  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS e altri"),
+	HRU(1616, 0x8AA2CF3B, "  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS и другие"),
+	HTESTO(1617, "@frasi", 'a', 0, "  Extended help:   zpaqfranz h h           ALL IN:   zpaqfranz h full"),
+	HIT(1617, 0x4AA3FE3C, "  Help esteso:     zpaqfranz h h           TUTTO:    zpaqfranz h full"),
+	HRU(1617, 0x4AA3FE3C, "  Подробно:        zpaqfranz h h           ВСЁ:      zpaqfranz h full"),
+	HTESTO(1618, "@frasi", 'a', 0, "Get help for one command with zpaqfranz h something"),
+	HIT(1618, 0x37ED7B8F, "L'help di un comando con zpaqfranz h qualcosa"),
+	HRU(1618, 0x37ED7B8F, "Справка по одной команде: zpaqfranz h что-то"),
+	HTESTO(1619, "@frasi", 'a', 0, " zpaqfranz   h all -nomore => everything, ready to be piped"),
+	HIT(1619, 0xF9A0BD19, " zpaqfranz   h all -nomore => tutto, pronto per una pipe"),
+	HRU(1619, 0xF9A0BD19, " zpaqfranz   h all -nomore => всё, готово для pipe"),
+	HTESTO(1620, "@frasi", 'a', 0, " zpaqfranz   h a           => ask help and examples for command 'a'"),
+	HIT(1620, 0xE4565077, " zpaqfranz   h a           => help ed esempi del comando 'a'"),
+	HRU(1620, 0xE4565077, " zpaqfranz   h a           => справка и примеры команды 'a'"),
+	HTESTO(1621, "@frasi", 'a', 0, " zpaqfranz -he a           => ask examples for command 'a'"),
+	HIT(1621, 0x2C788537, " zpaqfranz -he a           => esempi del comando 'a'"),
+	HRU(1621, 0x2C788537, " zpaqfranz -he a           => примеры команды 'a'"),
+	HTESTO(1622, "@frasi", 'a', 0, "Usage full:"),
+	HIT(1622, 0xCCBBE1E5, "Uso completo:"),
+	HRU(1622, 0xCCBBE1E5, "Полное использование:"),
+	HTESTO(1623, "@frasi", 'a', 0, "Extended switches:"),
+	HIT(1623, 0x00C8AF76, "Switch estesi:"),
+	HRU(1623, 0x00C8AF76, "Расширенные ключи:"),
+	HTESTO(1624, "@frasi", 'a', 0, "zpaqfranz switches:"),
+	HIT(1624, 0x2AAD692A, "Switch di zpaqfranz:"),
+	HRU(1624, 0x2AAD692A, "Ключи zpaqfranz:"),
+	HTESTO(1625, "@frasi", 'a', 0, "Voodoo switches"),
+	HIT(1625, 0xBF2E168D, "Switch voodoo"),
+	HRU(1625, 0xBF2E168D, "Ключи вуду"),
+	HTESTO(1626, "@frasi", 'a', 0, "Examples:"),
+	HIT(1626, 0x1DDC7164, "Esempi:"),
+	HRU(1626, 0x1DDC7164, "Примеры:"),
+	HTESTO(1627, "@frasi", 'a', 0, "the same, in their list of the hashes"),
+	HIT(1627, 0x4D9E3471, "lo stesso, nel loro elenco degli hash"),
+	HRU(1627, 0x4D9E3471, "то же самое, в их списке хешей"),
+	/// 65.14m: the line of the languages (help_lingue); 1628 was the hint of -lang, gone
+	HTESTO(1788, "@frasi", 'a', 0, "Language"),
+	HIT(1788, 0x9A73DB9B, "Lingua"),
+	HRU(1788, 0x9A73DB9B, "Язык"),
+	HTESTO(1789, "@frasi", 'a', 0, "English"),
+	HIT(1789, 0x1B9AE0BB, "inglese"),
+	HRU(1789, 0x1B9AE0BB, "английский"),
+	HTESTO(1790, "@frasi", 'a', 0, "Italian"),
+	HIT(1790, 0xF039952B, "italiano"),
+	HRU(1790, 0xF039952B, "итальянский"),
+	HTESTO(1791, "@frasi", 'a', 0, "Russian"),
+	HIT(1791, 0x47592386, "russo"),
+	HRU(1791, 0x47592386, "русский"),
+	/// 65.14l @hash: the descriptions of the hashes (help_printhash), found by their English (help_t; -helpcheck: one for each)
+	HTESTO(1629, "@hash", 'a', 0, "Disable checksums"),
+	HIT(1629, 0xE480E837, "Disattiva i checksum"),
+	HRU(1629, 0xE480E837, "Отключить контрольные суммы"),
+	HTESTO(1630, "@hash", 'a', 0, "Old but ubiquitous, superfast, not very strong"),
+	HIT(1630, 0x2E0C2794, "Vecchio ma ovunque, velocissimo, non molto robusto"),
+	HRU(1630, 0x2E0C2794, "Старый, но повсеместный, сверхбыстрый, не очень стойкий"),
+	HTESTO(1631, "@hash", 'a', 0, "Very fast, low CPU usage, zpaqfranz's default"),
+	HIT(1631, 0x30BCD2F4, "Molto veloce, poca CPU, il default di zpaqfranz"),
+	HRU(1631, 0x30BCD2F4, "Очень быстрый, мало CPU, по умолчанию в zpaqfranz"),
+	HTESTO(1632, "@hash", 'a', 0, "Very fast, low CPU usage, zpaqfranz's 60+ default"),
+	HIT(1632, 0xED861FFB, "Molto veloce, poca CPU, il default di zpaqfranz 60+"),
+	HRU(1632, 0xED861FFB, "Очень быстрый, мало CPU, по умолчанию в zpaqfranz 60+"),
+	HTESTO(1633, "@hash", 'a', 0, "Fair speed, very reliable, some collisions known"),
+	HIT(1633, 0xB9D7D588, "Velocita' discreta, molto affidabile, note alcune collisioni"),
+	HRU(1633, 0xB9D7D588, "Приличная скорость, очень надёжный, известны коллизии"),
+	HTESTO(1634, "@hash", 'a', 0, "CPU intensive, one of the most reliable. Legal proof in EU"),
+	HIT(1634, 0x57815577, "Pesante per la CPU, fra i piu' affidabili. Valore legale nella UE"),
+	HRU(1634, 0x57815577, "Нагружает CPU, один из самых надёжных. Юридическая сила в ЕС"),
+	HTESTO(1635, "@hash", 'a', 0, "Very fast and strong, zpaqfranz default for file comparing"),
+	HIT(1635, 0x4DF4AA56, "Molto veloce e robusto, default di zpaqfranz per confrontare file"),
+	HRU(1635, 0x4DF4AA56, "Очень быстрый и стойкий, по умолчанию в zpaqfranz для сравнения файлов"),
+	HTESTO(1636, "@hash", 'a', 0, "Common, fast, hashdeep compatible. Not cryptographically secure"),
+	HIT(1636, 0xEA688B19, "Comune, veloce, compatibile con hashdeep. Non sicuro in crittografia"),
+	HRU(1636, 0xEA688B19, "Распространённый, быстрый, совместим с hashdeep. Криптографически не стойкий"),
+	HTESTO(1637, "@hash", 'a', 0, "Fast, CPU intensive (on Win64 HW acceleration), reliable"),
+	HIT(1637, 0x14B2B8DF, "Veloce, pesante per la CPU (su Win64 accelerato in HW), affidabile"),
+	HRU(1637, 0x14B2B8DF, "Быстрый, нагружает CPU (в Win64 аппаратное ускорение), надёжный"),
+	HTESTO(1638, "@hash", 'a', 0, "Latest NIST standard, very strong"),
+	HIT(1638, 0x0A3A8138, "L'ultimo standard NIST, molto robusto"),
+	HRU(1638, 0x0A3A8138, "Новейший стандарт NIST, очень стойкий"),
+	HTESTO(1639, "@hash", 'a', 0, "Slow but very reliable"),
+	HIT(1639, 0x045B5361, "Lento ma molto affidabile"),
+	HRU(1639, 0x045B5361, "Медленный, но очень надёжный"),
+	HTESTO(1640, "@hash", 'a', 0, "Experimental Google HighwayHash, C implementation, 64 bit"),
+	HIT(1640, 0xAF58AAFD, "HighwayHash di Google sperimentale, implementazione in C, 64 bit"),
+	HRU(1640, 0xAF58AAFD, "Экспериментальный HighwayHash от Google, реализация на C, 64 бит"),
+	HTESTO(1641, "@hash", 'a', 0, "Experimental Google HighwayHash, C implementation, 128 bit"),
+	HIT(1641, 0xE5CA57B2, "HighwayHash di Google sperimentale, implementazione in C, 128 bit"),
+	HRU(1641, 0xE5CA57B2, "Экспериментальный HighwayHash от Google, реализация на C, 128 бит"),
+	HTESTO(1642, "@hash", 'a', 0, "Experimental Google HighwayHash, C implementation, 256 bit"),
+	HIT(1642, 0x72B28666, "HighwayHash di Google sperimentale, implementazione in C, 256 bit"),
+	HRU(1642, 0x72B28666, "Экспериментальный HighwayHash от Google, реализация на C, 256 бит"),
+	HTESTO(1643, "@hash", 'a', 0, "'Castagnoli' variation of CRC-32, HW accelerated"),
+	HIT(1643, 0x1D79B7FA, "Variante 'Castagnoli' del CRC-32, accelerata in HW"),
+	HRU(1643, 0x1D79B7FA, "Вариант CRC-32 'Castagnoli', аппаратное ускорение"),
+	HTESTO(1644, "@hash", 'a', 0, "Maybe the fastest, limited 'strength'"),
+	HIT(1644, 0xA1C78555, "Forse il piu' veloce, 'robustezza' limitata"),
+	HRU(1644, 0xA1C78555, "Возможно, самый быстрый, ограниченная 'стойкость'"),
+	HTESTO(1645, "@hash", 'a', 0, "Look for similarities, not differences"),
+	HIT(1645, 0x0689A849, "Cerca le somiglianze, non le differenze"),
+	HRU(1645, 0x0689A849, "Ищет сходства, а не различия"),
+	HTESTO(1646, "@hash", 'a', 0, "Quick-and-dirty entropy estimator"),
+	HIT(1646, 0xFCAAF94E, "Stima alla buona dell'entropia"),
+	HRU(1646, 0xFCAAF94E, "Грубая оценка энтропии"),
+	HTESTO(1647, "@hash", 'a', 0, "Quick partial hasher"),
+	HIT(1647, 0xD3E4DE64, "Hash parziale rapido"),
+	HRU(1647, 0xD3E4DE64, "Быстрый частичный хеш"),
+	HTESTO(1648, "@hash", 'a', 0, "Zpaq partial hasher"),
+	HIT(1648, 0x54B0DD2F, "Hash parziale di zpaq"),
+	HRU(1648, 0x54B0DD2F, "Частичный хеш zpaq"),
+	HTESTO(1649, "@hash", 'a', 0, "Zpaq partial hasher (encrypted)"),
+	HIT(1649, 0xE4A90BA4, "Hash parziale di zpaq (cifrato)"),
+	HRU(1649, 0xE4A90BA4, "Частичный хеш zpaq (зашифрованный)"),
+	HTESTO(1650, "@hash", 'a', 0, "Same as xxhash64 (with Windows' dates)"),
+	HIT(1650, 0xCCE6DBF7, "Come xxhash64 (con le date di Windows)"),
+	HRU(1650, 0xCCE6DBF7, "Как xxhash64 (с датами Windows)"),
+	/// 65.14l @flag: the descriptions of the flags (h common), found by their English (help_t; -helpcheck: one for each)
+	HTESTO(1651, "@flag", 'a', 0, "Runs just about like zpaq 7.15"),
+	HIT(1651, 0xC2822A12, "Funziona quasi come zpaq 7.15"),
+	HRU(1651, 0xC2822A12, "Работает почти как zpaq 7.15"),
+	HTESTO(1652, "@flag", 'a', 0, "Append-only (antiransomware, slow)"),
+	HIT(1652, 0x69B197EB, "Solo accodamento (antiransomware, lento)"),
+	HRU(1652, 0x69B197EB, "Только дописывание (antiransomware, медленно)"),
+	HTESTO(1653, "@flag", 'a', 0, "Use XXH3 in backup instead of MD5"),
+	HIT(1653, 0xC1E76921, "Usa XXH3 in backup invece di MD5"),
+	HRU(1653, 0xC1E76921, "XXH3 в backup вместо MD5"),
+	HTESTO(1654, "@flag", 'a', 0, "Use ZETA in backup instead of MD5"),
+	HIT(1654, 0x73CEC824, "Usa ZETA in backup invece di MD5"),
+	HRU(1654, 0x73CEC824, "ZETA в backup вместо MD5"),
+	HTESTO(1655, "@flag", 'a', 0, "Write the result of the processing in large text"),
+	HIT(1655, 0xFCEC831A, "Scrive il risultato in caratteri grandi"),
+	HRU(1655, 0xFCEC831A, "Вывести результат крупным текстом"),
+	HTESTO(1656, "@flag", 'a', 0, "Do checksums"),
+	HIT(1656, 0x3A8A86FC, "Fa i checksum"),
+	HRU(1656, 0x3A8A86FC, "Вычислять контрольные суммы"),
+	HTESTO(1657, "@flag", 'a', 0, "Create Checktxt.txt"),
+	HIT(1657, 0x16BEB47D, "Crea Checktxt.txt"),
+	HRU(1657, 0x16BEB47D, "Создать Checktxt.txt"),
+	HTESTO(1658, "@flag", 'a', 0, "Enable SFX module"),
+	HIT(1658, 0x6ED34ED3, "Attiva il modulo SFX"),
+	HRU(1658, 0x6ED34ED3, "Включить модуль SFX"),
+	HTESTO(1659, "@flag", 'a', 0, "Create test .txt with CRC-32 and QUICK"),
+	HIT(1659, 0xB00796C5, "Crea il .txt di test con CRC-32 e QUICK"),
+	HRU(1659, 0xB00796C5, "Создать тестовый .txt с CRC-32 и QUICK"),
+	HTESTO(1660, "@flag", 'a', 0, "Comment version"),
+	HIT(1660, 0x152101A6, "Commento della versione"),
+	HRU(1660, 0x152101A6, "Комментарий версии"),
+	HTESTO(1661, "@flag", 'a', 0, "Write the output on stderr"),
+	HIT(1661, 0x42ADE76B, "Scrive l'output su stderr"),
+	HRU(1661, 0x42ADE76B, "Писать вывод в stderr"),
+	HTESTO(1662, "@flag", 'a', 0, "Append to -out file (do not start from scratch)"),
+	HIT(1662, 0x462C24A6, "Accoda al file di -out (non riparte da zero)"),
+	HRU(1662, 0x462C24A6, "Дописывать в файл -out (не начинать заново)"),
+	HTESTO(1663, "@flag", 'a', 0, "Show debug line number"),
+	HIT(1663, 0xF24C99D4, "Mostra il numero di riga di debug"),
+	HRU(1663, 0xF24C99D4, "Показывать номер строки отладки"),
+	HTESTO(1664, "@flag", 'a', 0, "Show debug infos"),
+	HIT(1664, 0xD6FD7786, "Mostra informazioni di debug"),
+	HRU(1664, 0xD6FD7786, "Показывать отладочные сведения"),
+	HTESTO(1665, "@flag", 'a', 0, "Show A LOT of debug"),
+	HIT(1665, 0xB2919B4A, "Mostra MOLTISSIMO debug"),
+	HRU(1665, 0xB2919B4A, "Показывать ОЧЕНЬ МНОГО отладки"),
+	HTESTO(1666, "@flag", 'a', 0, "Deterministic encryption (tests only, NOT secure)"),
+	HIT(1666, 0x611C64A8, "Cifratura deterministica (solo test, NON sicura)"),
+	HRU(1666, 0x611C64A8, "Детерминированное шифрование (только тесты, НЕ безопасно)"),
+	HTESTO(1667, "@flag", 'a', 0, "Show RAM usage"),
+	HIT(1667, 0x7B8E494B, "Mostra l'uso della RAM"),
+	HRU(1667, 0x7B8E494B, "Показывать использование RAM"),
+	HTESTO(1668, "@flag", 'a', 0, "NTFS/Enforce test"),
+	HIT(1668, 0x5F8188A7, "NTFS/forza il test"),
+	HRU(1668, 0x5F8188A7, "NTFS/принудительный тест"),
+	HTESTO(1669, "@flag", 'a', 0, "Orderby desc"),
+	HIT(1669, 0x74B4C487, "Orderby decrescente"),
+	HRU(1669, 0x74B4C487, "Orderby по убыванию"),
+	HTESTO(1670, "@flag", 'a', 0, "Ignore Windows REPARSE_POINT (Symlink)"),
+	HIT(1670, 0x03D7F315, "Ignora i REPARSE_POINT di Windows (symlink)"),
+	HRU(1670, 0x03D7F315, "Игнорировать REPARSE_POINT Windows (symlink)"),
+	HTESTO(1671, "@flag", 'a', 0, "Run md5deep on cloud"),
+	HIT(1671, 0x6E9E22A4, "Esegue md5deep sul cloud"),
+	HRU(1671, 0x6E9E22A4, "Запустить md5deep в облаке"),
+	HTESTO(1672, "@flag", 'a', 0, "Run sha1deep on cloud"),
+	HIT(1672, 0x3EADE9DF, "Esegue sha1deep sul cloud"),
+	HRU(1672, 0x3EADE9DF, "Запустить sha1deep в облаке"),
+	HTESTO(1673, "@flag", 'a', 0, "Run sha256deep on cloud"),
+	HIT(1673, 0x31173A1D, "Esegue sha256deep sul cloud"),
+	HRU(1673, 0x31173A1D, "Запустить sha256deep в облаке"),
+	HTESTO(1674, "@flag", 'a', 0, "Do NOT force adding of XLS/PPT (default: NO)"),
+	HIT(1674, 0xB270ED09, "NON forza l'aggiunta di XLS/PPT (default: NO)"),
+	HRU(1674, 0xB270ED09, "НЕ добавлять XLS/PPT принудительно (по умолчанию: NO)"),
+	HTESTO(1675, "@flag", 'a', 0, "Add 0-byte long file (debugging)"),
+	HIT(1675, 0x05E092C2, "Aggiunge file lunghi 0 byte (debug)"),
+	HRU(1675, 0x05E092C2, "Добавить файлы длиной 0 байт (отладка)"),
+	HTESTO(1676, "@flag", 'a', 0, "Add files but zero-filled (debugging)"),
+	HIT(1676, 0xF7DB98D2, "Aggiunge i file ma pieni di zeri (debug)"),
+	HRU(1676, 0xF7DB98D2, "Добавить файлы, но заполненные нулями (отладка)"),
+	HTESTO(1677, "@flag", 'a', 0, "Store the history for a fast l (then automatic)"),
+	HIT(1677, 0xA6C6FA0C, "Salva la storia per un l veloce (poi automatico)"),
+	HRU(1677, 0xA6C6FA0C, "Хранить историю для быстрого l (затем автоматически)"),
+	HTESTO(1678, "@flag", 'a', 0, "Stop the automatic -fast / l the slow way"),
+	HIT(1678, 0x5DD2B998, "Ferma il -fast automatico / l nel modo lento"),
+	HRU(1678, 0x5DD2B998, "Остановить автоматический -fast / l медленным способом"),
+	HTESTO(1679, "@flag", 'a', 0, "Store the state of the archive for a fast add"),
+	HIT(1679, 0x607862A1, "Salva lo stato dell'archivio per un add veloce"),
+	HRU(1679, 0x607862A1, "Хранить состояние архива для быстрого add"),
+	HTESTO(1680, "@flag", 'a', 0, "Store CRC-32 on NTFS ADS"),
+	HIT(1680, 0x05EC5622, "Salva il CRC-32 negli ADS di NTFS"),
+	HRU(1680, 0x05EC5622, "Хранить CRC-32 в ADS NTFS"),
+	HTESTO(1681, "@flag", 'a', 0, "Extract big files as sparse files (default)"),
+	HIT(1681, 0x7364555C, "Estrae i file grandi come file sparse (default)"),
+	HRU(1681, 0x7364555C, "Извлекать большие файлы как разреженные (по умолчанию)"),
+	HTESTO(1682, "@flag", 'a', 0, "Extract without sparse files"),
+	HIT(1682, 0x11A633D1, "Estrae senza file sparse"),
+	HRU(1682, 0x11A633D1, "Извлекать без разреженных файлов"),
+	HTESTO(1683, "@flag", 'a', 0, "Fix 255"),
+	HIT(1683, 0xB5A7F21C, "Sistema 255"),
+	HRU(1683, 0xB5A7F21C, "Исправлять 255"),
+	HTESTO(1684, "@flag", 'a', 0, "Fix eml filenames"),
+	HIT(1684, 0xD25FE754, "Sistema i nomi dei file eml"),
+	HRU(1684, 0xD25FE754, "Исправлять имена файлов eml"),
+	HTESTO(1685, "@flag", 'a', 0, "Flat filenames"),
+	HIT(1685, 0xF2BBCCE8, "Nomi di file piatti"),
+	HRU(1685, 0xF2BBCCE8, "Плоские имена файлов"),
+	HTESTO(1686, "@flag", 'a', 0, "x -backupdir: move away files not in archive"),
+	HIT(1686, 0x5E1049EB, "x -backupdir: sposta via i file che non sono nell'archivio"),
+	HRU(1686, 0x5E1049EB, "x -backupdir: убирать файлы, которых нет в архиве"),
+	HTESTO(1687, "@flag", 'a', 0, "Force (usually overwrite)"),
+	HIT(1687, 0xB1AB1C13, "Forza (di solito sovrascrive)"),
+	HRU(1687, 0xB1AB1C13, "Принудительно (обычно перезапись)"),
+	HTESTO(1688, "@flag", 'a', 0, "Store ADS stuff                (default: NO)"),
+	HIT(1688, 0x7976BB29, "Salva gli ADS                  (default: NO)"),
+	HRU(1688, 0x7976BB29, "Сохранять ADS                  (по умолчанию: NO)"),
+	HTESTO(1689, "@flag", 'a', 0, "Enforce using .zfs"),
+	HIT(1689, 0xAC55058C, "Forza l'uso di .zfs"),
+	HRU(1689, 0xAC55058C, "Принудительно использовать .zfs"),
+	HTESTO(1690, "@flag", 'a', 0, "Frugal backup"),
+	HIT(1690, 0x76C50582, "Backup frugale"),
+	HRU(1690, 0x76C50582, "Экономный backup"),
+	HTESTO(1691, "@flag", 'a', 0, "Use franzhash"),
+	HIT(1691, 0x2DB44E6B, "Usa franzhash"),
+	HRU(1691, 0x2DB44E6B, "Использовать franzhash"),
+	HTESTO(0, "@flag", 'a', 0, "Hashdeep"),
+	HTESTO(1692, "@flag", 'a', 0, "Ignore (do not show) file errors"),
+	HIT(1692, 0x70803B02, "Ignora (non mostra) gli errori sui file"),
+	HRU(1692, 0x70803B02, "Игнорировать (не показывать) ошибки файлов"),
+	HTESTO(1693, "@flag", 'a', 0, "Extract without gaps (zeros written), no sparse"),
+	HIT(1693, 0x0FF2BD75, "Estrae senza buchi (zeri scritti), niente sparse"),
+	HRU(1693, 0x0FF2BD75, "Извлекать без пропусков (нули пишутся), без sparse"),
+	HTESTO(1694, "@flag", 'a', 0, "Disable autotrim of incomplete transactions"),
+	HIT(1694, 0xB25766D6, "Disattiva l'autotrim delle transazioni incomplete"),
+	HRU(1694, 0xB25766D6, "Отключить autotrim незавершённых транзакций"),
+	HTESTO(1695, "@flag", 'a', 0, "Do NOT get onedrive placeholders"),
+	HIT(1695, 0x086B2D8F, "NON prende i segnaposto di onedrive"),
+	HRU(1695, 0x086B2D8F, "НЕ брать заполнители onedrive"),
+	HTESTO(1696, "@flag", 'a', 0, "Divide into multiple files, one for each folder."),
+	HIT(1696, 0xDFD13E7B, "Divide in piu' file, uno per ogni cartella."),
+	HRU(1696, 0xDFD13E7B, "Разделить на несколько файлов, по одному на папку."),
+	HTESTO(1697, "@flag", 'a', 0, "It usually means 'do something dangerous.'"),
+	HIT(1697, 0x5232D8A4, "Di solito vuol dire 'fai qualcosa di pericoloso.'"),
+	HRU(1697, 0x5232D8A4, "Обычно означает 'сделать что-то опасное.'"),
+	HTESTO(1698, "@flag", 'a', 0, "Enable Hyperthread (if any)"),
+	HIT(1698, 0x99C99040, "Attiva l'Hyperthread (se c'e')"),
+	HRU(1698, 0x99C99040, "Включить Hyperthread (если есть)"),
+	HTESTO(1699, "@flag", 'a', 0, "Skip chaptcha"),
+	HIT(1699, 0x538A8F56, "Salta il captcha"),
+	HRU(1699, 0x538A8F56, "Пропустить капчу"),
+	HTESTO(1700, "@flag", 'a', 0, "Memory mapped file"),
+	HIT(1700, 0x769172B9, "File mappato in memoria"),
+	HRU(1700, 0x769172B9, "Отображение файла в память"),
+	HTESTO(1701, "@flag", 'a', 0, "Do not store file attribute"),
+	HIT(1701, 0x0619D30E, "Non salva l'attributo dei file"),
+	HRU(1701, 0x0619D30E, "Не сохранять атрибут файла"),
+	HTESTO(1702, "@flag", 'a', 0, "On 'dir' do not show dirs, only files"),
+	HIT(1702, 0x70C491E5, "In 'dir' non mostra le cartelle, solo i file"),
+	HRU(1702, 0x70C491E5, "В 'dir' показывать только файлы, без папок"),
+	HTESTO(1703, "@flag", 'a', 0, "Show attribute (listing)"),
+	HIT(1703, 0x190FFFA7, "Mostra l'attributo (elenco)"),
+	HRU(1703, 0x190FFFA7, "Показывать атрибут (список)"),
+	HTESTO(1704, "@flag", 'a', 0, "Thunderbird's e-mail"),
+	HIT(1704, 0xFDBEA755, "E-mail di Thunderbird"),
+	HRU(1704, 0xFDBEA755, "Почта Thunderbird"),
+	HTESTO(1705, "@flag", 'a', 0, "Turn off deduplicator"),
+	HIT(1705, 0x7AAD774D, "Spegne il deduplicatore"),
+	HRU(1705, 0x7AAD774D, "Отключить дедупликацию"),
+	HTESTO(1706, "@flag", 'a', 0, "Do not show ETA"),
+	HIT(1706, 0xB8BA933A, "Non mostra l'ETA"),
+	HRU(1706, 0xB8BA933A, "Не показывать ETA"),
+	HTESTO(1707, "@flag", 'a', 0, "Do not store path"),
+	HIT(1707, 0x7F6CD367, "Non salva il percorso"),
+	HRU(1707, 0x7F6CD367, "Не сохранять путь"),
+	HTESTO(1708, "@flag", 'a', 0, "Exclude QNAP snap & trash"),
+	HIT(1708, 0x2B50929B, "Esclude snapshot e cestino del QNAP"),
+	HRU(1708, 0x2B50929B, "Исключить снапшоты и корзину QNAP"),
+	HTESTO(1709, "@flag", 'a', 0, "Exclude Mac hidden files"),
+	HIT(1709, 0xEAC14239, "Esclude i file nascosti del Mac"),
+	HRU(1709, 0xEAC14239, "Исключить скрытые файлы Mac"),
+	HTESTO(1710, "@flag", 'a', 0, "Exclude Synology system files"),
+	HIT(1710, 0x95803969, "Esclude i file di sistema del Synology"),
+	HRU(1710, 0x95803969, "Исключить системные файлы Synology"),
+	HTESTO(1711, "@flag", 'a', 0, "Do not recurse into folders (default: YES)"),
+	HIT(1711, 0x3F15DF5C, "Non scende nelle cartelle (default: SI')"),
+	HRU(1711, 0x3F15DF5C, "Не заходить в папки (по умолчанию: ДА)"),
+	HTESTO(1712, "@flag", 'a', 0, "Do not sort file"),
+	HIT(1712, 0x4F5B9D9B, "Non ordina i file"),
+	HRU(1712, 0x4F5B9D9B, "Не сортировать файлы"),
+	HTESTO(1713, "@flag", 'a', 0, "Work on last file"),
+	HIT(1713, 0x63F4F427, "Lavora sull'ultimo file"),
+	HRU(1713, 0x63F4F427, "Работать с последним файлом"),
+	HTESTO(1714, "@flag", 'a', 0, "New output style"),
+	HIT(1714, 0x01EC6D4F, "Output nuovo stile"),
+	HRU(1714, 0x01EC6D4F, "Вывод в новом стиле"),
+	HTESTO(1715, "@flag", 'a', 0, "CATPAQ mode"),
+	HIT(1715, 0x0B54AA22, "Modalita' CATPAQ"),
+	HRU(1715, 0x0B54AA22, "Режим CATPAQ"),
+	HTESTO(1716, "@flag", 'a', 0, "Paranoid 'something'"),
+	HIT(1716, 0x0B371CB9, "'Qualcosa' paranoico"),
+	HRU(1716, 0x0B371CB9, "Параноидальное 'что-то'"),
+	HTESTO(1717, "@flag", 'a', 0, "Enable paq-levels"),
+	HIT(1717, 0x672E32A8, "Attiva i livelli paq"),
+	HRU(1717, 0x672E32A8, "Включить уровни paq"),
+	HTESTO(1718, "@flag", 'a', 0, "Collision check"),
+	HIT(1718, 0xF11D248F, "Controllo delle collisioni"),
+	HRU(1718, 0xF11D248F, "Проверка коллизий"),
+	HTESTO(1719, "@flag", 'a', 0, "Ramdisk (really: heap)"),
+	HIT(1719, 0x77843B0C, "Ramdisk (in realta': heap)"),
+	HRU(1719, 0x77843B0C, "Ramdisk (на самом деле: куча)"),
+	HTESTO(1720, "@flag", 'a', 0, "Rename"),
+	HIT(1720, 0xC80631F3, "Rinomina"),
+	HRU(1720, 0xC80631F3, "Переименовать"),
+	HTESTO(1721, "@flag", 'a', 0, "Silent (no) output"),
+	HIT(1721, 0x56D61F33, "Output silenzioso (nessuno)"),
+	HRU(1721, 0x56D61F33, "Тихий вывод (нет вывода)"),
+	HTESTO(1722, "@flag", 'a', 0, "Do not manipulate console"),
+	HIT(1722, 0x08FB2F0E, "Non manipola la console"),
+	HRU(1722, 0x08FB2F0E, "Не управлять консолью"),
+	HTESTO(1723, "@flag", 'a', 0, "Do NOT ignore .zfs             (default: YES)"),
+	HIT(1723, 0x0875FE4D, "NON ignora .zfs                (default: YES)"),
+	HRU(1723, 0x0875FE4D, "НЕ игнорировать .zfs           (по умолчанию: YES)"),
+	HTESTO(1724, "@flag", 'a', 0, "Do not check space/writeability"),
+	HIT(1724, 0xDF6324DB, "Non controlla spazio/scrivibilita'"),
+	HRU(1724, 0xDF6324DB, "Не проверять место/возможность записи"),
+	HTESTO(1725, "@flag", 'a', 0, "Reads the files with multithreading from the solid-state drive"),
+	HIT(1725, 0x288CAFCB, "Legge i file in multithread dal disco a stato solido"),
+	HRU(1725, 0x288CAFCB, "Читать файлы многопоточно с SSD"),
+	HTESTO(1726, "@flag", 'a', 0, "Zero Franzen structure ASAP"),
+	HIT(1726, 0x77C6941F, "Azzera la struttura Franzen il prima possibile"),
+	HRU(1726, 0x77C6941F, "Обнулять структуру Franzen как можно раньше"),
+	HTESTO(1727, "@flag", 'a', 0, "In cloud ... just continue upload"),
+	HIT(1727, 0xF471000F, "In cloud... continua solo l'upload"),
+	HRU(1727, 0xF471000F, "В cloud... только продолжить выгрузку"),
+	HTESTO(1728, "@flag", 'a', 0, "Disable internal 'more' (ex |less)"),
+	HIT(1728, 0x9F7710A8, "Disattiva il 'more' interno (es. |less)"),
+	HRU(1728, 0x9F7710A8, "Отключить встроенный 'more' (напр. |less)"),
+	HTESTO(1729, "@flag", 'a', 0, "Do not use pids in backup"),
+	HIT(1729, 0x1E9FE4D7, "Non usa i pid in backup"),
+	HRU(1729, 0x1E9FE4D7, "Не использовать pid в backup"),
+	HTESTO(1730, "@flag", 'a', 0, "Fix encryption salt to 0"),
+	HIT(1730, 0xE71C9880, "Fissa a 0 il sale della cifratura"),
+	HRU(1730, 0xE71C9880, "Зафиксировать соль шифрования в 0"),
+	HTESTO(1731, "@flag", 'a', 0, "HDD (use if possible RAM before drive)"),
+	HIT(1731, 0x40C79122, "HDD (se possibile usa la RAM prima del disco)"),
+	HRU(1731, 0x40C79122, "HDD (по возможности RAM перед диском)"),
+	HTESTO(1732, "@flag", 'a', 0, "Extract in sequential (recover) mode"),
+	HIT(1732, 0x280070DA, "Estrae in modalita' sequenziale (recover)"),
+	HRU(1732, 0x280070DA, "Извлекать в последовательном режиме (recover)"),
+	HTESTO(1733, "@flag", 'a', 0, "Shows statistics"),
+	HIT(1733, 0xF7230F84, "Mostra le statistiche"),
+	HRU(1733, 0xF7230F84, "Показывать статистику"),
+	HTESTO(1734, "@flag", 'a', 0, "Reads the data to be compressed from stdin"),
+	HIT(1734, 0x992CEA6C, "Legge da stdin i dati da comprimere"),
+	HRU(1734, 0x992CEA6C, "Читать сжимаемые данные из stdin"),
+	HTESTO(1735, "@flag", 'a', 0, "Create output without header and footer"),
+	HIT(1735, 0x177A18C1, "Crea un output senza intestazione e chiusura"),
+	HRU(1735, 0x177A18C1, "Вывод без заголовка и концовки"),
+	HTESTO(1736, "@flag", 'a', 0, "Do not show deleted files (in listing)"),
+	HIT(1736, 0xEE4EE842, "Non mostra i file cancellati (negli elenchi)"),
+	HRU(1736, 0xEE4EE842, "Не показывать удалённые файлы (в списке)"),
+	HTESTO(1737, "@flag", 'a', 0, "File suitable for extraction via piping to stdout (reduces efficiency)."),
+	HIT(1737, 0x99A2CBF8, "File adatto all'estrazione via pipe su stdout (riduce l'efficienza)."),
+	HRU(1737, 0x99A2CBF8, "Файл, пригодный для извлечения через pipe в stdout (снижает эффективность)."),
+	HTESTO(1738, "@flag", 'a', 0, "Store mode: no deduplication, no compression"),
+	HIT(1738, 0x7DFC4D30, "Modalita' store: niente deduplica, niente compressione"),
+	HRU(1738, 0x7DFC4D30, "Режим store: без дедупликации, без сжатия"),
+	HTESTO(1739, "@flag", 'a', 0, "zip: compress (deflate) instead of storing"),
+	HIT(1739, 0xB89EC1A9, "zip: comprime (deflate) invece di salvare e basta"),
+	HRU(1739, 0xB89EC1A9, "zip: сжимать (deflate) вместо хранения"),
+	HTESTO(1740, "@flag", 'a', 0, "zip: the same as -deflate"),
+	HIT(1740, 0x6F9522C3, "zip: come -deflate"),
+	HRU(1740, 0x6F9522C3, "zip: то же, что -deflate"),
+	HTESTO(1741, "@flag", 'a', 0, "TAR mode (store/show Posix metadata)"),
+	HIT(1741, 0xCDDA7EE3, "Modalita' TAR (salva/mostra i metadati Posix)"),
+	HRU(1741, 0xCDDA7EE3, "Режим TAR (хранить/показывать метаданные Posix)"),
+	HTESTO(1742, "@flag", 'a', 0, "x -tar: owners by uid/gid only, not by name"),
+	HIT(1742, 0x470EE078, "x -tar: proprietari solo per uid/gid, non per nome"),
+	HRU(1742, 0x470EE078, "x -tar: владельцы только по uid/gid, не по имени"),
+	HTESTO(1743, "@flag", 'a', 0, "Use .tmp instead of .zpaq during backup"),
+	HIT(1743, 0xCCB45B5D, "Usa .tmp invece di .zpaq durante il backup"),
+	HRU(1743, 0xCCB45B5D, "Использовать .tmp вместо .zpaq во время backup"),
+	HTESTO(1744, "@flag", 'a', 0, "Re-hash files without a usable hash (7.15 to zpaqfranz)"),
+	HIT(1744, 0xBBF398D1, "Ricalcola l'hash dei file senza un hash utile (da 7.15 a zpaqfranz)"),
+	HRU(1744, 0xBBF398D1, "Пересчитать хеш файлов без пригодного хеша (из 7.15 в zpaqfranz)"),
+	HTESTO(1745, "@flag", 'a', 0, "Use UTC time"),
+	HIT(1745, 0x1306F6D7, "Usa l'ora UTC"),
+	HRU(1745, 0x1306F6D7, "Использовать время UTC"),
+	HTESTO(1746, "@flag", 'a', 0, "Show/save creation date (if possible)"),
+	HIT(1746, 0xD503FE3A, "Mostra/salva la data di creazione (se possibile)"),
+	HRU(1746, 0xD503FE3A, "Показывать/сохранять дату создания (если возможно)"),
+	HTESTO(0, "@flag", 'a', 0, "UTF-8"),
+	HTESTO(1747, "@flag", 'a', 0, "Verbose output"),
+	HIT(1747, 0xEB4C712A, "Output dettagliato"),
+	HRU(1747, 0xEB4C712A, "Подробный вывод"),
+	HTESTO(1748, "@flag", 'a', 0, "Verify (read from filesystem)"),
+	HIT(1748, 0x5DFA212A, "Verifica (legge dal filesystem)"),
+	HRU(1748, 0x5DFA212A, "Проверка (чтение с файловой системы)"),
+	HTESTO(1749, "@flag", 'a', 0, "Enable Volume Shadow Copies (need admin)"),
+	HIT(1749, 0x0FBE27A9, "Attiva le copie shadow del volume (servono i diritti di amministratore)"),
+	HRU(1749, 0x0FBE27A9, "Включить теневые копии тома (нужны права администратора)"),
+	HTESTO(1750, "@flag", 'a', 0, "-image: no VSS, not even tried"),
+	HIT(1750, 0x1400259F, "-image: niente VSS, neanche tentato"),
+	HRU(1750, 0x1400259F, "-image: без VSS, даже без попытки"),
+	HTESTO(1751, "@flag", 'a', 0, "-image of a dying disk: jump over what does not read"),
+	HIT(1751, 0xF5BBF453, "-image di un disco morente: salta cio' che non si legge"),
+	HRU(1751, 0xF5BBF453, "-image умирающего диска: перепрыгивать нечитаемое"),
+	HTESTO(1752, "@flag", 'a', 0, "Zeroing something"),
+	HIT(1752, 0x200CB381, "Azzera qualcosa"),
+	HRU(1752, 0x200CB381, "Обнуление чего-то"),
+	HTESTO(1753, "@flag", 'a', 0, "work fat32: BIOS boot code that starts BOOTMGR"),
+	HIT(1753, 0x99DEEEAE, "work fat32: codice di boot del BIOS che avvia BOOTMGR"),
+	HRU(1753, 0x99DEEEAE, "work fat32: загрузочный код BIOS, запускающий BOOTMGR"),
+	HTESTO(1754, "@flag", 'a', 0, "Pause after run (for runhigh)"),
+	HIT(1754, 0xDC6F822B, "Pausa dopo l'esecuzione (per runhigh)"),
+	HRU(1754, 0xDC6F822B, "Пауза после выполнения (для runhigh)"),
+	HTESTO(1755, "@flag", 'a', 0, "Do not show filesystem errors"),
+	HIT(1755, 0x51C86A20, "Non mostra gli errori del filesystem"),
+	HRU(1755, 0x51C86A20, "Не показывать ошибки файловой системы"),
+	HTESTO(1756, "@flag", 'a', 0, "Do memzero on libsodium (just placebo)"),
+	HIT(1756, 0xC51E8E51, "memzero su libsodium (solo placebo)"),
+	HRU(1756, 0xC51E8E51, "memzero в libsodium (просто плацебо)"),
+	HTESTO(1757, "@flag", 'a', 0, "pakka: every version of a file on its own line (catpaq)"),
+	HIT(1757, 0x138E09CC, "pakka: ogni versione di un file sulla sua riga (catpaq)"),
+	HRU(1757, 0x138E09CC, "pakka: каждая версия файла на своей строке (catpaq)"),
+	HTESTO(1758, "@flag", 'a', 0, "Sfx force"),
+	HIT(1758, 0xE281F5C7, "Sfx forzato"),
+	HRU(1758, 0xE281F5C7, "Sfx принудительно"),
+	HTESTO(1759, "@flag", 'a', 0, "Sfx all"),
+	HIT(1759, 0xE499CB6F, "Sfx tutto"),
+	HRU(1759, 0xE499CB6F, "Sfx всё"),
+	HTESTO(1760, "@flag", 'a', 0, "Order by date"),
+	HIT(1760, 0xE3741588, "Ordina per data"),
+	HRU(1760, 0xE3741588, "Сортировать по дате"),
+	HTESTO(1761, "@flag", 'a', 0, "Order by name"),
+	HIT(1761, 0x4B079A47, "Ordina per nome"),
+	HRU(1761, 0x4B079A47, "Сортировать по имени"),
+	HTESTO(1762, "@flag", 'a', 0, "Order by size (dir, s -home)"),
+	HIT(1762, 0xA8B0BA44, "Ordina per dimensione (dir, s -home)"),
+	HRU(1762, 0xA8B0BA44, "Сортировать по размеру (dir, s -home)"),
+	HTESTO(1763, "@flag", 'a', 0, "Monochrome output"),
+	HIT(1763, 0x5C13E0FD, "Output monocromatico"),
+	HRU(1763, 0x5C13E0FD, "Монохромный вывод"),
+	HTESTO(1764, "@flag", 'a', 0, "Do not logical delete files"),
+	HIT(1764, 0x7157273E, "Non cancella logicamente i file"),
+	HRU(1764, 0x7157273E, "Не удалять файлы логически"),
+	HTESTO(1765, "@flag", 'a', 0, "Reduce CPU usage"),
+	HIT(1765, 0x190DD17A, "Riduce l'uso della CPU"),
+	HRU(1765, 0x190DD17A, "Снизить загрузку CPU"),
+	HTESTO(1766, "@flag", 'a', 0, "Shutdown-after-add"),
+	HIT(1766, 0x6655E6FA, "Spegne dopo l'add"),
+	HRU(1766, 0x6655E6FA, "Выключить после add"),
+	HTESTO(1767, "@flag", 'a', 0, "Drive image"),
+	HIT(1767, 0xAC1C3DEA, "Immagine di un'unita'"),
+	HRU(1767, 0xAC1C3DEA, "Образ диска"),
+	HTESTO(1768, "@flag", 'a', 0, "-image: a live map of the source (default)"),
+	HIT(1768, 0x467B6981, "-image: una mappa dal vivo della sorgente (default)"),
+	HRU(1768, 0x467B6981, "-image: живая карта источника (по умолчанию)"),
+	HTESTO(1769, "@flag", 'a', 0, "-image: no live map, the classic progress line"),
+	HIT(1769, 0x6DDF2410, "-image: niente mappa dal vivo, la classica riga di avanzamento"),
+	HRU(1769, 0x6DDF2410, "-image: без живой карты, классическая строка прогресса"),
+	HTESTO(1770, "@flag", 'a', 0, "ac, xc, f: choose on a screen (what to take, where to restore, what f does)"),
+	HIT(1770, 0x20C5102F, "ac, xc, f: sceglie a video (cosa prendere, dove ripristinare, cosa fa f)"),
+	HRU(1770, 0x20C5102F, "ac, xc, f: выбор на экране (что брать, куда восстанавливать, что делает f)"),
+	HTESTO(1771, "@flag", 'a', 0, "Image of the whole partition (or disk)"),
+	HIT(1771, 0x32EF2F44, "Immagine dell'intera partizione (o disco)"),
+	HRU(1771, 0x32EF2F44, "Образ всего раздела (или диска)"),
+	HTESTO(1772, "@flag", 'a', 0, "-image: the swap files too (pagefile...)"),
+	HIT(1772, 0x2B839D9C, "-image: anche i file di swap (pagefile...)"),
+	HRU(1772, 0x2B839D9C, "-image: также файлы подкачки (pagefile...)"),
+	HTESTO(0, "@flag", 'a', 0, "dd"),
+	HTESTO(1773, "@flag", 'a', 0, "Turn off monitor"),
+	HIT(1773, 0xAABDA345, "Spegne il monitor"),
+	HRU(1773, 0xAABDA345, "Выключить монитор"),
+	HTESTO(1774, "@flag", 'a', 0, "Search .zpaq in every drive letter (USB device)"),
+	HIT(1774, 0x40242816, "Cerca il .zpaq in ogni lettera di unita' (dispositivo USB)"),
+	HRU(1774, 0x40242816, "Искать .zpaq на всех буквах дисков (USB-устройство)"),
+	HTESTO(1775, "@flag", 'a', 0, "Fix CAse"),
+	HIT(1775, 0xC73CFE74, "Sistema maiuscole/minuscole"),
+	HRU(1775, 0xC73CFE74, "Исправлять регистр"),
+	HTESTO(0, "@flag", 'a', 0, "fixreserved"),
+	HTESTO(1776, "@flag", 'a', 0, "Do NOT fix Windows-invalid filenames"),
+	HIT(1776, 0x7577E7DF, "NON sistema i nomi non validi per Windows"),
+	HRU(1776, 0x7577E7DF, "НЕ исправлять недопустимые для Windows имена"),
+	HTESTO(1777, "@flag", 'a', 0, "NTFS: used clusters (-image), scan from the $MFT"),
+	HIT(1777, 0x4D17D278, "NTFS: cluster usati (-image), scansione dalla $MFT"),
+	HRU(1777, 0x4D17D278, "NTFS: используемые кластеры (-image), сканирование $MFT"),
+	HTESTO(1778, "@flag", 'a', 0, "Never scan from the $MFT by itself"),
+	HIT(1778, 0x2C26C336, "Mai scansione dalla $MFT da sola"),
+	HRU(1778, 0x2C26C336, "Никогда не сканировать $MFT само"),
+	HTESTO(1779, "@flag", 'a', 0, "NTFS image to VHD file"),
+	HIT(1779, 0x86115C82, "Immagine NTFS in un file VHD"),
+	HRU(1779, 0x86115C82, "Образ NTFS в файл VHD"),
+	HTESTO(0, "@flag", 'a', 0, "Longpath"),
+	HTESTO(1780, "@flag", 'a', 0, "Abort if archive seems already opened"),
+	HIT(1780, 0x20D7B522, "Esce se l'archivio sembra gia' aperto"),
+	HRU(1780, 0x20D7B522, "Прервать, если архив, похоже, уже открыт"),
+	HTESTO(1781, "@flag", 'a', 0, "work email: implicit TLS (SMTPS, port 465)"),
+	HIT(1781, 0xF444342A, "work email: TLS implicito (SMTPS, porta 465)"),
+	HRU(1781, 0xF444342A, "work email: неявный TLS (SMTPS, порт 465)"),
+	HTESTO(1782, "@flag", 'a', 0, "work email: do NOT verify the certificate (tests)"),
+	HIT(1782, 0x1CFCBECF, "work email: NON verifica il certificato (test)"),
+	HRU(1782, 0x1CFCBECF, "work email: НЕ проверять сертификат (тесты)"),
+	HTESTO(1783, "@flag", 'a', 0, "Use HW SHA1"),
+	HIT(1783, 0x309A314E, "Usa lo SHA1 in HW"),
+	HRU(1783, 0x309A314E, "Использовать аппаратный SHA1"),
+	HTESTO(1784, "@flag", 'a', 0, "Do not use JIT"),
+	HIT(1784, 0x31802D0D, "Non usa il JIT"),
+	HRU(1784, 0x31802D0D, "Не использовать JIT"),
+	HTESTO(1785, "@flag", 'a', 0, "Faster add: parallel fragmenter (same archive)"),
+	HIT(1785, 0x13DBDBD4, "add piu' veloce: frammentatore parallelo (stesso archivio)"),
+	HRU(1785, 0x13DBDBD4, "Ускоренный add: параллельный фрагментатор (тот же архив)"),
+	HTESTO(1786, "@flag", 'a', 0, "Plain add: no parallel fragmenter"),
+	HIT(1786, 0x54006B77, "add semplice: niente frammentatore parallelo"),
+	HRU(1786, 0x54006B77, "Обычный add: без параллельного фрагментатора"),
+	HTESTO(1787, "@flag", 'a', 0, "Only do test"),
+	HIT(1787, 0x1354E828, "Fa solo il test"),
+	HRU(1787, 0x1354E828, "Только проверка"),
+};
+static const size_t g_helpquante= sizeof(g_helprighe) / sizeof(g_helprighe[0]);
+/// 65.14l: the language of the help (lingua_scegli); -helpid: the id of every line shown
+int					g_lingua= LINGUA_EN;
+bool				g_helpid= false;
+static const char *g_lingue[]= {"en", "it", "ru"};
+/// 65.14m: the switch of each language (in the order of LINGUA_) and its name, for the line of the languages
+struct franz_linguaopzione
+{
+	const char *opzione;
+	const char *nome; /// in English: help_t gives it in the language of the help
+};
+static const franz_linguaopzione g_linguaopzioni[]= {{"-eng", "English"}, {"-it", "Italian"}, {"-ru", "Russian"}};
+/// FNV-1a of an English text: a translation carries the one of the English it was made from
+static uint32_t help_impronta(const char *i_testo)
+{
+	uint32_t h= 2166136261u;
+	for (const unsigned char *p= (const unsigned char *)i_testo; *p; p++)
+		h= (h ^ *p) * 16777619u;
+	return h;
+}
+/// what a line has to translate: the title of an example, the text of the others ("": nothing)
+static const char *help_inglese(const franz_helpriga &i_r)
+{
+	const char *t= (i_r.tipo == 'e') ? i_r.testata : i_r.testo;
+	return (t != NULL) ? t : "";
+}
+/// the translation of the line i_id in the language of the help (NULL: none), by id, made once for a language
+static const franz_helpriga *help_traduzione(int i_id)
+{
+	static vector<const franz_helpriga *> tradotte;
+	static int							   fatta= -1; /// the language of tradotte
+	if (fatta != g_lingua)
+	{
+		fatta= g_lingua;
+		tradotte.clear();
+		for (size_t i= 0; i < g_helpquante; i++)
+			if ((g_helprighe[i].tipo == 'T') && (g_helprighe[i].quando == g_lingua) && (g_helprighe[i].id > 0))
+			{
+				if ((size_t)g_helprighe[i].id >= tradotte.size())
+					tradotte.resize(g_helprighe[i].id + 1, (const franz_helpriga *)NULL);
+				tradotte[g_helprighe[i].id]= &g_helprighe[i];
+			}
 	}
-	return ("Expert-level (nerd) switches");
+	if ((i_id <= 0) || ((size_t)i_id >= tradotte.size()))
+		return NULL;
+	return tradotte[i_id];
+}
+/// a line in the language of the help: its translation, when it was made from this English; else the English.
+/// o_inglese: there is a language, but the English is shown (no translation, or an old one)
+static const char *help_tradotto(const franz_helpriga &i_r, bool *o_inglese= NULL)
+{
+	const char *inglese= help_inglese(i_r);
+	if (o_inglese)
+		*o_inglese= false;
+	if ((g_lingua == LINGUA_EN) || (i_r.id <= 0) || (inglese[0] == 0))
+		return inglese;
+	const franz_helpriga *t= help_traduzione(i_r.id);
+	if ((t != NULL) && (t->impronta == help_impronta(inglese)))
+		return t->testo;
+	if (o_inglese)
+		*o_inglese= true;
+	return inglese;
+}
+/// -helpid: " [00027]" after a line ("[00027 en]": the English, there is no translation of it)
+static string help_numero(const franz_helpriga &i_r)
+{
+	if ((!g_helpid) || (i_r.id <= 0))
+		return "";
+	bool inglese= false;
+	help_tradotto(i_r, &inglese);
+	char numero[32];
+	snprintf(numero, sizeof(numero), " [%05d%s]", i_r.id, inglese ? " en" : "");
+	return numero;
+}
+/// a text written by code (@frasi), the description of a flag (@flag) or of a hash (@hash), by its English, in the
+/// language of the help (the English, when it is not there)
+const char *help_t(const char *i_inglese)
+{
+	static std::map<string, const franz_helpriga *> mappa;
+	if (mappa.empty())
+		for (size_t i= 0; i < g_helpquante; i++)
+			if ((g_helprighe[i].tipo == 't') && ((!strcmp(g_helprighe[i].comando, "@frasi")) || (!strcmp(g_helprighe[i].comando, "@flag")) || (!strcmp(g_helprighe[i].comando, "@hash"))))
+				mappa[g_helprighe[i].testo]= &g_helprighe[i];
+	if ((i_inglese == NULL) || (g_lingua == LINGUA_EN))
+		return i_inglese;
+	std::map<string, const franz_helpriga *>::iterator p= mappa.find(i_inglese);
+	if (p == mappa.end())
+		return i_inglese;
+	return help_tradotto(*p->second);
+}
+/// a text and spaces up to i_larga characters (not bytes: a label translated)
+string help_colonna(const string &i_testo, size_t i_larga)
+{
+	string s= i_testo;
+	for (size_t n= caratteri_utf8(s.c_str()); n < i_larga; n++)
+		s+= ' ';
+	return s;
+}
+/// 65.14m: the languages there are, by their switch (zpaqfranz, h, h h): Language : zpaqfranz -eng English  -it...
+void help_lingue(int i_spazi= 0)
+{
+	color_cyan();
+	moreprint(help_colonna(help_t("Language"), 9).c_str(), true, i_spazi);
+	color_restore();
+	moreprint(": zpaqfranz", true);
+	const int quante= (int)(sizeof(g_linguaopzioni) / sizeof(g_linguaopzioni[0]));
+	for (int l= 0; l < quante; l++)
+	{
+		color_green();
+		moreprint((string(" ") + g_linguaopzioni[l].opzione).c_str(), true);
+		color_restore();
+		moreprint((string(" ") + help_t(g_linguaopzioni[l].nome) + ((l + 1 < quante) ? " " : "")).c_str(), l + 1 < quante);
+	}
+}
+/// what can be typed after h, the help it shows, where it is in the list of h. No category: a section of
+/// switches (h main...)
+struct franz_helpcomando
+{
+	const char *nome;
+	const char *help;
+	const char *categoria;
+	int			posizione;
+};
+static const franz_helpcomando g_helpcomandi[]=
+{
+	/// a map is not so good, but we want to keep the executable small
+	/// NOT in the constructor
+	// Core
+	{"a", "a", "Core     ", 0},
+	{"x", "x", "Core     ", 0},
+	{"xx", "xx", "Core     ", 0},
+	{"l", "l", "Core     ", 0},
+	{"e", "e", "Core     ", 0},
+	{"backup", "backup", "Backup   ", 1},
+#ifdef ZPAQFULL /// NOSFTPSTART
+	{"mysqldump", "mysqldump", "Backup   ", 1},
+#endif /// NOSFTPEND
+#ifdef ZPAQFULL /// NOSFTPSTART
+#if defined(_WIN32)
+	/// help_map.insert(std::pair<string, HelpInfo>("g", 				HelpInfo("Backup   ", help_g,				1)));
+	{"q", "q", "Backup   ", 1},
+	{"cc", "q", "Backup   ", 1},
+#endif // corresponds to #if (#if defined(_WIN32))
+#endif /// NOSFTPEND
+#if defined(_WIN32) && !defined(ANCIENT)
+	{"ac", "ac", "Backup   ", 1}, /// 65.9n
+	{"xc", "xc", "Restore  ", 2}, /// 65.9p
+#endif
+	// Restore
+	{"w", "w", "Restore  ", 2},
+	{"image", "image", "Restore  ", 2},
+	// Info
+	{"dirsize", "dirsize", "Info/list", 3},
+	{"i", "i", "Info/list", 3},
+#if defined(_WIN32)
+	{"drive", "drive", "Info/list", 3},
+#endif
+	// List
+	{"fzf", "fzf", "Info/list", 3},
+	{"ls", "ls", "Info/list", 3},
+	{"tui", "tui", "Info/list", 3},
+	{"gui", "tui", "Info/list", 3},
+	{"mc", "mc", "File     ", 6}, /// 65.10a
+	{"pakka", "pakka", "Info/list", 3},
+#if defined(_WIN32)
+	{"drive", "drive", "Info/list", 3},
+#endif // corresponds to #if (#if defined(_WIN32))
+	// Test
+	{"p", "p", "Test     ", 4},
+#ifndef ANCIENT
+	{"pp", "pp", "Test     ", 4},
+#endif
+	{"sync", "sync", "Test     ", 4},
+	{"t", "t", "Test     ", 4},
+	{"testbackup", "testbackup", "Test     ", 4},
+	{"v", "v", "Test     ", 4},
+#ifdef ZPAQFULL /// NOSFTPSTART
+#ifdef SFTP
+	{"ssh", "ssh", "Cloud    ", 5},
+	{"sftp", "sftp", "Cloud    ", 5},
+	{"cloud", "cloud", "Cloud    ", 5},
+#endif // corresponds to #ifdef (#ifdef SFTP)
+#ifdef _WIN64
+	{"download", "download", "Cloud    ", 5},
+	{"kickstart", "kickstart", "Admin    ", 7},
+#endif // corresponds to #ifdef (#ifdef _WIN64)
+#endif /// NOSFTPEND
+	// File
+	{"1on1", "oneonone", "File     ", 6},
+	{"c", "c", "File     ", 6},
+	{"cp", "cp", "File     ", 6},
+	{"d", "d", "File     ", 6},
+	{"dir", "dir", "File     ", 6},
+	{"tree", "dir", "File     ", 6},
+	{"find", "find", "File     ", 6},
+	{"hash", "hasha", "File     ", 6},
+	{"r", "r", "File     ", 6},
+	{"s", "s", "File     ", 6},
+	{"sum", "summa", "File     ", 6},
+#ifdef ZPAQFULL /// NOSFTPSTART
+	{"n", "n", "File     ", 6},
+#if defined(_WIN32)
+	{"rd", "rd", "File     ", 6},
+#endif
+#endif /// NOSFTPEND
+	{"zip", "zip", "Archive  ", 6},
+	// Admin
+	{"autotest", "autotest", "Admin    ", 7},
+	{"b", "b", "Admin    ", 7},
+	{"collision", "collision", "Admin    ", 7},
+	{"consolidate", "consolidatebackup", "Admin    ", 7},
+	{"crop", "crop", "Admin    ", 7},
+	{"dump", "dump", "Admin    ", 7},
+	{"k", "k", "Admin    ", 7},
+	{"m", "m", "Admin    ", 7},
+#ifndef NOEMAIL
+	{"mailreport", "mailreport", "Admin    ", 7},
+#endif
+	{"password", "setpassword", "Admin    ", 7},
+	{"redu", "redu", "Admin    ", 7},
+	{"trim", "trim", "Admin    ", 7},
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	{"franzen", "franzencommand", "Admin    ", 7},
+#endif /// NOSFTPEND
+#endif
+#ifdef ZPAQFULL /// NOSFTPSTART
+#if defined(_WIN32)
+#ifdef _WIN64
+	{"monitor", "monitor", "Admin    ", 7}, /// monitor() is Win64 only
+#endif
+	{"ads", "ads", "Admin    ", 7},
+#endif // corresponds to #if (#if defined(_WIN32))
+	{"update", "update", "Admin    ", 7},
+	{"upgrade", "update", "Admin    ", 7},
+#endif /// NOSFTPEND
+	// Utils
+	{"checkpassword", "checkpassword", "Utils    ", 8},
+	{"comparehex", "comparehex", "Utils    ", 8},
+	{"count", "count", "Utils    ", 8},
+	{"f", "f", "Utils    ", 8},
+	{"last", "last", "Utils    ", 8},
+	{"last2", "last2", "Utils    ", 8},
+#ifdef ZPAQMOUNT ///NOSFTPSTART
+	{"mount", "mount", "Utils    ", 8},
+#endif ///NOSFTPEND
+#if defined(_WIN32) && !defined(ZPAQMOUNT)
+	{"mount", "montadisco", "Utils    ", 8},
+#endif
+	{"pause", "pause", "Utils    ", 8},
+	{"grep", "grep", "Utils    ", 8},
+	{"utf", "utf", "Utils    ", 8},
+	{"versum", "versum", "Utils    ", 8},
+	{"work", "work", "Utils    ", 8},
+	{"z", "z", "Utils    ", 8},
+#ifdef ZPAQFULL /// NOSFTPSTART
+	{"isopen", "isopen", "Utils    ", 8},
+#if defined(_WIN32)
+	{"sfx", "sfx", "Utils    ", 8},
+#endif
+#endif /// NOSFTPEND
+#ifdef ZPAQFULL /// NOSFTPSTART
+#if defined(unix)
+	{"zfs", "zfs", "Admin    ", 7},
+	{"zfsproxbackup", "zfsproxbackup", "Backup   ", 1},
+	{"zfsproxrestore", "zfsproxrestore", "Restore  ", 2},
+	{"zfsbackup", "zfsbackup", "Backup   ", 1},
+	{"zfsrestore", "zfsrestore", "Restore  ", 2},
+	{"zfsreceive", "zfsreceive", "Backup   ", 1},
+	{"zfsadd", "zfsadd", "Backup   ", 1},
+	{"zfslist", "zfslist", "Info/list", 3},
+	{"zfspurge", "zfspurge", "Admin    ", 7},
+	{"zfssize", "zfssize", "Info/list", 3},
+#endif // corresponds to #if (#if defined(unix))
+#endif /// NOSFTPEND
+	{"main", "*main", "", 0},
+	{"normal", "*normal", "", 1},
+	{"common", "*common", "", 2},
+	{"franz", "*franz", "", 3},
+	{"voodoo", "*voodoo", "", 4},
+};
+static const size_t g_helpcomandiquanti= sizeof(g_helpcomandi) / sizeof(g_helpcomandi[0]);
+/// the wiki on GitHub, for a longer explanation. Empty for now: no link is shown. g_helpwiki: the page of a help
+/// (no switch), or of a switch (in a help, or "" = in all of them)
+static const char *g_helpwikibase= "";
+struct franz_helpwiki
+{
+	const char *help;
+	const char *nome;
+	const char *pagina;
+};
+static const franz_helpwiki g_helpwiki[]=
+{
+	{"", "", ""}, /// ex. {"a", "", "Command-a"} {"", "-rescue", "Rescue"}
+};
+void help_printhash(bool i_flagadd)
+{
+	/// 65.14l: the descriptions in the language of the help, whole (UTF-8: no buffer to cut them)
+	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+		if (p->second.flagiszpaq)
+			scrivi_riga(p->second.switchname.c_str(), help_t(p->second.hashdescription.c_str()));
+	if (!i_flagadd)
+	{
+		for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+			if (!p->second.flagiszpaq)
+				scrivi_riga(p->second.switchname.c_str(), help_t(p->second.hashdescription.c_str()));
+	}
+}
+/// -helpcheck (hidden, see help_controlla): the switches the parser asks for (each cli_ tells its name) and its
+/// commands
+bool						 flaghelpcheck= false;
+static std::set<std::string> g_helpregistro;
+static std::set<std::string> g_helpregistrocomandi;
+void help_registra(const string &i_nome, bool i_comando= false)
+{
+	if ((i_nome.size() < 2) || ((!i_comando) && (i_nome[0] != '-')))
+		return;
+	if (i_comando)
+		g_helpregistrocomandi.insert(i_nome);
+	else
+		g_helpregistro.insert(i_nome);
+}
+/// a text of the help in its lines: | is a new line, || is a |
+static void help_righe(const char *i_testo, vector<string> &o_righe)
+{
+	o_righe.clear();
+	string riga;
+	for (const char *p= i_testo; *p; p++)
+		if (*p != '|')
+			riga+= *p;
+		else if (p[1] == '|')
+		{
+			riga+= '|';
+			p++;
+		}
+		else
+		{
+			o_righe.push_back(riga);
+			riga= "";
+		}
+	o_righe.push_back(riga);
+}
+/// the standard meaning of a left column: its line in h main, normal, franz or voodoo (NULL: none)
+static const franz_helpriga *help_standardriga(const char *i_testata)
+{
+	for (size_t i= 0; i < g_helpquante; i++)
+		if ((g_helprighe[i].comando[0] == '*') && (g_helprighe[i].tipo == 'r') && (g_helprighe[i].testo != NULL) && (!strcmp(g_helprighe[i].testata, i_testata)))
+			return &g_helprighe[i];
+	return NULL;
+}
+static const char *help_standard(const char *i_testata)
+{
+	const franz_helpriga *r= help_standardriga(i_testata);
+	return (r != NULL) ? r->testo : NULL;
+}
+static void help_colore(char i_colore)
+{
+	if (i_colore == 'c')
+		color_cyan();
+	else if (i_colore == 'y')
+		color_yellow();
+	else if (i_colore == 'g')
+		color_green();
+	else if (i_colore == 'r')
+		color_red();
+}
+string help_stampa(const string &i_help, bool i_usage, bool i_example);
+/// the lines made by code: the hashes, the flags (h common), -until with the date of now, -sparse of x
+static void help_genera(const franz_helpriga &i_r)
+{
+	if (i_r.colore == 'h')
+		help_printhash(false);
+	else if (i_r.colore == 'H')
+		help_printhash(true);
+	else if (i_r.colore == 'f')
+		g_programflags.tutti();
+	else if ((i_r.colore == 'd') || (i_r.colore == 's'))
+	{
+		string valore;
+		if (i_r.colore == 'd')
+		{
+			time_t	adesso= time(NULL);
+			tm	   *t	  = gmtime(&adesso);
+			int64_t data  = (t->tm_year + 1900) * 10000000000LL + (t->tm_mon + 1) * 100000000LL + t->tm_mday * 1000000 + t->tm_hour * 10000 + t->tm_min * 100 + t->tm_sec;
+			valore= dateToString(flagutc, data);
+		}
+#ifdef ZPAQ_SPARSEMIN
+		else
+			valore= tohuman(ZPAQ_SPARSEMIN);
+#endif
+		string testo= help_tradotto(i_r);
+		myreplaceall(testo, "%s", valore);
+		scrivi_riga(i_r.testata, testo + help_numero(i_r));
+	}
+}
+/// 65.14l: a line in the language of the help (help_tradotto), -helpid its number after the first line of it
+static void help_riga(const franz_helpriga &i_r)
+{
+	vector<string> righe;
+	if (i_r.tipo == 'r')
+	{
+		/// no text of its own: the one of the standard line (and its translation, its number)
+		const franz_helpriga *r= (i_r.testo != NULL) ? &i_r : help_standardriga(i_r.testata);
+		help_righe((r != NULL) ? help_tradotto(*r) : "", righe);
+		if (r != NULL)
+			righe[0]+= help_numero(*r);
+		for (size_t k= 0; k < righe.size(); k++)
+			scrivi_riga((k == 0) ? i_r.testata : " ", righe[k]);
+	}
+	else if (i_r.tipo == 'e')
+		scrivi_esempio(help_tradotto(i_r), string(i_r.testo) + help_numero(i_r));
+	else if (i_r.tipo == 't')
+	{
+		help_righe(help_tradotto(i_r), righe);
+		righe[0]+= help_numero(i_r);
+		for (size_t k= 0; k < righe.size(); k++)
+		{
+			help_colore(i_r.colore);
+			moreprint(righe[k].c_str());
+			if (i_r.colore)
+				color_restore();
+		}
+	}
+	else if (i_r.tipo == 'x')
+		scrivi_examples();
+	else if (i_r.tipo == 'i')
+		help_stampa(i_r.testo, i_r.colore != 'e', i_r.colore != 'u');
+	else if (i_r.tipo == 'g')
+		help_genera(i_r);
+}
+static bool help_quando(const franz_helpriga &i_r, bool i_usage, bool i_example)
+{
+	if (i_r.quando == 'u')
+		return i_usage;
+	if (i_r.quando == 'e')
+		return i_example;
+	if (i_r.quando == 'E')
+		return i_example && ((g_optional == "") || (g_optional == i_r.comando));
+	if (i_r.quando == 'b')
+		return i_usage && i_example;
+	if (i_r.quando == 'o')
+		return i_usage || i_example;
+	return true;
+}
+/// the link to the wiki of a help (i_nome "") or of a switch, when there is a wiki
+static void help_wiki(const string &i_help, const string &i_nome)
+{
+	if (g_helpwikibase[0] == 0)
+		return;
+	for (size_t i= 0; i < sizeof(g_helpwiki) / sizeof(g_helpwiki[0]); i++)
+		if ((g_helpwiki[i].pagina[0] != 0) && (i_nome == g_helpwiki[i].nome) && ((i_help == g_helpwiki[i].help) || ((g_helpwiki[i].help[0] == 0) && (i_nome != ""))))
+			scrivi_riga("Wiki", string(g_helpwikibase) + g_helpwiki[i].pagina);
+}
+/// a help: the lines of the usage, of the examples or both, as the help_x functions did. Its one-line description
+string help_stampa(const string &i_help, bool i_usage, bool i_example)
+{
+	string breve;
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if (i_help != r.comando)
+			continue;
+		if (r.tipo == 'b')
+			breve= help_tradotto(r) + help_numero(r);
+		else if (help_quando(r, i_usage, i_example))
+			help_riga(r);
+	}
+	if (i_usage)
+		help_wiki(i_help, "");
+	return breve;
+}
+/// the switches written in a left column, a plain line or a command line ("-tN -threads N": -tN and -threads).
+/// Not what is between double quotes (a path, a pattern, a command of something else)
+static void help_switch(const string &i_testo, vector<string> &o_switch)
+{
+	o_switch.clear();
+	string t;
+	bool   apice= false;
+	for (size_t i= 0; i <= i_testo.size(); i++)
+	{
+		const char c= (i < i_testo.size()) ? i_testo[i] : ' ';
+		if (c == '"')
+		{
+			apice= !apice;
+			t	 = "";
+			continue;
+		}
+		if (apice)
+			continue;
+		if ((c == ' ') || (c == '\t') || (c == '(') || (c == '|') || (c == ','))
+		{
+			if (((t.size() > 1) && (t[0] == '-') && isalnum((unsigned char)t[1])) || (t == "/od") || (t == "/on") || (t == "/os"))
+				o_switch.push_back(t);
+			t= "";
+		}
+		else
+			t+= c;
+	}
+}
+/// a switch by its key: -m8[hN|aN] = -m8, -tN = -t, then as ini_chiave does (-m5 = -method, -t8 = -threads,
+/// -out = -output, -noturbo = -turbo...; every hash is its own)
+static string help_chiave(string i_switch)
+{
+	const size_t q= i_switch.find('[');
+	if (q != string::npos)
+		i_switch.erase(q);
+	while ((i_switch.size() > 1) && strchr(".,;:)'\"", i_switch[i_switch.size() - 1]))
+		i_switch.erase(i_switch.size() - 1);
+	if ((i_switch.size() > 2) && (i_switch[0] == '-') && islower((unsigned char)i_switch[1]))
+	{
+		bool segnaposto= true; /// -tN -sN -mNB: the letters of what goes there
+		for (size_t i= 2; i < i_switch.size(); i++)
+			if (!isupper((unsigned char)i_switch[i]))
+				segnaposto= false;
+		if (segnaposto)
+			i_switch.erase(2);
+	}
+	if (i_switch == "-m")
+		return "-method";
+	if (i_switch == "-t")
+		return "-threads";
+	return ini_chiave(i_switch, false);
+}
+/// what is typed to see a help ("q" "cc", "h franz"); for a piece (@date) or a help shown by another one (email in
+/// work), what shows it
+static void help_nomi(const string &i_help, vector<string> &o_nomi)
+{
+	for (size_t i= 0; i < g_helpcomandiquanti; i++)
+		if (i_help == g_helpcomandi[i].help)
+		{
+			const string nome= string((g_helpcomandi[i].categoria[0] != 0) ? "" : "h ") + g_helpcomandi[i].nome;
+			if (std::find(o_nomi.begin(), o_nomi.end(), nome) == o_nomi.end())
+				o_nomi.push_back(nome);
+		}
+	for (size_t i= 0; i < g_helpquante; i++)
+		if ((g_helprighe[i].tipo == 'i') && (i_help == g_helprighe[i].testo))
+			help_nomi(g_helprighe[i].comando, o_nomi);
+}
+static bool help_visibile(const string &i_help)
+{
+	vector<string> nomi;
+	help_nomi(i_help, nomi);
+	return !nomi.empty();
+}
+static string help_breve(const string &i_help)
+{
+	for (size_t i= 0; i < g_helpquante; i++)
+		if ((g_helprighe[i].tipo == 'b') && (i_help == g_helprighe[i].comando))
+			return help_tradotto(g_helprighe[i]);
+	return "";
+}
+static string help_dicomando(const string &i_nome)
+{
+	for (size_t i= 0; i < g_helpcomandiquanti; i++)
+		if (i_nome == g_helpcomandi[i].nome)
+			return g_helpcomandi[i].help;
+	return "";
+}
+static bool help_vuota(const char *i_testata)
+{
+	for (const char *p= i_testata; *p; p++)
+		if (*p != ' ')
+			return false;
+	return true;
+}
+/// the lines of a help about a switch (its key), each with its continuation lines, under the name of the help.
+/// The line of a hash (made by code, the same everywhere) only with i_hash; else counted in o_hash
+static int help_cercauno(const string &i_help, const string &i_chiave, bool i_hash, int *o_hash)
+{
+	int			   trovate= 0;
+	vector<string> s;
+	vector<string> nomi;
+	help_nomi(i_help, nomi);
+	string titolo= "CMD";
+	for (size_t k= 0; k < nomi.size(); k++)
+		titolo+= " " + nomi[k];
+	const string breve= help_breve(i_help);
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if (i_help != r.comando)
+			continue;
+		/// made by code: the hashes and the flags, the line of that one
+		if ((r.tipo == 'g') && ((r.colore == 'h') || (r.colore == 'H')))
+			for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+				if ((p->second.switchname != "") && (help_chiave(p->second.switchname) == i_chiave) && ((r.colore == 'h') || p->second.flagiszpaq))
+				{
+					if (!i_hash)
+					{
+						(*o_hash)++;
+						continue;
+					}
+					if (trovate++ == 0)
+						scrivi_riga(titolo, breve);
+					scrivi_riga(p->second.switchname, help_t(p->second.hashdescription.c_str()));
+				}
+		if ((r.tipo == 'g') && (r.colore == 'f'))
+			for (HELPFLAGS::iterator p= g_programflags.helpflags.begin(); p != g_programflags.helpflags.end(); ++p)
+				if (help_chiave(p->first) == i_chiave)
+				{
+					if (trovate++ == 0)
+						scrivi_riga(titolo, breve);
+					scrivi_riga(p->first, help_t(p->second.c_str()));
+				}
+		if ((r.tipo != 'r') && ((r.tipo != 'g') || (r.testata[0] == 0)))
+			continue;
+		bool si= false;
+		help_switch(r.testata, s);
+		for (size_t k= 0; k < s.size(); k++)
+			if (help_chiave(s[k]) == i_chiave)
+				si= true;
+		if (!si)
+			continue;
+		if (trovate++ == 0)
+			scrivi_riga(titolo, breve);
+		help_riga(r);
+		while ((i + 1 < g_helpquante) && (i_help == g_helprighe[i + 1].comando) && (g_helprighe[i + 1].tipo == 'r') && help_vuota(g_helprighe[i + 1].testata))
+			help_riga(g_helprighe[++i]);
+	}
+	return trovate;
+}
+static size_t help_distanza(const string &i_a, const string &i_b)
+{
+	vector<size_t> riga(i_b.size() + 1);
+	for (size_t j= 0; j <= i_b.size(); j++)
+		riga[j]= j;
+	for (size_t i= 1; i <= i_a.size(); i++)
+	{
+		size_t diagonale= riga[0];
+		riga[0]			= i;
+		for (size_t j= 1; j <= i_b.size(); j++)
+		{
+			const size_t sopra= riga[j];
+			size_t		 v	  = diagonale + ((i_a[i - 1] == i_b[j - 1]) ? 0 : 1);
+			if (sopra + 1 < v)
+				v= sopra + 1;
+			if (riga[j - 1] + 1 < v)
+				v= riga[j - 1] + 1;
+			riga[j]	 = v;
+			diagonale= sopra;
+		}
+	}
+	return riga[i_b.size()];
+}
+/// the switch of the help nearest to a mistyped one ("": none near enough)
+static string help_vicino(const string &i_switch)
+{
+	std::set<string> tutti;
+	vector<string>	 s;
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if ((r.tipo == 'r') || (r.tipo == 'g'))
+			help_switch(r.testata, s);
+		else if (r.tipo == 't')
+			help_switch(r.testo, s);
+		else
+			continue;
+		for (size_t k= 0; k < s.size(); k++)
+			tutti.insert(s[k]);
+	}
+	for (MAPPAFLAGS::iterator p= g_programflags.mappaflags.begin(); p != g_programflags.mappaflags.end(); ++p)
+		if (p->first.find(' ') == string::npos)
+			tutti.insert(p->first);
+	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+		if (p->second.switchname != "")
+			tutti.insert(p->second.switchname);
+	string vicino;
+	size_t meglio= 3;
+	for (std::set<string>::iterator p= tutti.begin(); p != tutti.end(); ++p)
+	{
+		const size_t d= help_distanza(i_switch, *p);
+		if ((d > 0) && (d < meglio))
+		{
+			meglio= d;
+			vicino= *p;
+		}
+	}
+	return vicino;
+}
+void programflags_riempi(bool *i_flagtest);
+void tipohash_riempi();
+/// zpaqfranz h -n -key (h a -n: in a only): what the switches do, in every help that has them (a piece as @date
+/// once, under the helps that show it), then the examples with them. Here before anything reads the line: -key
+/// would ask a password, -ini would want a file, two hashes would stop. -1 = not a question for here
+int help_cerca(int i_argc, const char **i_argv)
+{
+	if (i_argc < 3)
+		return -1;
+	const string primo= i_argv[1];
+	if ((primo != "h") && (primo != "help") && (primo != "-h") && (primo != "?") && (primo != "-?") && (primo != "/?") && (primo != "--help") && (primo != "-help"))
+		return -1;
+	bool domanda= false;
+	for (int i= 2; i < i_argc; i++)
+		if (strcmp(i_argv[i], "-nomore") && ini_eswitch(i_argv[i]))
+			domanda= true;
+	if (!domanda) /// h a, h all -nomore...: as ever
+		return -1;
+	for (int i= 2; i < i_argc; i++)
+		if (!strcmp(i_argv[i], "-nocolor"))
+			flagnocolor= true;
+#ifdef _WIN32
+	color_save();
+#endif
+	static bool flagtestfinto= false; /// (-test of Jidac: there is no Jidac here, see programflags_riempi)
+	programflags_riempi(&flagtestfinto); /// h common and the hashes, as loadparameters fills them
+	tipohash_riempi();
+	vector<string>	 cercati;
+	string			 comando;
+	std::set<string> dentro; /// h a -n: the help of a, and what it shows
+	for (int i= 2; i < i_argc; i++)
+	{
+		const string t= i_argv[i];
+		if (t == "-nomore")
+			flagnomore= true;
+		else if (ini_eswitch(t))
+			cercati.push_back(t);
+		else if ((i == 2) && (help_dicomando(t) != ""))
+		{
+			comando= t;
+			dentro.insert(help_dicomando(t));
+		}
+		else
+		{
+			myprintf("03630! h: %s is neither a command (right after h) nor a switch. Ex: zpaqfranz h -n -key, zpaqfranz h a -n\n", t.c_str());
+			return 2;
+		}
+	}
+	std::set<string> standard; /// h main normal franz voodoo common, and what they show
+	for (size_t i= 0; i < g_helpquante; i++)
+		if (g_helprighe[i].comando[0] == '*')
+		{
+			standard.insert(g_helprighe[i].comando);
+			if (g_helprighe[i].tipo == 'i')
+				standard.insert(g_helprighe[i].testo);
+		}
+	for (bool ancora= true; ancora;)
+	{
+		ancora= false;
+		for (size_t i= 0; i < g_helpquante; i++)
+			if ((g_helprighe[i].tipo == 'i') && dentro.count(g_helprighe[i].comando) && (!dentro.count(g_helprighe[i].testo)))
+			{
+				dentro.insert(g_helprighe[i].testo);
+				ancora= true;
+			}
+	}
+	/// the helps, the standard ones first, then as they come
+	vector<string> helps;
+	for (int giro= 0; giro < 2; giro++)
+		for (size_t i= 0; i < g_helpquante; i++)
+		{
+			const string c= g_helprighe[i].comando;
+			if ((standard.count(c) == (giro == 0 ? 1u : 0u)) && (std::find(helps.begin(), helps.end(), c) == helps.end()) && help_visibile(c))
+				helps.push_back(c);
+		}
+	int			   esito= 0;
+	vector<string> s;
+	for (size_t n= 0; n < cercati.size(); n++)
+	{
+		const string chiave= help_chiave(cercati[n]);
+		if (n > 0)
+			morebar('-');
+		color_yellow();
+		moreprint(cercati[n].c_str());
+		color_restore();
+		int		 trovate= 0;
+		string	 anche;	 /// the helps with the list of the hashes: one line for them all
+		for (size_t h= 0; h < helps.size(); h++)
+			if ((comando == "") || dentro.count(helps[h]))
+			{
+				int hash= 0;
+				trovate+= help_cercauno(helps[h], chiave, (comando != "") || standard.count(helps[h]), &hash);
+				if (hash > 0)
+				{
+					vector<string> nomi;
+					help_nomi(helps[h], nomi);
+					for (size_t k= 0; k < nomi.size(); k++)
+						anche+= " " + nomi[k];
+				}
+			}
+		if (anche != "")
+		{
+			scrivi_riga("CMD" + anche, help_t("the same, in their list of the hashes"));
+			trovate++;
+		}
+		if ((comando != "") && (trovate == 0))
+		{
+			myprintf("03631: %s has nothing of its own in %s: what it does everywhere\n", cercati[n].c_str(), comando.c_str());
+			for (size_t h= 0; h < helps.size(); h++)
+				if (standard.count(helps[h]))
+				{
+					int hash= 0;
+					trovate+= help_cercauno(helps[h], chiave, true, &hash);
+				}
+		}
+		int esempi= 0;
+		for (size_t i= 0; i < g_helpquante; i++)
+		{
+			const franz_helpriga &r= g_helprighe[i];
+			if ((r.tipo != 'e') || ((comando != "") && (!dentro.count(r.comando))) || (std::find(helps.begin(), helps.end(), string(r.comando)) == helps.end()))
+				continue;
+			help_switch(r.testo, s);
+			bool si= false;
+			for (size_t k= 0; k < s.size(); k++)
+				if (help_chiave(s[k]) == chiave)
+					si= true;
+			if (!si)
+				continue;
+			if (esempi++ == 0)
+				scrivi_examples();
+			scrivi_esempio(help_tradotto(r), string(r.testo) + help_numero(r));
+		}
+		help_wiki(comando == "" ? "" : help_dicomando(comando), cercati[n]);
+		if ((trovate == 0) && (esempi == 0))
+		{
+			const string vicino= help_vicino(cercati[n]);
+			if (vicino != "")
+				myprintf("03632$ %s: no switch of this zpaqfranz. Maybe %s?\n", cercati[n].c_str(), vicino.c_str());
+			else
+				myprintf("03633$ %s: no switch of this zpaqfranz\n", cercati[n].c_str());
+			esito= 1;
+		}
+	}
+	return esito;
+}
+/// -helpcheck (hidden): the help against the parser. -helpcheck goes through all the parser (no cli_ takes it), and
+/// every cli_ told its name (help_registra): with the flags, the hashes and the branches of their own, that is what
+/// it takes. Shown: what has no help, what the help names and the parser does not take (a typo, a switch gone), the
+/// lines of the help that lead nowhere. 0 = nothing to say, 1 = something to look at
+/// a name in a map by key, with the other names of that key (-findhash -searchhash)
+static void help_aggiungi(std::map<string, string> &o_mappa, const string &i_nome)
+{
+	string &nomi= o_mappa[help_chiave(i_nome)];
+	if ((" " + nomi + " ").find(" " + i_nome + " ") == string::npos)
+		nomi+= ((nomi == "") ? "" : " ") + i_nome;
+}
+/// 65.14l -helpcheck: the translations. The ids (twice, a translation of no line or not right below it); for each
+/// language what is missing, what was made from another English (with the fingerprint of now, for who updates it),
+/// a %s lost, Italian not ASCII, a line wider than the widest English one of that line, and than what fits in 80
+/// columns after its column (a translation is longer: it can take more lines than the English, -verbose says
+/// which). The flags with no @flag line, the hashes with no @hash. The next free id. The number of problems
+static size_t help_larga(const franz_helpriga &i_r)
+{
+	size_t larga= 79; /// a whole line ('t'), the title of an example (alone on its line, when long)
+	if ((i_r.tipo == 'r') || (i_r.tipo == 'g'))
+		larga= 59; /// after the left column (20)
+	else if (i_r.tipo == 'b')
+		larga= 64; /// after the name of the command (h h)
+	vector<string> s;
+	help_righe(help_inglese(i_r), s);
+	for (size_t k= 0; k < s.size(); k++)
+		if (caratteri_utf8(s[k].c_str()) > larga)
+			larga= caratteri_utf8(s[k].c_str());
+	return larga;
+}
+static int help_controllalingue()
+{
+	int					  problemi= 0;
+	std::map<int, size_t> righe; /// id => its line
+	int					  massimo= 0;
+	vector<size_t>		  senzaid; /// a text and no id: not translated (on purpose: a command line...)
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if ((r.tipo == 'T') || (r.tipo == 'i') || (r.tipo == 'x'))
+			continue;
+		if (r.id > massimo)
+			massimo= r.id;
+		if (r.id <= 0)
+		{
+			if (help_inglese(r)[0] != 0)
+				senzaid.push_back(i);
+			continue;
+		}
+		if (righe.count(r.id))
+		{
+			myprintf("03648! id %05d twice (%s and %s)\n", r.id, g_helprighe[righe[r.id]].comando, r.comando);
+			problemi++;
+		}
+		righe[r.id]= i;
+	}
+	/// a translation: right below its line (or below the other translations of it), once for a language
+	std::set<std::pair<int, int> > fatte;
+	int							   sopra= 0; /// the id of the last line that is not a translation
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if (r.tipo != 'T')
+		{
+			sopra= r.id;
+			continue;
+		}
+		const int lingua= ((r.quando > 0) && ((size_t)r.quando < sizeof(g_lingue) / sizeof(g_lingue[0]))) ? r.quando : 0;
+		if ((lingua == 0) || (r.id <= 0) || (r.id != sopra) || fatte.count(std::make_pair(lingua, r.id)))
+		{
+			myprintf("03649! the translation %s %05d is not right below the line with that id (or twice)\n", g_lingue[lingua], r.id);
+			problemi++;
+		}
+		fatte.insert(std::make_pair(lingua, r.id));
+	}
+	for (int lingua= LINGUA_IT; lingua <= LINGUA_RU; lingua++)
+	{
+		const int salvata= g_lingua;
+		g_lingua		 = lingua; /// help_traduzione: the ones of this language
+		int tradotte= 0, mancanti= 0, vecchie= 0, altre= 0;
+		for (std::map<int, size_t>::iterator p= righe.begin(); p != righe.end(); ++p)
+		{
+			const franz_helpriga &r		 = g_helprighe[p->second];
+			const char			 *inglese= help_inglese(r);
+			if (inglese[0] == 0)
+				continue;
+			const char			 *dove= g_lingue[lingua];
+			const franz_helpriga *t	  = help_traduzione(r.id);
+			if (t == NULL)
+			{
+				myprintf("03650$ %s %05d missing (its fingerprint 0x%08X): %s\n", dove, r.id, (unsigned int)help_impronta(inglese), inglese);
+				mancanti++;
+				continue;
+			}
+			if (t->impronta != help_impronta(inglese))
+			{
+				myprintf("03651$ %s %05d made from another English, now 0x%08X: %s\n", dove, r.id, (unsigned int)help_impronta(inglese), inglese);
+				vecchie++;
+				continue;
+			}
+			tradotte++;
+			vector<string> ri;
+			vector<string> rt;
+			help_righe(inglese, ri);
+			help_righe(t->testo, rt);
+			if ((ri.size() != rt.size()) && flagverbose)
+				myprintf("03652: %s %05d: %d lines, the English %d\n", dove, r.id, (int)rt.size(), (int)ri.size());
+			if ((string(inglese).find("%s") == string::npos) != (string(t->testo).find("%s") == string::npos))
+			{
+				myprintf("03653$ %s %05d: the %%s of the English is not there (or it is, and not in the English)\n", dove, r.id);
+				altre++;
+			}
+			bool ascii= true;
+			for (const unsigned char *c= (const unsigned char *)t->testo; *c; c++)
+				if (*c > 127)
+					ascii= false;
+			if ((lingua == LINGUA_IT) && (!ascii))
+			{
+				myprintf("03654$ %s %05d: not ASCII (Italian with the ', no accented letters): %s\n", dove, r.id, t->testo);
+				altre++;
+			}
+			const size_t larga= help_larga(r);
+			for (size_t k= 0; k < rt.size(); k++)
+				if (caratteri_utf8(rt[k].c_str()) > larga)
+				{
+					myprintf("03655$ %s %05d: a line of %d characters, at most %d (the English, 80 columns): %s\n", dove, r.id, (int)caratteri_utf8(rt[k].c_str()), (int)larga, rt[k].c_str());
+					altre++;
+				}
+		}
+		g_lingua= salvata;
+		myprintf("03656: -helpcheck %s: %s translated, %s missing, %s old, %s other\n", g_lingue[lingua], migliaia(tradotte), migliaia2(mancanti), migliaia3(vecchie), migliaia4(altre));
+		problemi+= mancanti + vecchie + altre;
+	}
+	/// the description of every flag (h common) in @flag, of every hash in @hash, else it has no translation
+	std::set<string> flag;
+	std::set<string> hash;
+	for (size_t i= 0; i < g_helpquante; i++)
+		if ((g_helprighe[i].tipo == 't') && (!strcmp(g_helprighe[i].comando, "@flag")))
+			flag.insert(g_helprighe[i].testo);
+		else if ((g_helprighe[i].tipo == 't') && (!strcmp(g_helprighe[i].comando, "@hash")))
+			hash.insert(g_helprighe[i].testo);
+	for (HELPFLAGS::iterator p= g_programflags.helpflags.begin(); p != g_programflags.helpflags.end(); ++p)
+		if (!flag.count(p->second))
+		{
+			myprintf("03657$ the flag %s: its description has no @flag line (no translation): %s\n", p->first.c_str(), p->second.c_str());
+			problemi++;
+		}
+	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+		if (!hash.count(p->second.hashdescription))
+		{
+			myprintf("03662$ the hash %s: its description has no @hash line (no translation): %s\n", p->second.switchname.c_str(), p->second.hashdescription.c_str());
+			problemi++;
+		}
+	if (flagverbose)
+		for (size_t k= 0; k < senzaid.size(); k++)
+			myprintf("03658: no id (not translated): %s %s\n", g_helprighe[senzaid[k]].comando, help_inglese(g_helprighe[senzaid[k]]));
+	myprintf("03659: -helpcheck languages: the next free id is %d; %s lines not translated on purpose (id 0, -verbose: which)\n", massimo + 1, migliaia(senzaid.size()));
+	return problemi;
+}
+int help_controlla()
+{
+	std::map<string, string> parser; /// key => its names
+	for (std::set<string>::iterator p= g_helpregistro.begin(); p != g_helpregistro.end(); ++p)
+		help_aggiungi(parser, *p);
+	static const char *amano[]= {"-nuke", "-rescue", "-turbo", "-repack", "-to", "-until", "-ini", "-writeini", "-eng", "-it", "-ru", "-helpid"}; /// branches of their own (-ini: ini_espandi, -eng -it -ru -helpid: lingua_scegli)
+	for (size_t i= 0; i < sizeof(amano) / sizeof(amano[0]); i++)
+		help_aggiungi(parser, amano[i]);
+	std::set<string>   nascosti; /// on purpose: the flags with no description, and these
+	static const char *senza[]= {"-elevatedpid", "-rescuefake", "-cpfake"};
+	for (size_t i= 0; i < sizeof(senza) / sizeof(senza[0]); i++)
+		nascosti.insert(help_chiave(senza[i]));
+	for (MAPPAFLAGS::iterator p= g_programflags.mappaflags.begin(); p != g_programflags.mappaflags.end(); ++p)
+		if (p->first.find(' ') == string::npos)
+		{
+			help_aggiungi(parser, p->first);
+			if (g_programflags.helpflags.find(p->first) == g_programflags.helpflags.end())
+				nascosti.insert(help_chiave(p->first));
+		}
+	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+		if (p->second.switchname != "")
+			help_aggiungi(parser, p->second.switchname);
+	/// what the help says (left columns, plain lines) and names (examples too), by key; only the helps an h shows
+	std::map<string, string> documentato;
+	std::map<string, vector<string> > nominato; /// key => "the switch (where)", every place
+	vector<string>			 s;
+	int						 problemi= 0;
+	int						 righe	 = 0;
+	std::set<string>		 helps;
+	for (size_t i= 0; i < g_helpquante; i++)
+		if ((g_helprighe[i].tipo != 'T') && strcmp(g_helprighe[i].comando, "@frasi") && strcmp(g_helprighe[i].comando, "@flag") && strcmp(g_helprighe[i].comando, "@hash")) /// 65.14l: not the translations, the texts of code
+			helps.insert(g_helprighe[i].comando);
+	for (size_t i= 0; i < g_helpquante; i++)
+	{
+		const franz_helpriga &r= g_helprighe[i];
+		if (!help_visibile(r.comando))
+			continue;
+		righe++;
+		const string dove= string(r.comando) + ": ";
+		if (((r.tipo == 'r') || (r.tipo == 'g')) && strncmp(r.testata, "CMD ", 4))
+		{
+			help_switch(r.testata, s);
+			for (size_t k= 0; k < s.size(); k++)
+			{
+				documentato[help_chiave(s[k])]= dove + r.testata;
+				nominato[help_chiave(s[k])].push_back(s[k] + " (" + dove + r.testata + ")");
+			}
+		}
+		/// a plain line says what a switch does (cloud...), but it can be a command of something else (ssh -i...): it
+		/// does not count as naming. An example names its switches, when it is a command of zpaqfranz (not hashdeep -c)
+		if (r.tipo == 't')
+		{
+			help_switch(r.testo, s);
+			for (size_t k= 0; k < s.size(); k++)
+				documentato[help_chiave(s[k])]= dove + r.testo;
+		}
+		if ((r.tipo == 'e') && (help_dicomando(string(r.testo).substr(0, string(r.testo).find(' '))) != ""))
+		{
+			help_switch(r.testo, s);
+			for (size_t k= 0; k < s.size(); k++)
+				nominato[help_chiave(s[k])].push_back(s[k] + " (" + dove + "example " + r.testo + ")");
+		}
+		if ((r.tipo == 'g') && ((r.colore == 'h') || (r.colore == 'H')))
+			for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+				if (p->second.switchname != "")
+					documentato[help_chiave(p->second.switchname)]= dove + "the hashes";
+		if ((r.tipo == 'g') && (r.colore == 'f'))
+			for (HELPFLAGS::iterator p= g_programflags.helpflags.begin(); p != g_programflags.helpflags.end(); ++p)
+				documentato[help_chiave(p->first)]= dove + "the flags";
+		if ((r.tipo == 'r') && (r.testo == NULL) && (help_standard(r.testata) == NULL))
+		{
+			myprintf("03634! %s%s: the standard meaning, but no h main/normal/franz/voodoo has it\n", dove.c_str(), r.testata);
+			problemi++;
+		}
+		if ((r.tipo == 'i') && (!helps.count(r.testo)))
+		{
+			myprintf("03635! %sshows the help %s, that has no lines\n", dove.c_str(), r.testo);
+			problemi++;
+		}
+	}
+	int senzahelp= 0;
+	for (std::map<string, string>::iterator p= parser.begin(); p != parser.end(); ++p)
+		if ((!documentato.count(p->first)) && (!nascosti.count(p->first)))
+		{
+			myprintf("03636$ %-20s the parser takes it, no help says what it does\n", p->second.c_str());
+			senzahelp++;
+		}
+	int sconosciuti= 0;
+	for (std::map<string, vector<string> >::iterator p= nominato.begin(); p != nominato.end(); ++p)
+	{
+		bool numero= (p->first.size() > 1);
+		for (size_t k= 1; k < p->first.size(); k++)
+			if (!isdigit((unsigned char)p->first[k]))
+				numero= false;
+		if ((!parser.count(p->first)) && (!numero))
+		{
+			for (size_t k= 0; k < p->second.size(); k++)
+				myprintf("03637$ the parser does not take %s\n", p->second[k].c_str());
+			sconosciuti++;
+		}
+	}
+	for (std::set<string>::iterator p= g_helpregistrocomandi.begin(); p != g_helpregistrocomandi.end(); ++p)
+		if (help_dicomando(*p) == "")
+		{
+			myprintf("03638$ the command %s has no help (h %s)\n", p->c_str(), p->c_str());
+			problemi++;
+		}
+	for (size_t i= 0; i < g_helpcomandiquanti; i++)
+		if (!helps.count(g_helpcomandi[i].help))
+		{
+			myprintf("03639! h %s: its help (%s) has no lines\n", g_helpcomandi[i].nome, g_helpcomandi[i].help);
+			problemi++;
+		}
+	for (std::set<string>::iterator p= helps.begin(); p != helps.end(); ++p)
+		if (!help_visibile(*p))
+			myprintf("03640: the help %s is there, but no h shows it\n", p->c_str());
+	problemi+= help_controllalingue();
+	if (flagverbose)
+		for (std::set<string>::iterator p= nascosti.begin(); p != nascosti.end(); ++p)
+			myprintf("03641: hidden on purpose (no help): %s\n", p->c_str());
+	problemi+= senzahelp + sconosciuti;
+	myprintf("03642: -helpcheck: %s switches in the parser, %s lines in %s helps; no help %s, not in the parser %s, other %s\n",
+			 migliaia(parser.size()), migliaia2(righe), migliaia3(helps.size()), migliaia4(senzahelp), migliaia5(sconosciuti), migliaia6(problemi - senzahelp - sconosciuti));
+	return (problemi > 0) ? 1 : 0;
 }
 
 // Structure to store information about categories
@@ -156348,6 +160558,14 @@ struct CategorySorter
 	}
 };
 
+/// 65.14l: a category of the list of the commands, in the language of the help, as wide as the English one
+static string help_categoria(const string &i_nome)
+{
+	string nome= i_nome;
+	while ((nome != "") && (nome[nome.size() - 1] == ' '))
+		nome.erase(nome.size() - 1);
+	return help_colonna(help_t(nome.c_str()), i_nome.size());
+}
 // Main function to print the help
 void printhelp(const MAPPAHELP &help_map, unsigned int maxchar)
 {
@@ -156391,9 +160609,10 @@ void printhelp(const MAPPAHELP &help_map, unsigned int maxchar)
 	size_t maxLength= 0;
 	for (std::vector<CategoryInfo>::const_iterator cat= categorieComandi.begin(); cat != categorieComandi.end(); ++cat)
 	{
-		if (cat->name.length() > maxLength)
+		const size_t lunga= caratteri_utf8(help_categoria(cat->name).c_str()); /// 65.14l: translated
+		if (lunga > maxLength)
 		{
-			maxLength= cat->name.length();
+			maxLength= lunga;
 		}
 	}
 
@@ -156412,13 +160631,13 @@ void printhelp(const MAPPAHELP &help_map, unsigned int maxchar)
 
 		// Print category header in yellow
 		color_yellow();
-		std::string intestazione= cat->name;
+		std::string intestazione= help_categoria(cat->name);
 		moreprint(intestazione.c_str(), true);
 		color_restore();
 		moreprint(":", true);
 
 		// Calculate indentation based on maximum length
-		std::string indentazione(maxLength - cat->name.length() + 1, ' ');
+		std::string indentazione(maxLength - caratteri_utf8(intestazione.c_str()) + 1, ' ');
 		moreprint(indentazione.c_str(), true);
 
 		color_green();
@@ -156431,7 +160650,7 @@ void printhelp(const MAPPAHELP &help_map, unsigned int maxchar)
 			std::string separatore= primoComando ? "" : ", ";
 
 			// If the separator + command don't fit, it wraps and realigns
-			if (rigaCorrente.length() + separatore.length() + cmd->length() > maxchar)
+			if (caratteri_utf8(rigaCorrente.c_str()) + separatore.length() + cmd->length() > maxchar)
 			{
 				moreprint("");
 				// Add the same indentation used for the first command of the category
@@ -156462,177 +160681,15 @@ void Jidac::load_help_map()
 {
 	/// a map is not so good, but we want to keep the executable small
 	/// NOT in the constructor
-
-	// Core
-	help_map.insert(std::pair<string, HelpInfo>("a", HelpInfo("Core     ", help_a, 0)));
-	help_map.insert(std::pair<string, HelpInfo>("x", HelpInfo("Core     ", help_x, 0)));
-	help_map.insert(std::pair<string, HelpInfo>("xx", HelpInfo("Core     ", help_xx, 0)));
-	help_map.insert(std::pair<string, HelpInfo>("l", HelpInfo("Core     ", help_l, 0)));
-	help_map.insert(std::pair<string, HelpInfo>("e", HelpInfo("Core     ", help_e, 0)));
-
-	help_map.insert(std::pair<string, HelpInfo>("backup", HelpInfo("Backup   ", help_backup, 1)));
-#ifdef ZPAQFULL /// NOSFTPSTART
-	help_map.insert(std::pair<string, HelpInfo>("mysqldump", HelpInfo("Backup   ", help_mysqldump, 1)));
-#endif /// NOSFTPEND
-
-#ifdef ZPAQFULL /// NOSFTPSTART
-#if defined(_WIN32)
-	/// help_map.insert(std::pair<string, HelpInfo>("g", 				HelpInfo("Backup   ", help_g,				1)));
-	help_map.insert(std::pair<string, HelpInfo>("q", HelpInfo("Backup   ", help_q, 1)));
-	help_map.insert(std::pair<string, HelpInfo>("cc", HelpInfo("Backup   ", help_q, 1)));
-
-#endif // corresponds to #if (#if defined(_WIN32))
-#endif /// NOSFTPEND
-#if defined(_WIN32) && !defined(ANCIENT)
-	help_map.insert(std::pair<string, HelpInfo>("ac", HelpInfo("Backup   ", help_ac, 1))); /// 65.9n
-	help_map.insert(std::pair<string, HelpInfo>("xc", HelpInfo("Restore  ", help_xc, 2))); /// 65.9p
-#endif
-
-	// Restore
-	help_map.insert(std::pair<string, HelpInfo>("w", HelpInfo("Restore  ", help_w, 2)));
-	help_map.insert(std::pair<string, HelpInfo>("image", HelpInfo("Restore  ", help_image, 2)));
-
-	// Info
-	help_map.insert(std::pair<string, HelpInfo>("dirsize", HelpInfo("Info/list", help_dirsize, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("i", HelpInfo("Info/list", help_i, 3)));
-#if defined(_WIN32)
-	help_map.insert(std::pair<string, HelpInfo>("drive", HelpInfo("Info/list", help_drive, 3)));
-#endif
-
-	// List
-	help_map.insert(std::pair<string, HelpInfo>("fzf", HelpInfo("Info/list", help_fzf, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("ls", HelpInfo("Info/list", help_ls, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("tui", HelpInfo("Info/list", help_tui, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("gui", HelpInfo("Info/list", help_tui, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("mc", HelpInfo("File     ", help_mc, 6))); /// 65.10a
-	help_map.insert(std::pair<string, HelpInfo>("pakka", HelpInfo("Info/list", help_pakka, 3)));
-
-#if defined(_WIN32)
-	help_map.insert(std::pair<string, HelpInfo>("drive", HelpInfo("Info/list", help_drive, 3)));
-
-#endif // corresponds to #if (#if defined(_WIN32))
-
-	// Test
-	help_map.insert(std::pair<string, HelpInfo>("p", HelpInfo("Test     ", help_p, 4)));
-#ifndef ANCIENT
-	help_map.insert(std::pair<string, HelpInfo>("pp", HelpInfo("Test     ", help_pp, 4)));
-#endif
-	help_map.insert(std::pair<string, HelpInfo>("sync", HelpInfo("Test     ", help_sync, 4)));
-	help_map.insert(std::pair<string, HelpInfo>("t", HelpInfo("Test     ", help_t, 4)));
-	help_map.insert(std::pair<string, HelpInfo>("testbackup", HelpInfo("Test     ", help_testbackup, 4)));
-	help_map.insert(std::pair<string, HelpInfo>("v", HelpInfo("Test     ", help_v, 4)));
-
-#ifdef ZPAQFULL /// NOSFTPSTART
-#ifdef SFTP
-	help_map.insert(std::pair<string, HelpInfo>("ssh", HelpInfo("Cloud    ", help_ssh, 5)));
-	help_map.insert(std::pair<string, HelpInfo>("sftp", HelpInfo("Cloud    ", help_sftp, 5)));
-	help_map.insert(std::pair<string, HelpInfo>("cloud", HelpInfo("Cloud    ", help_cloud, 5)));
-#endif // corresponds to #ifdef (#ifdef SFTP)
-#ifdef _WIN64
-	help_map.insert(std::pair<string, HelpInfo>("download", HelpInfo("Cloud    ", help_download, 5)));
-	help_map.insert(std::pair<string, HelpInfo>("kickstart", HelpInfo("Admin    ", help_kickstart, 7)));
-#endif // corresponds to #ifdef (#ifdef _WIN64)
-#endif /// NOSFTPEND
-
-	// File
-	help_map.insert(std::pair<string, HelpInfo>("1on1", HelpInfo("File     ", help_oneonone, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("c", HelpInfo("File     ", help_c, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("cp", HelpInfo("File     ", help_cp, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("d", HelpInfo("File     ", help_d, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("dir", HelpInfo("File     ", help_dir, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("tree", HelpInfo("File     ", help_dir, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("find", HelpInfo("File     ", help_find, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("hash", HelpInfo("File     ", help_hasha, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("r", HelpInfo("File     ", help_r, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("s", HelpInfo("File     ", help_s, 6)));
-	help_map.insert(std::pair<string, HelpInfo>("sum", HelpInfo("File     ", help_summa, 6)));
-#ifdef ZPAQFULL /// NOSFTPSTART
-	help_map.insert(std::pair<string, HelpInfo>("n", HelpInfo("File     ", help_n, 6)));
-#if defined(_WIN32)
-	help_map.insert(std::pair<string, HelpInfo>("rd", HelpInfo("File     ", help_rd, 6)));
-#endif
-#endif /// NOSFTPEND
-	help_map.insert(std::pair<string, HelpInfo>("zip", HelpInfo("Archive  ", help_zip, 6)));
-
-	// Admin
-	help_map.insert(std::pair<string, HelpInfo>("autotest", HelpInfo("Admin    ", help_autotest, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("b", HelpInfo("Admin    ", help_b, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("collision", HelpInfo("Admin    ", help_collision, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("consolidate", HelpInfo("Admin    ", help_consolidatebackup, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("crop", HelpInfo("Admin    ", help_crop, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("dump", HelpInfo("Admin    ", help_dump, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("k", HelpInfo("Admin    ", help_k, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("m", HelpInfo("Admin    ", help_m, 7)));
-#ifndef NOEMAIL
-	help_map.insert(std::pair<string, HelpInfo>("mailreport", HelpInfo("Admin    ", help_mailreport, 7)));
-#endif
-	help_map.insert(std::pair<string, HelpInfo>("password", HelpInfo("Admin    ", help_setpassword, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("redu", HelpInfo("Admin    ", help_redu, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("trim", HelpInfo("Admin    ", help_trim, 7)));
-#ifndef NOFRANZEN
-#ifdef ZPAQFULL /// NOSFTPSTART
-	help_map.insert(std::pair<string, HelpInfo>("franzen", HelpInfo("Admin    ", help_franzencommand, 7)));
-#endif /// NOSFTPEND
-#endif
-
-	
-#ifdef ZPAQFULL /// NOSFTPSTART
-#if defined(_WIN32)
-#ifdef _WIN64
-	help_map.insert(std::pair<string, HelpInfo>("monitor", HelpInfo("Admin    ", help_monitor, 7))); /// monitor() is Win64 only
-#endif
-	help_map.insert(std::pair<string, HelpInfo>("ads", HelpInfo("Admin    ", help_ads, 7)));
-#endif // corresponds to #if (#if defined(_WIN32))
-	help_map.insert(std::pair<string, HelpInfo>("update", HelpInfo("Admin    ", help_update, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("upgrade", HelpInfo("Admin    ", help_update, 7)));
-#endif /// NOSFTPEND
-
-	// Utils
-	help_map.insert(std::pair<string, HelpInfo>("checkpassword", HelpInfo("Utils    ", help_checkpassword, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("comparehex", HelpInfo("Utils    ", help_comparehex, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("count", HelpInfo("Utils    ", help_count, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("f", HelpInfo("Utils    ", help_f, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("last", HelpInfo("Utils    ", help_last, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("last2", HelpInfo("Utils    ", help_last2, 8)));
-#ifdef ZPAQMOUNT ///NOSFTPSTART
-	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_mount, 8)));
-#endif ///NOSFTPEND
-#if defined(_WIN32) && !defined(ZPAQMOUNT)
-	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_montadisco, 8)));
-#endif
-	help_map.insert(std::pair<string, HelpInfo>("pause", HelpInfo("Utils    ", help_pause, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("grep", HelpInfo("Utils    ", help_grep, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("utf", HelpInfo("Utils    ", help_utf, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("versum", HelpInfo("Utils    ", help_versum, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("work", HelpInfo("Utils    ", help_work, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("z", HelpInfo("Utils    ", help_z, 8)));
-#ifdef ZPAQFULL /// NOSFTPSTART
-	help_map.insert(std::pair<string, HelpInfo>("isopen", HelpInfo("Utils    ", help_isopen, 8)));
-#if defined(_WIN32)
-	help_map.insert(std::pair<string, HelpInfo>("sfx", HelpInfo("Utils    ", help_sfx, 8)));
-#endif
-#endif /// NOSFTPEND
-
-#ifdef ZPAQFULL /// NOSFTPSTART
-#if defined(unix)
-	help_map.insert(std::pair<string, HelpInfo>("zfs", HelpInfo("Admin    ", help_zfs, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsproxbackup", HelpInfo("Backup   ", help_zfsproxbackup, 1)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsproxrestore", HelpInfo("Restore  ", help_zfsproxrestore, 2)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsbackup", HelpInfo("Backup   ", help_zfsbackup, 1)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsrestore", HelpInfo("Restore  ", help_zfsrestore, 2)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsreceive", HelpInfo("Backup   ", help_zfsreceive, 1)));
-	help_map.insert(std::pair<string, HelpInfo>("zfsadd", HelpInfo("Backup   ", help_zfsadd, 1)));
-	help_map.insert(std::pair<string, HelpInfo>("zfslist", HelpInfo("Info/list", help_zfslist, 3)));
-	help_map.insert(std::pair<string, HelpInfo>("zfspurge", HelpInfo("Admin    ", help_zfspurge, 7)));
-	help_map.insert(std::pair<string, HelpInfo>("zfssize", HelpInfo("Info/list", help_zfssize, 3)));
-#endif // corresponds to #if (#if defined(unix))
-#endif /// NOSFTPEND
-
-	switches_map.insert(std::pair<string, HelpInfo>("main", HelpInfo("dummy", help_mainswitches, 0)));
-	switches_map.insert(std::pair<string, HelpInfo>("normal", HelpInfo("dummy", help_switches, 1)));
-	switches_map.insert(std::pair<string, HelpInfo>("common", HelpInfo("dummy", help_commonswitches, 2)));
-	switches_map.insert(std::pair<string, HelpInfo>("franz", HelpInfo("dummy", help_franzswitches, 3)));
-	switches_map.insert(std::pair<string, HelpInfo>("voodoo", HelpInfo("dummy", help_voodooswitches, 4)));
+	/// 65.14b: from g_helpcomandi (no category: a section of switches, h main...)
+	for (size_t i= 0; i < g_helpcomandiquanti; i++)
+	{
+		const franz_helpcomando &c= g_helpcomandi[i];
+		if (c.categoria[0] != 0)
+			help_map.insert(std::pair<string, HelpInfo>(c.nome, HelpInfo(c.categoria, c.help, c.posizione)));
+		else
+			switches_map.insert(std::pair<string, HelpInfo>(c.nome, HelpInfo("dummy", c.help, c.posizione)));
+	}
 }
 
 void Jidac::usage(bool i_flagdie= true)
@@ -156647,25 +160704,27 @@ void Jidac::usage(bool i_flagdie= true)
 		"Secure archiver w/dedup";
 #endif
 #endif
+	/// 65.14l: the texts in the language of the help (help_t), the labels as wide as before (help_colonna)
 	const char *hw= ihavehw() ? " & HW SHA1/2" : "";
-	char		output[128];
-	snprintf(output, sizeof(output), "%s%s (C) by ", base, hw);
+	char		output[256];
+	snprintf(output, sizeof(output), "%s%s (C) by ", help_t(base), hw);
 	moreprint(output, true);
 
 	color_cyan();
 	moreprint("Franco Corbelli");
 	color_cyan();
-	moreprint("Help     ", true);
+	moreprint(help_colonna(help_t("Help"), 9).c_str(), true);
 	color_restore();
 	moreprint(": zpaqfranz h ", true);
 	color_green();
-	moreprint("<command>", true);
+	moreprint(help_t("<command>"), true);
 	color_restore();
-	moreprint(" (single) zpaqfranz ", true);
+	moreprint((string(" ") + help_t("(single)") + " zpaqfranz ").c_str(), true);
 	color_green();
 	moreprint("h h", true);
 	color_restore();
-	moreprint(" (full)");
+	moreprint((string(" ") + help_t("(full)")).c_str());
+	help_lingue(); /// 65.14m: the languages there are
 
 	color_green();
 	load_help_map();
@@ -156679,7 +160738,7 @@ void Jidac::usage(bool i_flagdie= true)
 	color_restore();
 
 	color_cyan();
-	moreprint("Switches ", true);
+	moreprint(help_colonna(help_t("Switches"), 9).c_str(), true);
 	color_restore();
 	moreprint(": zpaqfranz h ", true);
 	color_green();
@@ -156695,34 +160754,46 @@ void Jidac::usage(bool i_flagdie= true)
 	color_green();
 	moreprint("franz");
 	color_restore();
+	/// 65.14b: what one or more switches do, in every command (help_cerca)
+	color_cyan();
+	moreprint(help_colonna(help_t("Search"), 9).c_str(), true);
+	color_restore();
+	moreprint(": zpaqfranz h ", true);
+	color_green();
+	moreprint("-key -n", true);
+	color_restore();
+	moreprint((string(" ") + help_t("(switches in every command)") + "  zpaqfranz h ").c_str(), true);
+	color_green();
+	moreprint("a -n");
+	color_restore();
 #ifndef ANCIENT
 	/// 65.9y
 	color_cyan();
-	moreprint("Chooser  ", true);
+	moreprint(help_colonna(help_t("Chooser"), 9).c_str(), true);
 	color_restore();
 	moreprint(": zpaqfranz ", true);
 	color_green();
 	moreprint("t", true);
 	color_restore();
-	moreprint(" (or x l i v e w zip image...) with no archive: pick it on a screen");
+	moreprint((string(" ") + help_t("(or x l i v e w zip image...) with no archive: pick it on a screen")).c_str());
 #endif
 
 #ifdef HWSHA1
-	moreprint("     -hw : Force hardware SHA1 (fails if unsupported by CPU)");
+	moreprint((string("     -hw : ") + help_t("Force hardware SHA1 (fails if unsupported by CPU)")).c_str());
 
 #endif // corresponds to #ifdef (#ifdef HWSHA1)
 
 #ifdef ZPAQFULL /// NOSFTPSTART
 #if defined(_WIN32)
 	color_cyan();
-	moreprint("Update   ", true);
+	moreprint(help_colonna(help_t("Update"), 9).c_str(), true);
 	color_restore();
 	moreprint(": zpaqfranz ", true);
 	color_green();
 	moreprint("update -force");
 	color_restore();
 #else
-	moreprint("Look for newer version  (Internet):    zpaqfranz update");
+	moreprint((string(help_t("Look for newer version  (Internet):")) + "    zpaqfranz update").c_str());
 #endif // corresponds to #if (#if defined(_WIN32))
 #endif /// NOSFTPEND
 
@@ -156752,28 +160823,30 @@ void Jidac::helphelp()
 	moreprint(" ZZZZ   PPP PPPP AAA  AAA QQQQ QQQ FFF  RRR   AAA  AAA NNN  NNN  ZZZZ", false, leftspace);
 	moreprint("ZZZZZZZ PPPPP.    AAAAAA     QQQQQ FFF  RRR    AAAAAA  NNN  NNN ZZZZZZZ", false, leftspace);
 	moreprint("        PPP                    QQQ", false, leftspace);
+	/// 65.14l: the texts in the language of the help (help_t)
 	color_red();
-	moreprint("(C) 2021-2026 by Franco Corbelli: provided as-is,no warranty whatsoever", false, leftspace);
+	moreprint((string("(C) 2021-2026 by Franco Corbelli: ") + help_t("provided as-is,no warranty whatsoever")).c_str(), false, leftspace);
 	color_yellow();
 	moreprint("           WWW: https://sourceforge.net/projects/zpaqfranz", false, leftspace);
 	color_restore();
-	moreprint("          Swiss army knife for backup and disaster recovery", false, leftspace);
-	moreprint("  Like 7z or RAR on steroids,with deduplicated \"snapshots\" (versions)", false, leftspace);
-	moreprint("  Conceptually similar to Mac time machine, but much more efficiently", false, leftspace);
-	moreprint("  Keeps backup always-to-always,no need to prune (bye bye Ransomware)", false, leftspace);
-	moreprint("  Easily handles millions of files and TBs of data, non-latin support", false, leftspace);
-	moreprint("  Multithreaded HW accelerations, full encryption, multipart archives", false, leftspace);
-	moreprint("  Minimal data transfer => low bandwidth Virtual Machine Cloud backup", false, leftspace);
-	moreprint("  Data integrity check CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3", false, leftspace);
+	moreprint(help_t("          Swiss army knife for backup and disaster recovery"), false, leftspace);
+	moreprint(help_t("  Like 7z or RAR on steroids,with deduplicated \"snapshots\" (versions)"), false, leftspace);
+	moreprint(help_t("  Conceptually similar to Mac time machine, but much more efficiently"), false, leftspace);
+	moreprint(help_t("  Keeps backup always-to-always,no need to prune (bye bye Ransomware)"), false, leftspace);
+	moreprint(help_t("  Easily handles millions of files and TBs of data, non-latin support"), false, leftspace);
+	moreprint(help_t("  Multithreaded HW accelerations, full encryption, multipart archives"), false, leftspace);
+	moreprint(help_t("  Minimal data transfer => low bandwidth Virtual Machine Cloud backup"), false, leftspace);
+	moreprint((string("  ") + help_t("Data integrity check") + " CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3").c_str(), false, leftspace);
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef unix
-	moreprint("  Specific zfs handling functions,full multiplatform interoperability", false, leftspace);
+	moreprint(help_t("  Specific zfs handling functions,full multiplatform interoperability"), false, leftspace);
 #endif // corresponds to #ifdef (#ifdef unix)
 #endif /// NOSFTPEND
-	moreprint("  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others", false, leftspace);
+	moreprint(help_t("  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others"), false, leftspace);
 	color_red();
-	moreprint("  Extended help:   zpaqfranz h h           ALL IN:   zpaqfranz h full", false, leftspace);
+	moreprint(help_t("  Extended help:   zpaqfranz h h           ALL IN:   zpaqfranz h full"), false, leftspace);
 	color_restore();
+	help_lingue(leftspace + 2); /// 65.14m: the languages there are
 }
 //// print a lot more
 void Jidac::usageall(string i_command)
@@ -156781,32 +160854,33 @@ void Jidac::usageall(string i_command)
 	load_help_map();
 	if (i_command == "")
 	{
-		moreprint("Get help for one command with zpaqfranz h something");
-		moreprint(" zpaqfranz   h all -nomore => everything, ready to be piped");
-		moreprint(" zpaqfranz   h a           => ask help and examples for command 'a'");
-		moreprint(" zpaqfranz -he a           => ask examples for command 'a'");
+		/// 65.14l: in the language of the help (help_t, help_stampa); the description whole (UTF-8: it can be
+		/// longer than 199 bytes)
+		moreprint(help_t("Get help for one command with zpaqfranz h something"));
+		moreprint(help_t(" zpaqfranz   h all -nomore => everything, ready to be piped"));
+		moreprint(help_t(" zpaqfranz   h a           => ask help and examples for command 'a'"));
+		moreprint(help_t(" zpaqfranz -he a           => ask examples for command 'a'"));
+		help_lingue(); /// 65.14m: the languages there are
 		moreprint(" ");
 		for (MAPPAHELP::iterator p= help_map.begin(); p != help_map.end(); ++p)
 		{
 			char   linea[200];
-			string temp= (*p->second.function)(false, false);
+			string temp= help_stampa(p->second.help, false, false);
 			snprintf(linea, sizeof(linea), "%-15s", p->first.c_str());
 			color_green();
 			moreprint(linea, true);
 			color_restore();
-			snprintf(linea, sizeof(linea), "%s", temp.c_str());
-			moreprint(linea);
+			moreprint(temp.c_str());
 		}
 		for (MAPPAHELP::iterator p= switches_map.begin(); p != switches_map.end(); ++p)
 		{
 			char   linea[200];
-			string temp= (*p->second.function)(false, false);
+			string temp= help_stampa(p->second.help, false, false);
 			snprintf(linea, sizeof(linea), "%-15s", p->first.c_str());
 			color_green();
 			moreprint(linea, true);
 			color_restore();
-			snprintf(linea, sizeof(linea), "%s", temp.c_str());
-			moreprint(linea);
+			moreprint(temp.c_str());
 		}
 		seppuku(0);
 		return;
@@ -156821,35 +160895,35 @@ void Jidac::usageall(string i_command)
 			MAPPAHELP::iterator b= switches_map.find(i_command);
 			if (b != switches_map.end())
 			{
-				(*b->second.function)(true, true);
+				help_stampa(b->second.help, true, true);
 				seppuku(0);
 			}
 		}
 		//	if not found => show everything
 		usage(false); // do not seppuku!
-		moreprint("Usage full:");
+		moreprint(help_t("Usage full:"));
 		for (MAPPAHELP::iterator p= help_map.begin(); p != help_map.end(); ++p)
 		{
 			///(*p->second)(true,true);
-			(*p->second.function)(true, true);
+			help_stampa(p->second.help, true, true);
 			morebar('-');
 		}
 		morebar('-');
-		moreprint("Extended switches:");
-		help_switches(true, true);
+		moreprint(help_t("Extended switches:"));
+		help_stampa("*normal", true, true);
 		morebar('-');
-		moreprint("zpaqfranz switches:");
-		help_franzswitches(true, true);
+		moreprint(help_t("zpaqfranz switches:"));
+		help_stampa("*franz", true, true);
 		morebar('-');
-		moreprint("Voodoo switches");
-		help_voodooswitches(true, true);
+		moreprint(help_t("Voodoo switches"));
+		help_stampa("*voodoo", true, true);
 	}
 	else
 	{ // please note: first parameter help, second example
-		(*a->second.function)(true, true);
+		help_stampa(a->second.help, true, true);
 		morebar('-');
 	}
-	print_doublequote();
+	help_stampa("@doublequote", true, true);
 	seppuku(0);
 }
 void Jidac::examples(string i_command)
@@ -156861,13 +160935,13 @@ void Jidac::examples(string i_command)
 	{
 		for (MAPPAHELP::iterator p= help_map.begin(); p != help_map.end(); ++p)
 		{
-			(*p->second.function)(false, true);
+			help_stampa(p->second.help, false, true);
 			morebar('-');
 		}
 	}
 	else
 	{ // please note: first parameter help, second example
-		(*a->second.function)(false, true);
+		help_stampa(a->second.help, false, true);
 		morebar('-');
 	}
 }
@@ -157313,6 +161387,8 @@ string finalizza_entropy(void* p_hash)
 /// this must compile on 20-years-old C++
 bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_command,int argc,const char** argv, int* i_i)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string, true);
 	if ((argv==NULL) || (i_i==NULL))
 	{
 		myprintf("00513: GURU null data\n");
@@ -157360,6 +161436,8 @@ string get_final_part(string i_filename)
 }
 bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,string* o_plain,char**	o_password,char*	o_password_string)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string);
 		
 	if (flagonlyupload)
 		return false;
@@ -157447,6 +161525,12 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 
 bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,const string&  i_default,string* o_thestring)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+	{
+		help_registra(i_string);
+		if (i_short.size() == 2) /// the short form (-m3 of -method): 2 chars only, as below
+			help_registra(i_short);
+	}
 	if ((argv==NULL) || (i_i==NULL) || (o_thestring==NULL))
 	{
 		myprintf("00518: GURU null data\n");
@@ -157494,6 +161578,8 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 
 bool Jidac::cli_getarray(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,vector<string>* o_files,string* o_stringtype)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string);
 	if ((argv==NULL) || (i_i==NULL) || (o_files==NULL))
 	{
 		myprintf("00521: GURU null data\n");
@@ -157532,6 +161618,12 @@ bool Jidac::cli_getarray(const string& i_opt,string i_string,int argc,const char
 
 bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,int i_default,int* o_thenumber)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+	{
+		help_registra(i_string);
+		if (i_short.size() == 2) /// the short form (-m3 of -method): 2 chars only, as below
+			help_registra(i_short);
+	}
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
 		myprintf("00523: GURU null data\n");
@@ -157579,6 +161671,8 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 
 bool Jidac::cli_getuint(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,unsigned int i_default,unsigned int* o_thenumber)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string);
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
 		myprintf("00526: GURU null data\n");
@@ -157612,6 +161706,8 @@ bool Jidac::cli_getuint(const string& i_opt,string i_string,bool	i_flagoptional,
 }
 bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,uint64_t i_default,uint64_t* o_thenumber)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string);
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
 		myprintf("00528: GURU null data\n");
@@ -157644,6 +161740,8 @@ bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptiona
 
 bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv, int* i_i,int64_t* o_date)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+		help_registra(i_string);
 	if ((argv==NULL) || (i_i==NULL) || (o_date==NULL))
 	{
 		myprintf("00530: GURU null data\n");
@@ -157685,6 +161783,11 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 
 bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,string& o_thefile,int argc,const char** argv, int* i_i,bool* i_theflag)
 {
+	if (flaghelpcheck) /// 65.14b: -helpcheck, the parser tells what it takes (see help_controlla)
+	{
+		help_registra(i_string);
+		help_registra(i_alias);
+	}
 	if ((argv==NULL) || (i_i==NULL))
 	{
 		myprintf("00533: GURU null data\n");
@@ -158011,11 +162114,12 @@ static int cloud_eleva(bool i_pausa, bool i_finta)
 #endif ///NOSFTPEND
 #endif
 
-int Jidac::loadparameters(int argc, const char** argv)
+/// 65.14b: the flags of the command line (g_programflags), out of loadparameters: help_cerca (h -verbose) needs
+/// them before it. add() sets the default only the first time. -test is Jidac::flagtest (a member, not the global
+/// flagtest that is there too): its address comes from loadparameters
+void programflags_riempi(bool *i_flagtest)
 {
-	///printf("*********************** CARICO *******************\n");
-
-	bool flagdummy=false;
+	static bool flagdummy=false; /// (its address stays in g_programflags)
 	/// 65.6a: a is -m8 -turbo -fast by default (-m1 -noturbo -nofast as before).
 	/// Not in the ANCIENT builds (ESX, NAS): there everything is as before
 #ifdef ANCIENT
@@ -158131,7 +162235,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store/show Posix metadata)",							"");
 	g_programflags.add(&flagnumeric,		"-numeric",				"x -tar: owners by uid/gid only, not by name",			"");
 	g_programflags.add(&flagtmp,			"-tmp",					"Use .tmp instead of .zpaq during backup",			"");
-	g_programflags.add(&flagtest,			"-test",				"Only do test",										"");
+	g_programflags.add(i_flagtest,			"-test",				"Only do test",										"");
 	g_programflags.add(&flagtouch,			"-touch",				"Re-hash files without a usable hash (7.15 to zpaqfranz)",		"");
 	g_programflags.add(&flagutc,			"-utc",					"Use UTC time",										"");
 	g_programflags.add(&flagdate,			"-date",				"Show/save creation date (if possible)",			"");
@@ -158149,8 +162253,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifndef NOFRANZEN
 	g_programflags.add(&flagmemzero,		"-memzero",				"Do memzero on libsodium (just placebo)",									"");
 #endif
+	g_programflags.add(&flagdistinct,		"-distinct",			"pakka: every version of a file on its own line (catpaq)",	"pakka;"); /// 65.14d: used by pakka, never turned on
+#ifdef _WIN32 /// 65.14d: the SFX module is Windows only: elsewhere they were taken and ignored
 	g_programflags.add(&g_sfxflagforce,		"-sfxforce",			"Sfx force",									"");
 	g_programflags.add(&g_sfxflagall,		"-sfxall",				"Sfx all",										"");
+#endif
 #endif ///NOSFTPEND
 	g_programflags.add(&flagbarraod,		"/od",					"Order by date",									"dir;");
 	g_programflags.add(&flagbarraon,		"/on",					"Order by name",									"dir;");
@@ -158166,6 +162273,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagelevated,		"-elevated",			"",												""); /// not in the help: set by the relaunch of mount
 #ifdef _WIN32
 	g_programflags.add(&flagacfake,			"-acfake",				"",												""); /// not in the help: for the tests of xc (ac on a disk that is not the one of Windows)
+	g_programflags.add(&flagwinpefake,		"-winpefake",			"",												""); /// not in the help: ac as from a Windows PE (the tests of 65.14j)
 	g_programflags.add(&flaggui,			"-gui",					"ac, xc, f: choose on a screen (what to take, where to restore, what f does)",	"");
 #endif
 	g_programflags.add(&flagelevatefake,	"-elevatefake",			"",												""); /// not in the help: for the tests of the relaunch of cloud -image
@@ -158194,6 +162302,177 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnojit,			"-nojit",				"Do not use JIT",									"");
 	g_programflags.add(&flagturbo,			"-turbo",				"Faster add: parallel fragmenter (same archive)",	"",nuovodefault);
 	g_programflags.add(&flagnoturbo,		"-noturbo",				"Plain add: no parallel fragmenter",				"");
+	g_programflags.add(&flaghelpcheck,	"-helpcheck",			"",												""); /// not in the help: the help against the parser (help_controlla)
+}
+/// 65.14b: the hashes (g_mappatipohash), out of loadparameters as well
+void tipohash_riempi()
+{
+	// A bit of refactoring. The boolean differentiate hashes used inside zpaqfranz archive
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_NONE		 ,	tipohash("NONE",		0,"Disable checksums",											true	,"-nochecksum",		&flagnochecksum,	&finalizza_none,		"")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_CRC_32	 ,	tipohash("CRC-32",	 	8,"Old but ubiquitous, superfast, not very strong",				true	,"-crc32",			&flagcrc32,			&finalizza_crc32,		TOSTRING(FRANZO_CRC_32))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXHASH64	 ,	tipohash("XXHASH64",   16,"Very fast, low CPU usage, zpaqfranz's default",				true	,"-xxhash",			&flagxxhash64,		&finalizza_xxhash64,	TOSTRING(FRANZO_XXHASH64))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXHASH64B ,	tipohash("XXHASH64B",  16,"Very fast, low CPU usage, zpaqfranz's 60+ default",			true	,"-xxhashb",		&flagxxhash64b,		&finalizza_xxhash64,	TOSTRING(FRANZO_XXHASH64B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1	 ,	tipohash("SHA-1",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1",			&flagsha1,			&finalizza_sha1,		TOSTRING(FRANZO_SHA_1))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1B	 ,	tipohash("SHA-1B",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1b",			&flagsha1b,			&finalizza_sha1,		TOSTRING(FRANZO_SHA_1B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256	 ,	tipohash("SHA-256",	   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256",			&flagsha256,		&finalizza_sha256,		TOSTRING(FRANZO_SHA_256))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256B	 ,	tipohash("SHA-256B",   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256b",		&flagsha256b,		&finalizza_sha256,		TOSTRING(FRANZO_SHA_256B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3		 ,	tipohash("XXH3",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3",			&flagxxh3,			&finalizza_xxh3,		TOSTRING(FRANZO_SHA3))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3B	 ,	tipohash("XXH3B",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3b",			&flagxxh3b,			&finalizza_xxh3,		TOSTRING(FRANZO_XXH3B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_MD5		 ,	tipohash("MD5",	       32,"Common, fast, hashdeep compatible. Not cryptographically secure",	true	,"-md5",			&flagmd5,			&finalizza_md5,			TOSTRING(FRANZO_MD5))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_MD5B		 ,	tipohash("MD5B",	   32,"Common, fast, hashdeep compatible. Not cryptographically secure",	true	,"-md5b",			&flagmd5b,			&finalizza_md5,			TOSTRING(FRANZO_MD5B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3	 ,	tipohash("BLAKE3",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3",			&flagblake3,		&finalizza_blake3,		TOSTRING(FRANZO_BLAKE3))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3B	 ,	tipohash("BLAKE3B",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3b",		&flagblake3b,		&finalizza_blake3,		TOSTRING(FRANZO_BLAKE3B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3		 ,	tipohash("SHA-3",	   64,"Latest NIST standard, very strong",							true	,"-sha3",			&flagsha3,			&finalizza_sha3,		TOSTRING(FRANZO_SHA3))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3B	 ,	tipohash("SHA-3B",	   64,"Latest NIST standard, very strong",							true	,"-sha3b",			&flagsha3b,			&finalizza_sha3,		TOSTRING(FRANZO_SHA3B))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WHIRLPOOL ,	tipohash("WHIRLPOOL", 128,"Slow but very reliable",										true	,"-whirlpool",		&flagwhirlpool,		&finalizza_whirlpool,	TOSTRING(FRANZO_WHIRLPOOL))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY64 ,	tipohash("HIGHWAY64",  16,"Experimental Google HighwayHash, C implementation, 64 bit",		true	,"-highway64",		&flaghighway64,		&finalizza_highway64,	TOSTRING(FRANZO_HIGHWAY64))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY128,	tipohash("HIGHWAY128", 32,"Experimental Google HighwayHash, C implementation, 128 bit",		true	,"-highway128",		&flaghighway128,	&finalizza_highway128,	TOSTRING(FRANZO_HIGHWAY128))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY256,	tipohash("HIGHWAY256", 64,"Experimental Google HighwayHash, C implementation, 256 bit",		true	,"-highway256",		&flaghighway256,	&finalizza_highway256,	TOSTRING(FRANZO_HIGHWAY256))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_CRC32C		 ,	tipohash("CRC-32C",	    8,"'Castagnoli' variation of CRC-32, HW accelerated",			false	,"-crc32c",			&flagcrc32c,		&finalizza_crc32c,		TOSTRING(ALGO_CRC32C))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_WYHASH		 ,	tipohash("WYHASH",	   16,"Maybe the fastest, limited 'strength'",						false	,"-wyhash",			&flagwyhash,		&finalizza_wyhash,		TOSTRING(ALGO_WYHASH))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_NILSIMSA	 ,	tipohash("NILSIMSA",  128,"Look for similarities, not differences",						false	,"-nilsimsa",		&flagnilsimsa,		&finalizza_nilsimsa,	TOSTRING(ALGO_NILSIMSA))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ENTROPY	 ,	tipohash("ENTROPY",     6,"Quick-and-dirty entropy estimator",							false	,"-entropy",		&flagentropy,		&finalizza_entropy,		TOSTRING(ALGO_ENTROPY))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_QUICK	 	 ,	tipohash("QUICK",      16,"Quick partial hasher",										false	,"-quick",			&flagquick,			&finalizza_xxhash64,	TOSTRING(ALGO_QUICK))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ZETA	 	 ,	tipohash("ZETA",       16,"Zpaq partial hasher",										false	,"-zeta",			&flagzeta,			&finalizza_xxhash64,	TOSTRING(ALGO_ZETA))));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ZETAENC	 ,	tipohash("ZETAENC",    16,"Zpaq partial hasher (encrypted)",							false	,"-zetaenc",		&flagzetaenc,		&finalizza_xxhash64,	TOSTRING(ALGO_ZETAENC))));
+#ifdef _WIN32
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WINHASH64,tipohash("WINHASH64", 	16,"Same as xxhash64 (with Windows' dates)",						true	,"-windate",		&flagwindate,		&finalizza_xxhash64,	TOSTRING(FRANZO_WINHASH64))));
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+}
+#if defined(_WIN32) && !defined(ANCIENT)
+/*
+	65.14j: ac from a Windows PE (a GitHub issue: "cannot open disk -1"). There the Windows of GetSystemWindowsDirectory
+	is the PE itself, X:, a RAM disk on no physical disk. The Windows to save is a stopped one: found on the volumes
+	(a letter with \Windows\System32\config\SYSTEM, not the one of the PE), or the drive given if there are more.
+	Not running: no shadow copy (a PE has none, nothing needs it), and the registry of the PE says nothing about
+	where that Windows boots from (as -acfake, as xc in a PE). -winpefake (hidden): as if this were a PE, the bench
+*/
+static bool ac_winpe()
+{
+	HKEY pe;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\MiniNT", 0, KEY_READ, &pe) != ERROR_SUCCESS)
+		return false;
+	RegCloseKey(pe);
+	return true;
+}
+/// a drive letter (c c: c:\ c:/), in upper case; 0 if it is not one
+static char ac_lettera(const string &i_s)
+{
+	if ((i_s.size() < 1) || (i_s.size() > 3) || (!isalpha((unsigned char)i_s[0])))
+		return 0;
+	if ((i_s.size() >= 2) && (i_s[1] != ':'))
+		return 0;
+	if ((i_s.size() == 3) && (i_s[2] != '\\') && (i_s[2] != '/'))
+		return 0;
+	return (char)toupper((unsigned char)i_s[0]);
+}
+static bool ac_hawindows(char i_l)
+{
+	char percorso[64];
+	snprintf(percorso, sizeof(percorso), "%c:\\Windows\\System32\\config\\SYSTEM", i_l);
+	const UINT  vecchio= SetErrorMode(SEM_FAILCRITICALERRORS); /// (a card reader without a card: no window)
+	const DWORD a      = GetFileAttributesA(percorso);
+	SetErrorMode(vecchio);
+	return (a != INVALID_FILE_ATTRIBUTES) && (!(a & FILE_ATTRIBUTE_DIRECTORY));
+}
+/// 65.14k: in a PE a volume can have no letter (the author: the Windows of a GPT disk, while the other disk got C:).
+/// One with a Windows gets the first free letter, as diskpart assign: in the registry of the PE, nothing on the disk
+static void ac_dailettere()
+{
+	wchar_t nome[MAX_PATH + 1]= {0};
+	HANDLE  h                  = FindFirstVolumeW(nome, MAX_PATH);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	const UINT vecchio= SetErrorMode(SEM_FAILCRITICALERRORS);
+	DWORD      usate  = GetLogicalDrives();
+	do
+	{
+		const std::wstring   v= nome; /// \\?\Volume{...}\ .
+		std::vector<wchar_t> posti(4096, 0);
+		DWORD                quanti= 0;
+		if ((!GetVolumePathNamesForVolumeNameW(v.c_str(), &posti[0], 4095, &quanti)) || (posti[0] != 0))
+			continue; /// it has a letter (or a folder)
+		const UINT tipo= GetDriveTypeW(v.c_str());
+		if ((tipo != DRIVE_FIXED) && (tipo != DRIVE_REMOVABLE))
+			continue;
+		const std::wstring sistema= v + L"Windows\\System32\\config\\SYSTEM";
+		const DWORD        a      = GetFileAttributesW(sistema.c_str());
+		if ((a == INVALID_FILE_ATTRIBUTES) || (a & FILE_ATTRIBUTE_DIRECTORY))
+			continue;
+		const string   volume= linuxtowinpath(wtou(v.c_str()));
+		ULARGE_INTEGER tutto;
+		tutto.QuadPart= 0;
+		GetDiskFreeSpaceExW(v.c_str(), NULL, &tutto, NULL);
+		char libera= 0;
+		for (int i= 2; i < 26; i++) /// C: to Z:
+			if (!(usate & (1u << i)))
+			{
+				libera= (char)('A' + i);
+				break;
+			}
+		if (libera == 0)
+		{
+			myprintf("66027! Windows PE: the volume of %s with a Windows (%s) has no letter, and none is free\n", tohuman(tutto.QuadPart), volume.c_str());
+			continue;
+		}
+		wchar_t radice[4]= {(wchar_t)libera, L':', L'\\', 0};
+		if (!SetVolumeMountPointW(radice, v.c_str()))
+		{
+			myprintf("66027! Windows PE: the volume of %s with a Windows (%s) has no letter, and %c: cannot be given (error %u)\n", tohuman(tutto.QuadPart), volume.c_str(), libera, (unsigned)GetLastError());
+			continue;
+		}
+		usate|= (1u << (libera - 'A'));
+		myprintf("66028$ Windows PE: the volume of %s with a Windows (%s) had no letter: now it is %c:\n", tohuman(tutto.QuadPart), volume.c_str(), libera);
+	} while (FindNextVolumeW(h, nome, MAX_PATH));
+	SetErrorMode(vecchio);
+	FindVolumeClose(h);
+}
+/// the stopped Windows to save: the drive given, or the only one on the volumes (i_pe: the drive of the PE). 0: said why not
+static char ac_windowsspento(char i_pe, char i_data)
+{
+	if (i_data != 0)
+	{
+		if (!ac_hawindows(i_data))
+		{
+			myprintf("66024! Windows PE: %c: has no Windows (no %c:\\Windows\\System32\\config\\SYSTEM)\n", i_data, i_data);
+			return 0;
+		}
+		return i_data;
+	}
+	ac_dailettere();
+	string      trovate;
+	const DWORD unita= GetLogicalDrives();
+	for (int i= 0; i < 26; i++)
+	{
+		const char l= (char)('A' + i);
+		if ((!(unita & (1u << i))) || (l == i_pe))
+			continue;
+		char       radice[4]= {l, ':', '\\', 0};
+		const UINT tipo     = GetDriveTypeA(radice);
+		if ((tipo != DRIVE_FIXED) && (tipo != DRIVE_REMOVABLE))
+			continue;
+		if (ac_hawindows(l))
+			trovate+= l;
+	}
+	if (trovate.size() == 1)
+		return trovate[0];
+	if (trovate.empty())
+		myprintf("66022! Windows PE: no Windows on the volumes (no X:\\Windows\\System32\\config\\SYSTEM). BitLocker: unlock it first (manage-bde -unlock)\n");
+	else
+	{
+		string elenco;
+		for (size_t i= 0; i < trovate.size(); i++)
+			elenco+= string((i > 0) ? " " : "") + trovate[i] + ":";
+		myprintf("66023! Windows PE: more than one Windows (%s): which one? Say it after the archive: ac archive %c:\n", elenco.c_str(), trovate[0]);
+	}
+	return 0;
+}
+#endif
+int Jidac::loadparameters(int argc, const char** argv)
+{
+	///printf("*********************** CARICO *******************\n");
+
+	programflags_riempi(&flagtest); /// 65.14b: in a function (help_cerca needs them before). The member flagtest
 	
 
 	for (int i=0; i<argc; i++)
@@ -158232,37 +162511,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		g_programflags.debugga();
 
 ///flemma
-	// A bit of refactoring. The boolean differentiate hashes used inside zpaqfranz archive
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_NONE		 ,	tipohash("NONE",		0,"Disable checksums",											true	,"-nochecksum",		&flagnochecksum,	&finalizza_none,		"")));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_CRC_32	 ,	tipohash("CRC-32",	 	8,"Old but ubiquitous, superfast, not very strong",				true	,"-crc32",			&flagcrc32,			&finalizza_crc32,		TOSTRING(FRANZO_CRC_32))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXHASH64	 ,	tipohash("XXHASH64",   16,"Very fast, low CPU usage, zpaqfranz's default",				true	,"-xxhash",			&flagxxhash64,		&finalizza_xxhash64,	TOSTRING(FRANZO_XXHASH64))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXHASH64B ,	tipohash("XXHASH64B",  16,"Very fast, low CPU usage, zpaqfranz's 60+ default",			true	,"-xxhashb",		&flagxxhash64b,		&finalizza_xxhash64,	TOSTRING(FRANZO_XXHASH64B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1	 ,	tipohash("SHA-1",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1",			&flagsha1,			&finalizza_sha1,		TOSTRING(FRANZO_SHA_1))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1B	 ,	tipohash("SHA-1B",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1b",			&flagsha1b,			&finalizza_sha1,		TOSTRING(FRANZO_SHA_1B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256	 ,	tipohash("SHA-256",	   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256",			&flagsha256,		&finalizza_sha256,		TOSTRING(FRANZO_SHA_256))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256B	 ,	tipohash("SHA-256B",   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256b",		&flagsha256b,		&finalizza_sha256,		TOSTRING(FRANZO_SHA_256B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3		 ,	tipohash("XXH3",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3",			&flagxxh3,			&finalizza_xxh3,		TOSTRING(FRANZO_SHA3))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3B	 ,	tipohash("XXH3B",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3b",			&flagxxh3b,			&finalizza_xxh3,		TOSTRING(FRANZO_XXH3B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_MD5		 ,	tipohash("MD5",	       32,"Common, fast, hashdeep compatible. Not cryptographically secure",	true	,"-md5",			&flagmd5,			&finalizza_md5,			TOSTRING(FRANZO_MD5))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_MD5B		 ,	tipohash("MD5B",	   32,"Common, fast, hashdeep compatible. Not cryptographically secure",	true	,"-md5b",			&flagmd5b,			&finalizza_md5,			TOSTRING(FRANZO_MD5B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3	 ,	tipohash("BLAKE3",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3",			&flagblake3,		&finalizza_blake3,		TOSTRING(FRANZO_BLAKE3))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3B	 ,	tipohash("BLAKE3B",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3b",		&flagblake3b,		&finalizza_blake3,		TOSTRING(FRANZO_BLAKE3B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3		 ,	tipohash("SHA-3",	   64,"Latest NIST standard, very strong",							true	,"-sha3",			&flagsha3,			&finalizza_sha3,		TOSTRING(FRANZO_SHA3))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3B	 ,	tipohash("SHA-3B",	   64,"Latest NIST standard, very strong",							true	,"-sha3b",			&flagsha3b,			&finalizza_sha3,		TOSTRING(FRANZO_SHA3B))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WHIRLPOOL ,	tipohash("WHIRLPOOL", 128,"Slow but very reliable",										true	,"-whirlpool",		&flagwhirlpool,		&finalizza_whirlpool,	TOSTRING(FRANZO_WHIRLPOOL))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY64 ,	tipohash("HIGHWAY64",  16,"Experimental Google HighwayHash, C implementation, 64 bit",		true	,"-highway64",		&flaghighway64,		&finalizza_highway64,	TOSTRING(FRANZO_HIGHWAY64))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY128,	tipohash("HIGHWAY128", 32,"Experimental Google HighwayHash, C implementation, 128 bit",		true	,"-highway128",		&flaghighway128,	&finalizza_highway128,	TOSTRING(FRANZO_HIGHWAY128))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY256,	tipohash("HIGHWAY256", 64,"Experimental Google HighwayHash, C implementation, 256 bit",		true	,"-highway256",		&flaghighway256,	&finalizza_highway256,	TOSTRING(FRANZO_HIGHWAY256))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_CRC32C		 ,	tipohash("CRC-32C",	    8,"'Castagnoli' variation of CRC-32, HW accelerated",			false	,"-crc32c",			&flagcrc32c,		&finalizza_crc32c,		TOSTRING(ALGO_CRC32C))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_WYHASH		 ,	tipohash("WYHASH",	   16,"Maybe the fastest, limited 'strength'",						false	,"-wyhash",			&flagwyhash,		&finalizza_wyhash,		TOSTRING(ALGO_WYHASH))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_NILSIMSA	 ,	tipohash("NILSIMSA",  128,"Look for similarities, not differences",						false	,"-nilsimsa",		&flagnilsimsa,		&finalizza_nilsimsa,	TOSTRING(ALGO_NILSIMSA))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ENTROPY	 ,	tipohash("ENTROPY",     6,"Quick-and-dirty entropy estimator",							false	,"-entropy",		&flagentropy,		&finalizza_entropy,		TOSTRING(ALGO_ENTROPY))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_QUICK	 	 ,	tipohash("QUICK",      16,"Quick partial hasher",										false	,"-quick",			&flagquick,			&finalizza_xxhash64,	TOSTRING(ALGO_QUICK))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ZETA	 	 ,	tipohash("ZETA",       16,"Zpaq partial hasher",										false	,"-zeta",			&flagzeta,			&finalizza_xxhash64,	TOSTRING(ALGO_ZETA))));
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ZETAENC	 ,	tipohash("ZETAENC",    16,"Zpaq partial hasher (encrypted)",							false	,"-zetaenc",		&flagzetaenc,		&finalizza_xxhash64,	TOSTRING(ALGO_ZETAENC))));
-#ifdef _WIN32
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WINHASH64,tipohash("WINHASH64", 	16,"Same as xxhash64 (with Windows' dates)",						true	,"-windate",		&flagwindate,		&finalizza_xxhash64,	TOSTRING(FRANZO_WINHASH64))));
-#endif // corresponds to #ifdef (#ifdef _WIN32)
+	tipohash_riempi(); /// 65.14b: in a function (help_cerca needs them before)
 	// Initialize options to default values
 	// Why some variables out of Jidac? Because of pthread: does not like very much C++ objects
 	// quick and dirty.
@@ -158642,8 +162891,20 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 	if (flagdebug)
 		myprintf("00547: FULL exename <<%s>>\n",fullzpaqexename.c_str());
+	/// 65.14e: -ini says what it loaded, as the banner (in cyan); with -verbose which ones (the passwords hidden),
+	/// and what was left out (see ini_espandi)
+	if ((!flagpakka) && (!flagstdout) && (!flagterse))
+		for (size_t i=0; i<g_ini_caricati.size(); i++)
+		{
+			color_cyan();
+			myprintf("03643: %s\n",g_ini_caricati[i].c_str());
+			color_restore();
+		}
+	if (flagverbose && (!flagpakka) && (!flagstdout) && (!flagterse))
+		for (size_t i=0; i<g_ini_mostra.size(); i++)
+			myprintf("03628: %s\n",g_ini_mostra[i].c_str());
 
-	
+
 
 	for (int i=1;i<argc;i++)
 		if  (stringcomparei(argv[i],"-nomore"))
@@ -158784,6 +163045,14 @@ int Jidac::loadparameters(int argc, const char** argv)
       +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
 	g_optional="";
 
+	/// 65.14a: -writeini, the line as typed (here below the hashers become -dummyhash), and where each
+	/// piece the parser takes begins: a switch with its arguments, or a command with its archive and files
+	vector<string>	inioriginale;
+	vector<int>		iniinizi;
+	if (g_writeini!="")
+		for (int i=0; i<argc; i++)
+			inioriginale.push_back(argv[i]);
+
 	///	a bit of refactoring. getting, early, the hasher
 	static const string	dummyhash="-dummyhash";
 	int		howmanyhasher=0;
@@ -158826,6 +163095,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 	for (int i=1; i<argc; ++i)
 	{
+		if (g_writeini!="")
+			iniinizi.push_back(i);
 		string opt=argv[i];  // read command
 		if (flagforzarobocopy)
 		{
@@ -159088,13 +163359,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 #if defined(_WIN32) && !defined(ANCIENT)
 				/// (-acfake, hidden, for the tests of xc: the drive given is taken as the one of Windows, its disk as the one to save)
 				bool finto=false;
+				bool pefinto=false;
 				for (int k=1; k<argc; k++)
+				{
 					if (!strcmp(argv[k],"-acfake"))
 						finto=(files.size()==1);
-				if ((files.size()>0) && (!finto))
-				{
-					myprintf("66000! ac takes the archive only (ac z:\\backup.zpaq): what it saves is the disk of Windows\n");
-					return 2;
+					if (!strcmp(argv[k],"-winpefake"))
+						pefinto=true;
 				}
 				char cartella[MAX_PATH+1]={0};
 				string unita="c:";
@@ -159105,6 +163376,31 @@ int Jidac::loadparameters(int argc, const char** argv)
 					unita=files[0];
 					files.clear();
 					flagacfake=true;
+				}
+				else if (pefinto || ac_winpe())
+				{
+					/// 65.14j: a Windows PE (it runs from X:, a RAM disk): the Windows to save is a stopped one (ac_windowsspento)
+					const char data=(files.size()==1) ? ac_lettera(files[0]) : 0;
+					if ((files.size()>1) || ((files.size()==1) && (data==0)))
+					{
+						myprintf("66025! Windows PE: ac archive [X:] (after the archive, the drive of the Windows to save, if there is more than one)\n");
+						return 2;
+					}
+					const char trovata=ac_windowsspento((char)toupper((unsigned char)unita[0]),data);
+					if (trovata==0)
+						return 2;
+					files.clear();
+					unita=string(1,(char)tolower((unsigned char)trovata))+":";
+					g_acpe=true;
+				}
+				else if (files.size()>0)
+				{
+					/// 65.14j (the author): not a reason to stop. ac saves the disk of the Windows running, whatever is given
+					string dati;
+					for (size_t k=0; k<files.size(); k++)
+						dati+=string((k>0) ? " " : "")+files[k];
+					myprintf("66009$ ac: %s ignored: ac saves the disk of the Windows running (%s)\n",dati.c_str(),unita.c_str());
+					files.clear();
 				}
 				files.push_back(unita);
 				flagac=true;
@@ -159329,8 +163625,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		///else if (cli_onlystring	(opt,"-ismounted",			"",	g_ismounted,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-script",				"",				g_script,		argc,argv,&i,					NULL));
 #ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef _WIN32 /// 65.14d: the SFX module is Windows only
 		else if (cli_onlystring	(opt,"-sfx",				"",				g_sfx,			argc,argv,&i,					&flagsfx));
 		else if (cli_onlystring	(opt,"-sfxto",				"",				g_sfxto,		argc,argv,&i,					NULL));
+#endif
 #endif ///NOSFTPEND
 		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -159352,9 +163650,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getdate	(opt,"-dateto",												argc,argv,&i,					&g_dateto));
 		else if (cli_getarray	(opt,"-not",												argc,argv,&i,					&notfiles,		&nottype));
 #ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef _WIN32 /// 65.14d: the SFX module is Windows only
 		else if (cli_getarray	(opt,"-sfxnot",												argc,argv,&i,					&sfxnotfiles,	&sfxnottype));
 		else if (cli_getarray	(opt,"-sfxonly",											argc,argv,&i,					&sfxonlyfiles,	NULL));
 		else if (cli_getstring	(opt,"-sfxuntil",	false, 	"",								argc,argv,&i,"",				&g_sfxuntil));
+#endif
 		else if (cli_onlystring	(opt,"-franzen",				"",							g_franzen,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-franzen2",				"",							g_franzen2,	argc,argv,&i,					NULL)); /// 65.13n
 
@@ -159512,6 +163812,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 			if (!g_programflags.exists(argv[i]))
 				myprintf("00562! Unknown option ignored: %s\n", argv[i]);
 		}
+	}
+	if (flaghelpcheck) /// 65.14b: hidden, the help against this parser (no cli_ took it: they all told their name)
+		seppuku(help_controlla());
+	if (g_writeini!="") /// 65.14a: the switches of this line into the ini, then on as ever
+	{
+		const int esito=ini_scrivi(inioriginale,iniinizi,archive);
+		if (esito!=0)
+			return esito;
 	}
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -170630,7 +174938,7 @@ int Jidac::list()
 // If filename is 0 then return true if it is possible to compare.
 // In the meantime calc the crc32 of the entire file
 
-bool Jidac::equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc32, string i_myhashtype, const string i_myhash, string &o_hash)
+bool Jidac::equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc32, string i_myhashtype, const string i_myhash, string &o_hash, int64_t *o_fatti)
 {
 	if (flagdebug3)
 	{
@@ -170705,10 +175013,15 @@ bool Jidac::equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc
 	// compare hashes chunk by chunk.
 	fseeko(in, 0, SEEK_SET);
 	libzpaq::SHA1 sha1;
-	const int	  BUFSIZE= 4096;
-	char		  buf[BUFSIZE];
+	/// 65.14f: the file in blocks of 1 MB (it was 4 KB a read: on Windows a ReadFile each, 1,6 millions for 6,5 GB),
+	/// the fragments hashed from memory. A small file: a block as big as the file
+	const int64_t BLOCCO = 1048576;
+	const int64_t quanto = (p->second.size < 1) ? 1 : ((p->second.size < BLOCCO) ? p->second.size : BLOCCO);
+	vector<char>  buf((size_t)quanto);
+	int64_t		  inbuf	 = 0; /// bytes in buf
+	int64_t		  dove	 = 0; /// the next one to hash
 	bool		  flagshow= false;
-	if (!flagnoeta)
+	if ((!flagnoeta) && (o_fatti == NULL)) /// (in a thread: the dashboard of testverify_ssd says it)
 		if (flagverbose || (p->second.size > 100000000)) // only 100MB+ files
 			flagshow= true;
 	if (flagshow)
@@ -170754,23 +175067,32 @@ bool Jidac::equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc
 					ultimapercentuale= (int)percentuale;
 				}
 		}
-		for (int j= 0; j < ht[f].usize;)
+		for (int64_t j= 0; j < ht[f].usize;)
 		{
-			int n= ht[f].usize - j;
-			if (n > BUFSIZE)
-				n= BUFSIZE;
-			int r  = fread(buf, 1, n, in);
-			o_crc32= crc32_16bytes(buf, r, o_crc32);
-			done+= r;
-			g_worked+= r;
-			if (flagchecksum || flagparanoid || flagverify)
-				hashfrombuffer.update(buf, r);
-			if (r != n)
+			if (dove == inbuf) /// the next block of the file
 			{
-				myfclose(&in);
-				return false;
+				const int64_t r= (int64_t)fread(&buf[0], 1, buf.size(), in);
+				if (r <= 0)
+				{
+					myfclose(&in);
+					return false;
+				}
+				o_crc32= crc32_16bytes(&buf[0], (size_t)r, o_crc32);
+				if (flagchecksum || flagparanoid || flagverify)
+					hashfrombuffer.update(&buf[0], (int)r);
+				done+= r;
+				if (o_fatti != NULL)
+					(*o_fatti)+= r;
+				else
+					g_worked+= r;
+				inbuf= r;
+				dove = 0;
 			}
-			sha1.write(buf, n);
+			int64_t n= ht[f].usize - j;
+			if (n > inbuf - dove)
+				n= inbuf - dove;
+			sha1.write(&buf[(size_t)dove], n);
+			dove+= n;
 			j+= n;
 		}
 		if (memcmp(sha1.result(), ht[f].sha1, 20) != 0)
@@ -170779,7 +175101,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char *filename, uint32_t &o_crc
 			return false;
 		}
 	}
-	if (fread(buf, 1, BUFSIZE, in) != 0)
+	if ((dove < inbuf) || (fread(&buf[0], 1, buf.size(), in) != 0)) /// more than its fragments: not the same file
 	{
 		myfclose(&in);
 		return false;
@@ -171280,7 +175602,9 @@ void *scriviramtodisk(void *t)
 
 						franz_do_hash hashfrombuffer(par->algo[i]);
 						hashfrombuffer.init();
-						hashfrombuffer.update(par->data[i], par->filesize[i]);
+						/// 65.14i: in blocks, update() takes an int (a file of 2 GB or more was hashed wrong)
+						for (int64_t fatto= 0; fatto < par->filesize[i]; fatto+= 1048576)
+							hashfrombuffer.update(par->data[i] + fatto, (int)((par->filesize[i] - fatto < 1048576) ? par->filesize[i] - fatto : 1048576));
 						hashstringato= hashfrombuffer.finalize();
 						par->o_hashedsize+= par->filesize[i];
 					}
@@ -175895,6 +180219,97 @@ int main()
 #endif // unix
 #endif // ifndef DLL
 
+/// 65.14l: a language by its name: en it ru, english italiano russian..., it_IT.UTF-8 (a locale of *nix). -1: none
+static int lingua_dalnome(const string &i_nome)
+{
+	const string n	 = stringtolower(i_nome);
+	const string base= n.substr(0, n.find_first_of("_.-@"));
+	if ((base == "en") || (base == "english") || (base == "inglese") || (base == "c") || (base == "posix"))
+		return LINGUA_EN;
+	if ((base == "it") || (base == "italian") || (base == "italiano"))
+		return LINGUA_IT;
+	if ((base == "ru") || (base == "russian") || (base == "russo"))
+		return LINGUA_RU;
+	return -1;
+}
+/// the language of the system: on Windows the one of the user interface, on *nix LC_ALL, LC_MESSAGES, LANG.
+/// Russian only where it can be shown: a UTF-8 locale (*nix), the console set to UTF-8 (Windows, i_utf8)
+static int lingua_sistema(bool i_utf8)
+{
+#ifdef _WIN32
+	const LANGID id= GetUserDefaultUILanguage();
+	if (PRIMARYLANGID(id) == LANG_ITALIAN)
+		return LINGUA_IT;
+	if ((PRIMARYLANGID(id) == LANG_RUSSIAN) && i_utf8)
+		return LINGUA_RU;
+	return LINGUA_EN;
+#else
+	(void)i_utf8;
+	static const char *variabili[]= {"LC_ALL", "LC_MESSAGES", "LANG"};
+	for (size_t i= 0; i < sizeof(variabili) / sizeof(variabili[0]); i++)
+	{
+		const char *v= getenv(variabili[i]);
+		if ((v == NULL) || (v[0] == 0))
+			continue;
+		const string locale= stringtolower(v);
+		const int	 l	   = lingua_dalnome(locale);
+		if ((l == LINGUA_RU) && (locale.find("utf-8") == string::npos) && (locale.find("utf8") == string::npos))
+			return LINGUA_EN;
+		return (l < 0) ? LINGUA_EN : l;
+	}
+	return LINGUA_EN;
+#endif
+}
+/// 65.14l: the language of the help chosen, its switch (65.14m: -eng -it -ru, it was -lang X) and -helpid taken away
+/// from the line (the help and the parser never see them: h a -it is h a). The switch of the command line
+/// (i_dariga), else the one an -ini brought (the line after ini_espandi), else ZPAQFRANZ_LANG, else the system's
+static bool g_linguascelta= false; /// a language on the command line: an -ini does not change it
+static void lingua_scegli(int &io_argc, const char **&io_argv, vector<const char *> &o_argv, bool i_dariga)
+{
+	o_argv.clear();
+	int	 scelta= -1;
+	bool utf8  = true;
+	for (int i= 0; i < io_argc; i++)
+	{
+		bool lingua= false;
+		for (int l= 0; (i > 0) && (l < (int)(sizeof(g_linguaopzioni) / sizeof(g_linguaopzioni[0]))); l++)
+			if (!strcmp(io_argv[i], g_linguaopzioni[l].opzione))
+			{
+				scelta= l;
+				lingua= true;
+			}
+		if (lingua)
+			continue;
+		if ((i > 0) && (!strcmp(io_argv[i], "-helpid")))
+		{
+			g_helpid= true;
+			continue;
+		}
+		if (!strcmp(io_argv[i], "-noconsole"))
+			utf8= false;
+		o_argv.push_back(io_argv[i]);
+	}
+	if (scelta >= 0)
+	{
+		if (i_dariga || (!g_linguascelta))
+			g_lingua= scelta;
+		if (i_dariga)
+			g_linguascelta= true;
+	}
+	else if (i_dariga)
+	{
+		const char *variabile= getenv("ZPAQFRANZ_LANG");
+		const int	l		 = (variabile != NULL) ? lingua_dalnome(variabile) : -1;
+		g_lingua			 = (l >= 0) ? l : lingua_sistema(utf8 && (!flagnoconsole));
+	}
+	if ((int)o_argv.size() == io_argc) /// nothing taken away: the line as it is
+	{
+		o_argv.clear();
+		return;
+	}
+	io_argc= (int)o_argv.size();
+	io_argv= &o_argv[0];
+}
 int zpaq_main_internal(int argc, const char **argv)
 {
 #ifdef _WIN32
@@ -175991,6 +180406,39 @@ int zpaq_main_internal(int argc, const char **argv)
                 return (error_level > 255) ? 255 : error_level;
         }
     }
+
+    /// 65.14l: the language of the help; -eng -it -ru and -helpid out of the line (see lingua_scegli)
+    std::vector<const char *> linguaargv;
+    lingua_scegli(argc, argv, linguaargv, true);
+
+    /// 65.14b: zpaqfranz h -n -key (h a -n): what the switches do, help by help. Before anything else
+    /// reads the line: -key would ask a password, -ini would want a file (see help_cerca)
+    {
+        const int esito = help_cerca(argc, argv);
+        if (esito >= 0)
+            return esito;
+    }
+
+    /// 65.14a: -ini X, its switches in the line as if typed (the command line wins), before anything
+    /// reads it (mail, tui, franzscegli). -writeini X taken away, loadparameters writes it. Neither: as it is
+    std::vector<std::string> iniriga;
+    std::vector<const char *> iniargv;
+    {
+        const int esito = ini_espandi(argc, argv, iniriga);
+        if (esito != 0)
+            return esito;
+        if (!iniriga.empty())
+        {
+            for (size_t i = 0; i < iniriga.size(); i++)
+                iniargv.push_back(iniriga[i].c_str());
+            argc = (int)iniargv.size();
+            argv = &iniargv[0];
+        }
+    }
+    /// 65.14l: a language (-helpid) an -ini brought; the one of the command line wins
+    std::vector<const char *> linguainiargv;
+    if (!iniriga.empty())
+        lingua_scegli(argc, argv, linguainiargv, false);
 
 #ifndef DLL
     /// 65.12d: an archive (.zpaq, .franzen) in the place of the command is tui on it, and what comes after
@@ -180152,7 +184600,7 @@ int Jidac::zfssize()
 	{
 		myprintf("01580: zfssize needs 1 or 2 parameter(s)\n\n");
 		myprintf("01581: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
-		help_zfssize(true, true);
+		help_stampa("zfssize", true, true);
 		return 1;
 	}
 	return zfsenumerate("");
@@ -180164,7 +184612,7 @@ int Jidac::zfspurge()
 	{
 		myprintf("01582: zfspurge needs 1 or 2 parameter(s)\n\n");
 		myprintf("01583: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
-		help_zfspurge(true, true);
+		help_stampa("zfspurge", true, true);
 		return 1;
 	}
 	return zfsenumerate("zfs destroy ");
@@ -180175,7 +184623,7 @@ int Jidac::zfslist()
 	{
 		myprintf("01584: zfslist needs 1 or 2 parameter(s)\n\n");
 		myprintf("01585: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
-		help_zfslist(true, true);
+		help_stampa("zfslist", true, true);
 		return 1;
 	}
 	return zfsenumerate("");
@@ -180226,7 +184674,7 @@ int Jidac::zfsadd()
 	{
 		myprintf("01590: For zfsadd you need 1, 2 or 3 parameters\n\n");
 		myprintf("01591: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
-		help_zfsadd(true, true);
+		help_stampa("zfsadd", true, true);
 		return 1;
 	}
 
@@ -186594,7 +191042,7 @@ int Jidac::verify(bool i_readfile)
 		{
 			string finalfile= rename(p->first);
 			if (!isdirectory(finalfile))
-				if (p->second.size > 0)
+				if (p->second.size >= 0) /// 65.14c: an empty file too (its hash is the one of no data). It was > 0: an empty file written afterwards was "all OK"
 					if ((finalfile != "VFILE-l-filelist.txt") && (!ismemfile(finalfile)))
 					{
 						hashtotali+= p->second.size;
@@ -186890,14 +191338,388 @@ void Jidac::handleflaglongpath()
 		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
+/*
+	65.14i: w -ramdisk -test -verify, the counterpart of t -ssd. There the SHA-1 of the fragments against the files,
+	nothing decompressed; here the archive is really decompressed (in RAM) and every file is compared with the one
+	on disk, where x would put it (the stored path, or -to), by the hash of the whole file: the stored one, the one
+	of the RAM and the one of the disk must be the same (no hash stored, zpaq 7.15 or -nochecksum: byte by byte,
+	RAM against disk). A file is two works, its RAM and its disk, for the threads (-ssd; else one), the biggest
+	first, each to the one with less to do; on a console the bars of t -ssd (lighter grey: the RAM).
+	A file bigger than the RAM window comes in windows, one after the other: its hashes go on from a window to the
+	next one. -checksum alone does the RAM part of it (before 65.14i a file in windows was not checked at all)
+*/
+enum
+{
+	TWD_OK= 0,      /// the disk: as the RAM (so far)
+	TWD_MANCA,      /// no file there
+	TWD_DIMENSIONE, /// another size
+	TWD_LETTURA,    /// cannot be opened or read
+	TWD_NONFILE,    /// *nix: not a regular file (a FIFO would wait forever)
+	TWD_BYTE        /// no hash stored: a byte is not the same
+};
+struct twfile /// a file of the archive in RAM (or a window of a big one), and what was found
+{
+	string         nome;       /// in the archive
+	string         sudisco;    /// on disk (-verify)
+	string         tipohash;   /// stored
+	string         hash;
+	string         crc32;
+	int64_t        dimensione; /// of the whole file
+	char          *dati;       /// in RAM: the file, or a window of it
+	int64_t        inizio;     /// of the window, in the file
+	int64_t        lunghezza;  /// of dati
+	bool           disco;      /// against the disk too (-test -verify), else only the RAM (-checksum)
+	bool           finestre;   /// in windows: the hashes below go on from a window to the next one
+	bool           finito;     /// its verdict given
+	franz_do_hash *hram;       /// (a whole file: the hashes are made by the threads)
+	franz_do_hash *hdisco;
+	uint32_t       crcram;
+	string         hashram;
+	string         hashdisco;
+	int            statodisco; /// TWD_
+	int64_t        dimdisco;
+	twfile() : dimensione(0), dati(NULL), inizio(0), lunghezza(0), disco(false), finestre(false), finito(false), hram(NULL), hdisco(NULL), crcram(0), statodisco(TWD_OK), dimdisco(0)
+	{
+	}
+};
+struct twconti /// what w -test -verify found, all the chunks
+{
+	int64_t file;
+	int64_t byte;
+	int64_t uguali;
+	int64_t diversi;
+	int64_t mancanti;
+	int64_t illeggibili;
+	int64_t ramdiversi;     /// the RAM is not as stored: the archive
+	int64_t noncontrollati; /// the extraction stopped before the end of a file in windows
+	int64_t senzahash;      /// compared byte by byte
+	int64_t vuoti;          /// 0 bytes: there, and empty
+	void    azzera()
+	{
+		file= byte= uguali= diversi= mancanti= illeggibili= ramdiversi= noncontrollati= senzahash= vuoti= 0;
+	}
+	twconti()
+	{
+		azzera();
+	}
+};
+static twconti g_wconti;
+static void    wconfronta(vector<twfile *> &io_file, unsigned int i_thread); /// the threads and the bars: after franzbarre
+/// a hash that franz_do_hash can do from a buffer (a CRC-32 as "hash": the CRC-32 is checked anyway)
+static bool wconfronta_conhash(const string &i_tipo)
+{
+	return (i_tipo != "") && (i_tipo != "CRC-32") && (i_tipo != "CRC-32C") && (franz_get_hash(i_tipo) != NULL);
+}
+/// a file of the archive: where it is on disk (as x would put it) and what is stored
+static void wconfronta_prepara(twfile &o_f, DTMap::iterator p, const string &i_sudisco, bool i_disco)
+{
+	o_f.nome      = p->first;
+	o_f.sudisco   = i_sudisco;
+	o_f.dimensione= p->second.size;
+	o_f.disco     = i_disco;
+	int64_t      dummyc= 0;
+	int64_t      dummya= 0;
+	bool         dummyo= false;
+	int          dummyv= 0;
+	franz_posix *dummyp= NULL;
+	bool         dummyi= false;
+	decode_franz_block(false, p->second.franz_block, o_f.tipohash, o_f.hash, o_f.crc32, dummyc, dummya, dummyo, dummyv, dummyp, dummyi);
+}
+/// a file in windows: its hashes from the first byte
+static void wconfronta_inizia(twfile &io_f)
+{
+	io_f.finestre  = true;
+	io_f.crcram    = 0;
+	io_f.statodisco= TWD_OK;
+	if (!wconfronta_conhash(io_f.tipohash))
+		return;
+	io_f.hram= new franz_do_hash(io_f.tipohash);
+	io_f.hram->init();
+	if (io_f.disco)
+	{
+		io_f.hdisco= new franz_do_hash(io_f.tipohash);
+		io_f.hdisco->init();
+	}
+}
+/// the RAM of a file (or of a window): CRC-32 and hash, in blocks (update() takes an int, and the bar moves)
+static void wconfronta_ram(twfile &io_f, volatile int64_t *io_fatti)
+{
+	const int64_t  BLOCCO= 1048576;
+	franz_do_hash *h     = io_f.hram;
+	franz_do_hash *mio   = NULL;
+	if ((!io_f.finestre) && wconfronta_conhash(io_f.tipohash))
+	{
+		mio= new franz_do_hash(io_f.tipohash);
+		mio->init();
+		h= mio;
+	}
+	for (int64_t i= 0; i < io_f.lunghezza; i+= BLOCCO)
+	{
+		const int64_t n= (io_f.lunghezza - i < BLOCCO) ? io_f.lunghezza - i : BLOCCO;
+		if (io_f.crc32 != "")
+			io_f.crcram= crc32_16bytes(io_f.dati + i, (size_t)n, io_f.crcram);
+		if (h != NULL)
+			h->update(io_f.dati + i, (int)n);
+		*io_fatti= *io_fatti + n;
+	}
+	if (mio != NULL)
+	{
+		io_f.hashram= mio->finalize();
+		delete mio;
+	}
+}
+/// the disk of a file (or the same window of it): the hash, or byte by byte against the RAM (no hash stored)
+static void wconfronta_disco(twfile &io_f, volatile int64_t *io_fatti)
+{
+	if (io_f.statodisco != TWD_OK) /// a window before: already not the same
+		return;
+	const char *nome= io_f.sudisco.c_str();
+#ifdef unix
+	struct stat sb;
+	if (lstat(nome, &sb) != 0)
+	{
+		io_f.statodisco= TWD_MANCA;
+		return;
+	}
+	if (!S_ISREG(sb.st_mode))
+	{
+		io_f.statodisco= TWD_NONFILE;
+		return;
+	}
+#endif
+	FP in= myfopen(nome, RB);
+	if ((in == NULL) || (in == FPNULL))
+	{
+		io_f.statodisco= fileexists(io_f.sudisco) ? TWD_LETTURA : TWD_MANCA;
+		return;
+	}
+	fseeko(in, 0, SEEK_END);
+	io_f.dimdisco= ftello(in);
+	if (io_f.dimdisco != io_f.dimensione)
+	{
+		io_f.statodisco= TWD_DIMENSIONE;
+		myfclose(&in);
+		return;
+	}
+	if (fseeko(in, io_f.inizio, SEEK_SET) != 0)
+	{
+		io_f.statodisco= TWD_LETTURA;
+		myfclose(&in);
+		return;
+	}
+	franz_do_hash *h  = io_f.hdisco;
+	franz_do_hash *mio= NULL;
+	if ((!io_f.finestre) && wconfronta_conhash(io_f.tipohash))
+	{
+		mio= new franz_do_hash(io_f.tipohash);
+		mio->init();
+		h= mio;
+	}
+	const int64_t BLOCCO= 1048576;
+	vector<char>  buf((size_t)((io_f.lunghezza < 1) ? 1 : ((io_f.lunghezza < BLOCCO) ? io_f.lunghezza : BLOCCO)));
+	for (int64_t i= 0; i < io_f.lunghezza;)
+	{
+		int64_t n= io_f.lunghezza - i;
+		if (n > (int64_t)buf.size())
+			n= (int64_t)buf.size();
+		const int64_t r= (int64_t)fread(&buf[0], 1, (size_t)n, in);
+		if (r != n)
+		{
+			io_f.statodisco= TWD_LETTURA;
+			break;
+		}
+		if (h != NULL)
+			h->update(&buf[0], (int)r);
+		else if (memcmp(&buf[0], io_f.dati + i, (size_t)r) != 0)
+		{
+			io_f.statodisco= TWD_BYTE;
+			break;
+		}
+		i+= r;
+		*io_fatti= *io_fatti + r;
+	}
+	myfclose(&in);
+	if (mio != NULL)
+	{
+		io_f.hashdisco= mio->finalize();
+		delete mio;
+	}
+	/// the last window of a file in windows: its hash here too (the bar red at once, as in t -ssd)
+	else if ((io_f.hdisco != NULL) && (io_f.statodisco == TWD_OK) && (io_f.inizio + io_f.lunghezza == io_f.dimensione))
+	{
+		io_f.hashdisco= io_f.hdisco->finalize();
+		delete io_f.hdisco;
+		io_f.hdisco= NULL;
+	}
+}
+/// the disk of a file is not as stored, as soon as a thread knows it: for the bars (the verdict: wconfronta_esito)
+static bool wconfronta_discodiverso(const twfile &i_f)
+{
+	if (i_f.statodisco != TWD_OK)
+		return true;
+	return (i_f.hash != "") && (i_f.hashdisco != "") && (i_f.hashdisco != i_f.hash);
+}
+/// the end of a file (or of its last window): the stored hash and CRC-32, the RAM, the disk. A line for what is
+/// not good (always: the names are what -verify is for), 1 if something is not
+static int wconfronta_esito(twfile &io_f)
+{
+	if (io_f.hram != NULL)
+	{
+		io_f.hashram= io_f.hram->finalize();
+		delete io_f.hram;
+		io_f.hram= NULL;
+	}
+	if (io_f.hdisco != NULL)
+	{
+		io_f.hashdisco= io_f.hdisco->finalize();
+		delete io_f.hdisco;
+		io_f.hdisco= NULL;
+	}
+	io_f.finito       = true;
+	const bool conhash= wconfronta_conhash(io_f.tipohash);
+	g_wconti.file++;
+	g_wconti.byte+= io_f.dimensione;
+	char crcram[16];
+	snprintf(crcram, sizeof(crcram), "%08X", io_f.crcram);
+	bool ramok= true;
+	if (io_f.dimensione > 0)
+	{
+		if (io_f.inizio + io_f.lunghezza != io_f.dimensione) /// not all in RAM
+			ramok= false;
+		if (conhash && (io_f.hashram != io_f.hash))
+			ramok= false;
+		if ((io_f.crc32 != "") && (io_f.crc32 != "00000000") && (io_f.crc32 != crcram))
+			ramok= false;
+	}
+	if (!ramok)
+	{
+		g_wconti.ramdiversi++;
+		myprintf("02571! DECOMPRESSED NOT AS STORED (damaged archive?) <<%Z>>\n", io_f.nome.c_str());
+		if (flagverbose)
+			myprintf("02576: %s stored %s RAM %s, CRC-32 stored %s RAM %s, in RAM %s of %s bytes\n", io_f.tipohash.c_str(), io_f.hash.c_str(), io_f.hashram.c_str(), io_f.crc32.c_str(), crcram, migliaia(io_f.inizio + io_f.lunghezza), migliaia2(io_f.dimensione));
+		return 1;
+	}
+	if (!io_f.disco)
+	{
+		g_wconti.uguali++;
+		return 0;
+	}
+	switch (io_f.statodisco)
+	{
+		case TWD_OK:
+			break;
+		case TWD_MANCA:
+			g_wconti.mancanti++;
+			myprintf("02572! MISSING     <<%Z>>\n", io_f.sudisco.c_str());
+			return 1;
+		case TWD_DIMENSIONE:
+			g_wconti.diversi++;
+			myprintf("02574! DIFFERENT   <<%Z>> (size %s, in the archive %s)\n", io_f.sudisco.c_str(), migliaia(io_f.dimdisco), migliaia2(io_f.dimensione));
+			return 1;
+		case TWD_BYTE:
+			g_wconti.diversi++;
+			myprintf("02575! DIFFERENT   <<%Z>> (byte by byte: no hash stored)\n", io_f.sudisco.c_str());
+			return 1;
+		default:
+			g_wconti.illeggibili++;
+			myprintf("02573! CANNOT READ <<%Z>>%s\n", io_f.sudisco.c_str(), (io_f.statodisco == TWD_NONFILE) ? " (not a regular file)" : "");
+			return 1;
+	}
+	if (conhash && (io_f.dimensione > 0) && (io_f.hashdisco != io_f.hashram))
+	{
+		g_wconti.diversi++;
+		myprintf("02575! DIFFERENT   <<%Z>>\n", io_f.sudisco.c_str());
+		if (flagverbose)
+			myprintf("02576: %s on disk %s, decompressed %s (stored %s)\n", io_f.tipohash.c_str(), io_f.hashdisco.c_str(), io_f.hashram.c_str(), io_f.hash.c_str());
+		return 1;
+	}
+	if (io_f.dimensione == 0)
+		g_wconti.vuoti++;
+	else if (!conhash)
+		g_wconti.senzahash++;
+	g_wconti.uguali++;
+	return 0;
+}
+/// a file in windows that did not get to its end (the extraction stopped): its hashes are good for nothing
+static int wconfronta_lascia(twfile &io_f)
+{
+	if (io_f.finito)
+		return 0;
+	if (io_f.hram != NULL)
+	{
+		(void)io_f.hram->finalize(); /// (it frees what init took)
+		delete io_f.hram;
+		io_f.hram= NULL;
+	}
+	if (io_f.hdisco != NULL)
+	{
+		(void)io_f.hdisco->finalize();
+		delete io_f.hdisco;
+		io_f.hdisco= NULL;
+	}
+	io_f.finito= true;
+	g_wconti.file++;
+	g_wconti.byte+= io_f.dimensione;
+	g_wconti.noncontrollati++;
+	myprintf("02577! NOT CHECKED (the extraction stopped) <<%Z>>\n", io_f.nome.c_str());
+	return 1;
+}
+/// w -test -verify, the end: how many files, what was found. 2 if a file is not the same (as t), 1 on other errors
+static int wconfronta_riassunto(int i_errori)
+{
+	const twconti &c   = g_wconti;
+	const int64_t  male= c.diversi + c.mancanti + c.illeggibili + c.ramdiversi;
+	if ((male == 0) && (c.noncontrollati == 0))
+	{
+		myprintf("02578: Verify against the filesystem: %s files (%s) all the same", migliaia(c.file), tohuman(c.byte));
+		if (c.senzahash > 0)
+			myprintf(", %s byte by byte (no hash stored)", migliaia(c.senzahash));
+		if (c.vuoti > 0)
+			myprintf(", %s empty", migliaia(c.vuoti));
+		myprintf("\n");
+	}
+	else
+	{
+		myprintf("02579! Verify against the filesystem: %s files (%s), the same %s", migliaia(c.file), tohuman(c.byte), migliaia2(c.uguali));
+		if (c.diversi > 0)
+			myprintf(", DIFFERENT %s", migliaia(c.diversi));
+		if (c.mancanti > 0)
+			myprintf(", MISSING %s", migliaia(c.mancanti));
+		if (c.illeggibili > 0)
+			myprintf(", CANNOT READ %s", migliaia(c.illeggibili));
+		if (c.ramdiversi > 0)
+			myprintf(", NOT AS STORED %s", migliaia(c.ramdiversi));
+		if (c.noncontrollati > 0)
+			myprintf(", NOT CHECKED %s", migliaia(c.noncontrollati));
+		myprintf("\n");
+	}
+	if (male > 0)
+		return 2;
+	return (i_errori > 0) ? 1 : 0;
+}
 int Jidac::extractw()
 {
 	myprintf("02442: **** CHUNKED EXTRACTION/TEST ****\n");
-	if (flagverify && flagtest)
+	/// 65.14i: -test -verify = what is decompressed in RAM against the files on disk (see twfile)
+	const bool confronto= flagtest && flagverify;
+	if (confronto)
 	{
-		myprintf("02443: -verify and -test incompatible (-test does not write on disk)\n");
-		myprintf("02444: maybe you mean -test -checksum ?\n");
-		return 1;
+		if (flagparanoid)
+		{
+			myprintf("02443! -paranoid writes on disk: not with -test (-test -verify reads the files on disk)\n");
+			return 1;
+		}
+		if (tofiles.size() > 1)
+		{
+			myprintf("02570! -test -verify: one -to at most (where x would extract)\n");
+			return 2;
+		}
+		if (!flagramdisk)
+		{
+			myprintf("02444: -test -verify: -ramdisk on (the files are compared from RAM)\n");
+			flagramdisk= true;
+		}
+		g_wconti.azzera();
 	}
 	if (!flagtest)
 		if (tofiles.size() != 1)
@@ -186913,7 +191735,13 @@ int Jidac::extractw()
 	/// transform -tofiles on WIN32 (if neeeded)
 	handleflaglongpath();
 	string outputdirectory= "";
-	if (flagtest)
+	if (confronto) /// 65.14i: no -to, the stored paths; -to, as x
+	{
+		if (tofiles.size() == 1)
+			if (!isdirectory(tofiles[0]))
+				tofiles[0]+= '/';
+	}
+	else if (flagtest)
 		tofiles.push_back("K:/dummy/");
 	else
 	{
@@ -186941,8 +191769,8 @@ int Jidac::extractw()
 	if (sz < 1)
 		error("44504: archive not found");
 #ifdef _WIN32
-	if (!flagtest)
-		sanitizzawindows(); /// filenames Windows cannot create, see extract()
+	if ((!flagtest) || confronto)
+		sanitizzawindows(); /// filenames Windows cannot create, see extract() (-test -verify: where x puts them)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	for (unsigned i= 0; i < block.size(); ++i)
 	{
@@ -186966,7 +191794,7 @@ int Jidac::extractw()
 	vector<s_fileandsize> chunkfile;
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 		if (!isdirectory(p->first))
-			if (p->second.size > 0)
+			if ((p->second.size > 0) && ((!confronto) || (p->second.date != 0))) /// 65.14i: -test -verify, a deleted file is not on disk
 			{
 				totalarchive+= p->second.size;
 				string		 myhashtype	   = "";
@@ -187051,7 +191879,7 @@ int Jidac::extractw()
 	unsigned int chunkscount   = 0;
 	int64_t		 chunkcorrente = 0;
 	unsigned int indice		   = 0;
-	string		 initialtofiles= tofiles[0];
+	string		 initialtofiles= tofiles.empty() ? "" : tofiles[0]; /// (-test -verify without -to: none)
 	char		 chunksbuffer[10];
 	chunkfiles.clear();
 	//	count the chunks in advance
@@ -187149,7 +191977,7 @@ int Jidac::extractw()
 			{
 				printbar('=');
 				errors+= extractqueue2(chunkscount, quantichunk);
-				if (flagverify)
+				if (flagverify && !confronto)
 					errors+= multiverify(chunkfile);
 				if (errors == 0)
 					myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
@@ -187169,7 +191997,7 @@ int Jidac::extractw()
 				snprintf(chunksbuffer, sizeof(chunksbuffer), "%08d", (int)chunkscount);
 				tofiles[0]= initialtofiles + chunksbuffer + "/";
 			}
-			else
+			else if (!tofiles.empty())
 				tofiles[0]= initialtofiles;
 
 			string fn= fileandsize[indice].filename;
@@ -187183,7 +192011,24 @@ int Jidac::extractw()
 			{
 				uint64_t windowbudget= (uint64_t)spazio;
 				uint64_t windowcount= (oversizedfilesize + windowbudget - 1) / windowbudget;
-				for (uint64_t windowindex= 0; windowindex < windowcount && errors == 0; ++windowindex)
+				/// 65.14i: -checksum, -test -verify: its hashes go on from a window to the next one
+				twfile  grande;
+				twfile *pgrande= NULL;
+				if (confronto || flagchecksum)
+				{
+					DTMap::iterator pg= dt.find(fn);
+					if (pg != dt.end())
+					{
+						string sudisco= rename(fn);
+						franzreplace(sudisco);
+						wconfronta_prepara(grande, pg, sudisco, confronto);
+						wconfronta_inizia(grande);
+						pgrande= &grande;
+					}
+				}
+				/// (-test -verify: a file not as on disk is no reason to stop)
+				const int erroriprima= errors;
+				for (uint64_t windowindex= 0; windowindex < windowcount && (confronto ? (errors == erroriprima) : (errors == 0)); ++windowindex)
 				{
 					uint64_t windowoffset= windowindex * windowbudget;
 					uint64_t windowsize= oversizedfilesize - windowoffset;
@@ -187194,9 +192039,11 @@ int Jidac::extractw()
 							 (unsigned long long)(windowindex + 1), (unsigned long long)windowcount,
 							 (unsigned long long)windowoffset, (unsigned long long)windowsize);
 					printbar('=');
-					errors+= extractqueue2(chunkscount, quantichunk, (int64_t)windowoffset, (int64_t)windowsize);
+					errors+= extractqueue2(chunkscount, quantichunk, (int64_t)windowoffset, (int64_t)windowsize, pgrande);
 					chunkscount++;
 				}
+				if (pgrande != NULL)
+					errors+= wconfronta_lascia(grande);
 			}
 			else
 			{
@@ -187207,7 +192054,7 @@ int Jidac::extractw()
 				errors+= extractqueue2(chunkscount, quantichunk);
 				chunkscount++;
 			}
-			if (flagverify)
+			if (flagverify && !confronto)
 				errors+= multiverify(chunkfile);
 			if (errors == 0)
 				myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
@@ -187224,7 +192071,7 @@ int Jidac::extractw()
 		{
 			printbar('=');
 			errors+= extractqueue2(chunkscount, quantichunk);
-			if (flagverify)
+			if (flagverify && !confronto)
 				errors+= multiverify(chunkfile);
 			if (errors == 0)
 				myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
@@ -187245,7 +192092,7 @@ int Jidac::extractw()
 				snprintf(chunksbuffer, sizeof(chunksbuffer), "%08d", (int)chunkscount);
 				tofiles[0]= initialtofiles + chunksbuffer + "/";
 			}
-			else
+			else if (!tofiles.empty())
 				tofiles[0]= initialtofiles;
 			chunkcorrente+= fileandsize[indice].size;
 			string fn= fileandsize[indice].filename;
@@ -187263,17 +192110,32 @@ int Jidac::extractw()
 		printbar('=');
 		/// finalize "spare" chunk
 		errors+= extractqueue2(chunkscount, quantichunk);
-		if (flagverify)
+		if (flagverify && !confronto)
 			errors+= multiverify(chunkfile);
 		if (errors == 0)
 			myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n", chunkinlavorazione, errors);
 		else
 			myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n", chunkinlavorazione, errors);
 	}
+	/// 65.14i: -test -verify, the empty files too: there, and empty
+	if (confronto)
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			if ((p->second.date != 0) && (p->second.size == 0) && (!isdirectory(p->first)))
+			{
+				string sudisco= rename(p->first);
+				franzreplace(sudisco);
+				twfile  vuoto;
+				int64_t letti= 0;
+				wconfronta_prepara(vuoto, p, sudisco, true);
+				wconfronta_disco(vuoto, &letti);
+				errors+= wconfronta_esito(vuoto);
+			}
 	printbar('=');
 	if (flagverify && flagparanoid)
 		if (!removetempdirifempty(outputdirectory, true))
 			errors++;
+	if (confronto)
+		return wconfronta_riassunto(errors);
 	return errors > 0;
 }
 bool Jidac::removetempdirifempty(string i_folder, bool i_deleteifsizezero= false)
@@ -187619,7 +192481,7 @@ int Jidac::multiverify(vector<s_fileandsize> &i_arrayfilename)
 		}
 	return risultato;
 }
-int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, int64_t i_windowsize)
+int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, int64_t i_windowsize, twfile *i_grande)
 {
 	if (i_chunk < 0)
 	{
@@ -187778,6 +192640,19 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, i
 						 migliaia(job.total_done), migliaia2((int64_t)job.window_size));
 				errors++;
 			}
+			/// 65.14i: -checksum, -test -verify, a file in windows: this one (the verdict at the last one, after the
+			/// writing, as for the other files)
+			int controllo= 0;
+			if ((i_grande != NULL) && (errors == 0))
+			{
+				i_grande->dati     = windowfile->second.pramfile->data;
+				i_grande->inizio   = (int64_t)job.window_start;
+				i_grande->lunghezza= (int64_t)job.window_size;
+				vector<twfile *> questo(1, i_grande);
+				wconfronta(questo, flagssd ? (unsigned int)howmanythreads : 1);
+				if (job.window_start + job.window_size == (uint64_t)windowfile->second.size)
+					controllo= wconfronta_esito(*i_grande);
+			}
 			if (!flagtest && errors == 0 && !windowfile->second.donotextractme)
 			{
 				string finalfile= rename(windowfile->first);
@@ -187820,6 +192695,7 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, i
 						myfclose(&myfile);
 				}
 			}
+			errors+= controllo;
 			windowfile->second.pramfile->reset();
 		}
 		block= preblock;
@@ -187867,6 +192743,39 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, i
 	{
 		myprintf("02500: RAMDISK       %21s bytes (%s) ", migliaia(g_ramdisksize), tohuman(g_ramdisksize));
 		myprintf("02501: time %.2f s @ %s (%s/s)\n", time_extract, migliaia((int64_t)(job.total_size / time_extract)), tohuman((int64_t)(job.total_size / time_extract)));
+	}
+	/// 65.14i: -test -verify, against the files on disk (the RAM is checked there too), by threads
+	if (flagtest && flagverify)
+	{
+		vector<twfile> daconfrontare;
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
+				if (!isdirectory(p->first))
+				{
+					string sudisco= rename(p->first);
+					franzreplace(sudisco);
+					twfile f;
+					wconfronta_prepara(f, p, sudisco, true);
+					if ((p->second.pramfile != NULL) && (p->second.pramfile->data != NULL))
+					{
+						f.dati     = p->second.pramfile->data;
+						f.lunghezza= (int64_t)p->second.pramfile->filesize;
+					}
+					daconfrontare.push_back(f);
+				}
+		vector<twfile *> punti;
+		for (size_t i= 0; i < daconfrontare.size(); i++)
+			punti.push_back(&daconfrontare[i]);
+		wconfronta(punti, flagssd ? (unsigned int)howmanythreads : 1);
+		for (size_t i= 0; i < daconfrontare.size(); i++)
+			errors+= wconfronta_esito(daconfrontare[i]);
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
+				if (p->second.pramfile != NULL)
+					(*p->second.pramfile).reset();
+		block= preblock;
+		chunkfiles.clear();
+		return errors > 0;
 	}
 	int64_t			startwrite	 = mtime();
 	int64_t			expected	 = 0;
@@ -194036,6 +198945,7 @@ int64_t Jidac::fl_readarchive(const char *i_arc)
 		if (!i_quiet)
 			if (!flagpakka)
 			{
+				eol(); /// 65.14h: as read_archive, nothing left of a progress line
 				myprintf("\n");
 				myprintf("02969: <<%Z>>", i_arc);
 				if (version == DEFAULT_VERSION)
@@ -195855,6 +200765,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 			if (!i_quiet)
 				if (!flagpakka)
 				{
+					eol(); /// 65.14h: the progress line of the scan (02972, with \r) is longer: "(30.93 GB)block/s)"
 					if (flagverbose)
 						myprintf("02988: %d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
 								 int(ver.size() - 1), migliaia(files), migliaia2(unsigned(ht.size()) - 1),
@@ -201609,6 +206520,941 @@ std::string get_top_level_folder(const std::string &path)
 		myprintf("Final result = '%s'\n", result.c_str());
 	return result;
 }
+/*
+	65.14f: t archive path -ssd. The files to compare are given to the threads before they start (the biggest
+	first, each one to the thread with less to read): every thread knows how many bytes it has to read, and on a
+	console it has a bar that long. The bars fill while the threads read, green while every file is the same, red
+	once one is not. More threads than rows: a row for a group of them. The loop of testverify then says how it
+	went, as ever: the same lines in the same order, with what the threads found.
+	65.14g: a file bigger than ZPAQ_TPEZZO is cut in pieces of about that size (on the borders of its fragments: the
+	archive has the SHA-1 of each), and the pieces go with the other files: a big one (a disk of a VM) is read by
+	more threads, many small ones as before, a mix balances itself. Its CRC-32 is put together from the pieces
+	(crc32_combine). Not with -verify -checksum -paranoid (the hash of the whole file is read from the start to the
+	end) nor -quick. In the bars the pieces of a big file are a lighter grey than the files
+*/
+#ifndef ZPAQ_TPEZZO
+#define ZPAQ_TPEZZO ((int64_t)256 << 20)
+#endif
+/// colors of the map: 1 green, 2 yellow, 3 red, 4 cyan, 5 grey, 6 blue, 7 magenta, else the normal one (65.14i: here, out of the ANCIENT block of f: franzbarre wants it in every build)
+static void usb_colore(int i_quale)
+{
+	switch (i_quale)
+	{
+	case 1:
+		color_green();
+		break;
+	case 2:
+		color_yellow();
+		break;
+	case 3:
+		color_red();
+		break;
+	case 4:
+		color_cyan();
+		break;
+	case 5: /// grey: still to do
+		if (flagnocolor)
+			break;
+#ifdef _WIN32
+		color_something(8);
+#else
+		printf("\x1b[90m");
+#endif
+		break;
+	case 6:
+		color_blue();
+		break;
+	case 7:
+		color_magenta();
+		break;
+	default:
+		color_restore();
+	}
+}
+struct tlavoro /// a file (or a piece of a big one) to compare, for a thread
+{
+	size_t			indice;		/// in the filelist of testverify
+	DTMap::iterator p;			/// in the archive
+	string			file;		/// on disk
+	string			tipohash;	/// stored in the archive
+	string			hash;
+	string			crc32;
+	int64_t			dimensione; /// bytes to read
+	int				grosso;		/// 65.14g: -1 a whole file, else the big file (in grossi) this is a piece of
+	unsigned		primo;		/// the piece: the fragments ptr[primo..ultimo), from inizio
+	unsigned		ultimo;
+	int64_t			inizio;
+};
+struct tpezzo /// 65.14g: what a thread found in a piece
+{
+	bool	 buono;
+	uint32_t crc32;
+	tpezzo() : buono(false), crc32(0)
+	{
+	}
+};
+struct tgrosso /// 65.14g: a big file, its pieces in order
+{
+	size_t		   indice; /// in the filelist of testverify
+	vector<size_t> pezzi;  /// in lavori
+	volatile bool  rotto;  /// a piece is not the same (for the dashboard: the verdict is put together at the end)
+	tgrosso() : indice(0), rotto(false)
+	{
+	}
+};
+struct tverifica /// a thread
+{
+	Jidac			   *jidac;
+	vector<tlavoro>	   *lavori;
+	vector<tconfronto> *esiti;	/// by index of the filelist
+	vector<tpezzo>	   *pezzi;	/// by index of lavori
+	vector<tgrosso>	   *grossi;
+	vector<size_t>		miei;	/// in lavori
+	int64_t				totale;
+	volatile int64_t	fatti;
+	volatile int		parti;
+	volatile int		errori; /// the bar red
+	volatile int		diversi; /// whole files not the same
+	volatile bool		finito;
+	tverifica() : jidac(NULL), lavori(NULL), esiti(NULL), pezzi(NULL), grossi(NULL), totale(0), fatti(0), parti(0), errori(0), diversi(0), finito(false)
+	{
+	}
+};
+/// the biggest first (the same size: in order)
+struct tlavoro_ordine
+{
+	const vector<tlavoro> *l;
+	bool				   operator()(size_t a, size_t b) const
+	{
+		if ((*l)[a].dimensione != (*l)[b].dimensione)
+			return (*l)[a].dimensione > (*l)[b].dimensione;
+		return a < b;
+	}
+};
+/// the same file? As the loop of testverify will say: equal(), then the stored hash or CRC-32
+static bool tverifica_buono(const tlavoro &i_l, const tconfronto &i_e)
+{
+	if (!i_e.uguale)
+		return false;
+	if (flagquick)
+		return true;
+	if (i_e.hash != "")
+		return i_e.hash == i_l.hash;
+	if (i_l.crc32 != "")
+		return crchex2int(i_l.crc32.c_str()) == i_e.crc32;
+	return true;
+}
+void *tverifica_thread(void *i_arg)
+{
+	tverifica *t= (tverifica *)i_arg;
+	for (size_t k= 0; k < t->miei.size(); k++)
+	{
+		const size_t   n	= t->miei[k];
+		const tlavoro &l	= (*t->lavori)[n];
+		const int64_t  prima= t->fatti;
+		if (l.grosso < 0)
+		{
+			tconfronto &e= (*t->esiti)[l.indice];
+			e.uguale	 = t->jidac->equal(l.p, l.file.c_str(), e.crc32, l.tipohash, l.hash, e.hash, (int64_t *)&t->fatti); /// it counts while it reads
+			e.fatto		 = true;
+			if (!tverifica_buono(l, e))
+			{
+				t->errori= t->errori + 1; /// (not ++: volatile, deprecated in C++20)
+				t->diversi= t->diversi + 1;
+			}
+		}
+		else
+		{
+			tpezzo &e= (*t->pezzi)[n];
+			e.buono	 = t->jidac->equalpezzo(l.p, l.file.c_str(), l.primo, l.ultimo, l.inizio, l.dimensione, e.crc32, (int64_t *)&t->fatti);
+			if (!e.buono)
+			{
+				t->errori= t->errori + 1; /// (not ++: volatile, deprecated in C++20)
+				(*t->grossi)[l.grosso].rotto= true;
+			}
+		}
+		t->fatti= prima + l.dimensione; /// a file that differs stops early: its part of the bar is done anyway
+		t->parti= t->parti + 1;
+	}
+	t->finito= true;
+	return NULL;
+}
+/// 65.14g: a piece of a big file: its fragments ptr[i_primo..i_ultimo), from i_inizio, against the SHA-1 of the
+/// archive; the CRC-32 of these bytes. The size of the file and its fragments were checked before (testverify_grosso)
+bool Jidac::equalpezzo(DTMap::const_iterator p, const char *filename, unsigned i_primo, unsigned i_ultimo, int64_t i_inizio, int64_t i_lunghezza, uint32_t &o_crc32, int64_t *o_fatti)
+{
+	o_crc32= 0;
+	FP in  = myfopen(filename, RB);
+	if ((in == NULL) || (in == FPNULL))
+		return false;
+	fseeko(in, i_inizio, SEEK_SET);
+	const int64_t BLOCCO= 1048576;
+	vector<char>  buf((size_t)((i_lunghezza < 1) ? 1 : ((i_lunghezza < BLOCCO) ? i_lunghezza : BLOCCO)));
+	libzpaq::SHA1 sha1;
+	int64_t		  restanti= i_lunghezza; /// bytes of the piece not read yet
+	int64_t		  inbuf	  = 0;
+	int64_t		  dove	  = 0;
+	for (unsigned i= i_primo; i < i_ultimo; ++i)
+	{
+		const unsigned f= p->second.ptr[i];
+		for (int64_t j= 0; j < ht[f].usize;)
+		{
+			if (dove == inbuf) /// the next block, never past the piece
+			{
+				int64_t chiesti= (int64_t)buf.size();
+				if (chiesti > restanti)
+					chiesti= restanti;
+				const int64_t r= (chiesti > 0) ? (int64_t)fread(&buf[0], 1, (size_t)chiesti, in) : 0;
+				if (r <= 0)
+				{
+					myfclose(&in);
+					return false;
+				}
+				o_crc32= crc32_16bytes(&buf[0], (size_t)r, o_crc32);
+				restanti-= r;
+				if (o_fatti != NULL)
+					(*o_fatti)+= r;
+				inbuf= r;
+				dove = 0;
+			}
+			int64_t n= ht[f].usize - j;
+			if (n > inbuf - dove)
+				n= inbuf - dove;
+			sha1.write(&buf[(size_t)dove], n);
+			dove+= n;
+			j+= n;
+		}
+		if (memcmp(sha1.result(), ht[f].sha1, 20) != 0)
+		{
+			myfclose(&in);
+			return false;
+		}
+	}
+	myfclose(&in);
+	return (dove == inbuf) && (restanti == 0);
+}
+/// 65.14g: a big file before its pieces, what equal() checks before reading: a regular file (*nix), there, its size,
+/// its fragments good and as long as the file. 1 = in pieces, 0 = not the same (equal() would say false), -1 = not in
+/// pieces (equal() does it whole)
+int Jidac::testverify_grosso(DTMap::const_iterator p, const string &i_file)
+{
+	if (p->second.date == 0)
+		return -1;
+#ifdef unix
+	struct stat sb;
+	if ((lstat(i_file.c_str(), &sb) != 0) || (!S_ISREG(sb.st_mode)))
+		return 0;
+#endif
+	FP in= myfopen(i_file.c_str(), RB);
+	if ((in == NULL) || (in == FPNULL))
+		return 0;
+	fseeko(in, 0, SEEK_END);
+	const bool stessa= (ftello(in) == p->second.size);
+	myfclose(&in);
+	if (!stessa)
+		return 0;
+	int64_t somma= 0;
+	for (unsigned i= 0; i < p->second.ptr.size(); ++i)
+	{
+		const unsigned f= p->second.ptr[i];
+		if ((f < 1) || (f >= ht.size()) || (ht[f].usize < 0))
+			return 0;
+		somma+= ht[f].usize;
+	}
+	return (somma == p->second.size) ? 1 : 0;
+}
+
+class franzbarre
+{
+  public:
+	franzbarre() : m_live(false), m_utf8(false), m_righe(0), m_altezza(0), m_etichetta(0), m_barra(0)
+	{
+#ifdef _WIN32
+		m_origine= 0;
+#else
+		m_attuale= 0;
+#endif
+	}
+	/// i_tipi: for each thread, its work in order (bytes, 1 = a piece of a big file, 0 = a file)
+	void inizia(const string &i_titolo, const vector<int64_t> &i_totali, const vector<vector<std::pair<int64_t, int> > > &i_tipi);
+	void aggiorna(const vector<int64_t> &i_fatti, const vector<int> &i_errori, const string &i_info);
+	void finale(const vector<int64_t> &i_fatti, const vector<int> &i_errori, const string &i_info);
+	bool live() const { return m_live; }
+
+  private:
+	bool			m_live;
+	bool			m_utf8;
+	int				m_righe;
+	int				m_altezza;	 /// the title, the info line, the bars
+	int				m_etichetta; /// columns of "T01-04 "
+	int				m_barra;	 /// columns of the longest bar
+	vector<int>		m_primo;	 /// the threads of a row
+	vector<int>		m_ultimo;
+	vector<int64_t> m_totale; /// bytes of a row
+	vector<int>		m_lunga;  /// its bar
+	vector<string>	m_tipo;	  /// what every cell of its bar is (1 a piece of a big file, 0 a file)
+	vector<int>		m_pieni;  /// what is drawn (-1: nothing yet)
+	vector<int>		m_colore;
+	string			m_titolo;
+#ifdef _WIN32
+	int m_origine; /// first row of the area, in the console buffer
+#else
+	int m_attuale; /// *nix: row of the cursor, inside the area
+#endif
+	void vai(int i_riga, int i_colonna);
+	void scrivilinea(int i_riga, const string &i_testo, int i_colore);
+	void riga(int i_r, int64_t i_fatti, int i_errori);
+	void grigio(int i_tipo);
+};
+/// as franzdash: relative moves on *nix (the console scrolls only when the area is printed), the rows of the
+/// buffer on Windows
+void franzbarre::vai(int i_riga, int i_colonna)
+{
+#ifdef _WIN32
+	fflush(stdout);
+	gotoxy(i_colonna, m_origine + i_riga);
+#else
+	if (i_riga < m_attuale)
+		printf("\x1b[%dA", m_attuale - i_riga);
+	else if (i_riga > m_attuale)
+		printf("\x1b[%dB", i_riga - m_attuale);
+	printf("\x1b[%dG", i_colonna + 1);
+	m_attuale= i_riga;
+#endif
+}
+void franzbarre::scrivilinea(int i_riga, const string &i_testo, int i_colore)
+{
+	int larga= terminalwidth() - 1;
+	if (larga < 39)
+		larga= 39;
+	string testo= i_testo;
+	if ((int)testo.size() > larga)
+		testo= testo.substr(0, larga);
+	vai(i_riga, 0);
+	usb_colore(i_colore);
+	printf("%s", testo.c_str());
+#ifdef _WIN32
+	fflush(stdout); /// the color is set on the console, the text may be still in the buffer
+#endif
+	usb_colore(0);
+	for (int i= (int)testo.size(); i < larga; i++) /// the rest of the old line
+		printf(" ");
+	fflush(stdout);
+}
+/// what is still to read: dark grey a file, light grey a piece of a big one
+void franzbarre::grigio(int i_tipo)
+{
+	if (i_tipo == 0)
+	{
+		usb_colore(5);
+		return;
+	}
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+	color_something(7);
+#else
+	printf("\x1b[37m");
+#endif
+}
+void franzbarre::inizia(const string &i_titolo, const vector<int64_t> &i_totali, const vector<vector<std::pair<int64_t, int> > > &i_tipi)
+{
+	m_titolo= i_titolo;
+	m_live	= (!isAnyOutputRedirected()) && (!flagnoeta) && (!flagsilent) && (!flagpakka) && (!flagterse) && (!flagstdout);
+#ifdef _WIN32
+	m_utf8= (!flagnocolor) && (!flagnoconsole);
+#else
+	m_utf8= !flagnocolor;
+#endif
+	const int quanti= (int)i_totali.size();
+	int		  altezza= terminalheight();
+	if (altezza < 10)
+		altezza= 10;
+	int posto= altezza - 4; /// the title, the info line, a free row, the cursor
+	if (posto < 1)
+		posto= 1;
+	const int gruppo= (quanti + posto - 1) / posto; /// threads in a row
+	m_righe			= (quanti + gruppo - 1) / gruppo;
+	m_primo.clear();
+	m_ultimo.clear();
+	m_totale.clear();
+	int64_t massimo= 0;
+	for (int r= 0; r < m_righe; r++)
+	{
+		const int primo	= r * gruppo;
+		const int ultimo= (primo + gruppo - 1 < quanti - 1) ? primo + gruppo - 1 : quanti - 1;
+		int64_t	  totale= 0;
+		for (int i= primo; i <= ultimo; i++)
+			totale+= i_totali[i];
+		m_primo.push_back(primo);
+		m_ultimo.push_back(ultimo);
+		m_totale.push_back(totale);
+		if (totale > massimo)
+			massimo= totale;
+	}
+	m_etichetta= (gruppo > 1) ? 8 : 4; /// "T01-04 " "T01 "
+	m_barra	   = terminalwidth() - 1 - m_etichetta - 6;
+	if (m_barra < 10)
+		m_barra= 10;
+	m_lunga.assign(m_righe, 1);
+	m_tipo.assign(m_righe, "");
+	for (int r= 0; r < m_righe; r++)
+	{
+		if (massimo > 0)
+		{
+			m_lunga[r]= (int)((double)m_barra * (double)m_totale[r] / (double)massimo + 0.5);
+			if (m_lunga[r] < 1)
+				m_lunga[r]= 1;
+		}
+		/// every cell: what is in the middle of it, the work of the threads of the row one after the other
+		vector<std::pair<int64_t, int> > lavoro;
+		for (int i= m_primo[r]; i <= m_ultimo[r]; i++)
+			lavoro.insert(lavoro.end(), i_tipi[i].begin(), i_tipi[i].end());
+		size_t	k	 = 0;
+		int64_t fine = lavoro.empty() ? 0 : lavoro[0].first;
+		for (int c= 0; c < m_lunga[r]; c++)
+		{
+			const int64_t dove= (int64_t)(((double)c + 0.5) * (double)m_totale[r] / (double)m_lunga[r]);
+			while ((k + 1 < lavoro.size()) && (dove >= fine))
+			{
+				k++;
+				fine+= lavoro[k].first;
+			}
+			m_tipo[r]+= (lavoro.empty() || (lavoro[k].second == 0)) ? '0' : '1';
+		}
+	}
+	m_pieni.assign(m_righe, -1);
+	m_colore.assign(m_righe, -1);
+	m_altezza= 2 + m_righe;
+	if (!m_live)
+		return;
+	/// the area: printed once (it may scroll the console), then drawn in place
+	fflush(stdout);
+	for (int i= 0; i < m_altezza; i++)
+		printf("\n");
+	fflush(stdout);
+#ifdef _WIN32
+	CONSOLE_SCREEN_BUFFER_INFO info;
+	if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+		m_origine= info.dwCursorPosition.Y - m_altezza;
+	if (m_origine < 0)
+		m_origine= 0;
+#else
+	m_attuale= m_altezza;
+#endif
+	hide_cursor();
+	scrivilinea(0, m_titolo, 4);
+	for (int r= 0; r < m_righe; r++)
+		riga(r, 0, 0);
+	vai(m_altezza, 0);
+	fflush(stdout);
+}
+/// a row: the done part green (red once something differs), the rest grey (lighter: pieces of a big file)
+void franzbarre::riga(int i_r, int64_t i_fatti, int i_errori)
+{
+	int pieni= m_lunga[i_r];
+	if (m_totale[i_r] > 0)
+		pieni= (int)((double)m_lunga[i_r] * (double)i_fatti / (double)m_totale[i_r]);
+	if (pieni < 0)
+		pieni= 0;
+	if (pieni > m_lunga[i_r])
+		pieni= m_lunga[i_r];
+	const int colore= (i_errori > 0) ? 3 : 1;
+	if ((pieni == m_pieni[i_r]) && (colore == m_colore[i_r]))
+		return;
+	char etichetta[32];
+	if (m_primo[i_r] == m_ultimo[i_r])
+		snprintf(etichetta, sizeof(etichetta), "T%02d ", m_primo[i_r] + 1);
+	else
+		snprintf(etichetta, sizeof(etichetta), "T%02d-%02d ", m_primo[i_r] + 1, m_ultimo[i_r] + 1);
+	string fatto;
+	for (int i= 0; i < pieni; i++)
+		fatto+= m_utf8 ? "\xE2\x96\x88" : ((i_errori > 0) ? "X" : "#"); /// U+2588 full block
+	const int percento= (m_totale[i_r] > 0) ? (int)(100.0 * (double)i_fatti / (double)m_totale[i_r]) : 100;
+	vai(2 + i_r, 0);
+	usb_colore(0);
+	printf("%-*s", m_etichetta, etichetta);
+#ifdef _WIN32
+	fflush(stdout);
+#endif
+	usb_colore(colore);
+	printf("%s", fatto.c_str());
+#ifdef _WIN32
+	fflush(stdout);
+#endif
+	/// the rest, a stretch of the same grey at a time
+	for (int i= pieni; i < m_lunga[i_r];)
+	{
+		const char tipo= m_tipo[i_r][i];
+		string	   resto;
+		for (; (i < m_lunga[i_r]) && (m_tipo[i_r][i] == tipo); i++)
+			resto+= m_utf8 ? ((tipo == '1') ? "\xE2\x96\x92" : "\xE2\x96\x91") : ((tipo == '1') ? ":" : "."); /// U+2592 medium, U+2591 light shade
+		grigio(tipo == '1' ? 1 : 0);
+		printf("%s", resto.c_str());
+#ifdef _WIN32
+		fflush(stdout);
+#endif
+	}
+	usb_colore(0);
+	printf(" %3d%%", percento > 100 ? 100 : percento);
+	fflush(stdout);
+	m_pieni[i_r] = pieni;
+	m_colore[i_r]= colore;
+}
+void franzbarre::aggiorna(const vector<int64_t> &i_fatti, const vector<int> &i_errori, const string &i_info)
+{
+	if (!m_live)
+		return;
+	scrivilinea(1, i_info, 0);
+	for (int r= 0; r < m_righe; r++)
+	{
+		int64_t fatti = 0;
+		int		errori= 0;
+		for (int i= m_primo[r]; i <= m_ultimo[r]; i++)
+		{
+			fatti+= i_fatti[i];
+			errori+= i_errori[i];
+		}
+		riga(r, fatti, errori);
+	}
+	vai(m_altezza, 0);
+	fflush(stdout);
+}
+void franzbarre::finale(const vector<int64_t> &i_fatti, const vector<int> &i_errori, const string &i_info)
+{
+	if (!m_live)
+		return;
+	aggiorna(i_fatti, i_errori, i_info);
+	show_cursor();
+}
+
+/// t archive path -ssd: the files of filelist that are an archive one followed by its file on disk compared by
+/// threads (a big one in pieces); what they found in o_esiti (by index of filelist), for the loop of testverify.
+/// Empty: nothing done (fewer than 2 parts, one thread): the loop does all, as ever
+void Jidac::testverify_ssd(vector<DTMap::iterator> &i_filelist, vector<tconfronto> &o_esiti)
+{
+	o_esiti.clear();
+	vector<tlavoro>	   lavori;
+	vector<tgrosso>	   grossi;
+	vector<tconfronto> subito; /// big files that are not the same before reading (size...): (indice, verdict)
+	vector<size_t>	   subitodove;
+	int64_t			   totale= 0;
+	const bool		   apezzi= (!flagverify) && (!flagchecksum) && (!flagparanoid) && (!flagquick); /// the hash of the whole file: no pieces
+	int				   file	 = 0;
+	for (size_t fi= 0; fi + 1 < i_filelist.size(); fi++)
+	{
+		DTMap::iterator p = i_filelist[fi];
+		DTMap::iterator p1= i_filelist[fi + 1];
+		if ((p->second.data != '-') || (p1->second.data != '+') || isdirectory(p->first) || isdirectory(p1->first))
+			continue;
+		file++;
+		tlavoro l;
+		l.indice		  = fi;
+		l.p				  = p;
+		l.file			  = p1->first;
+		l.dimensione	  = (p->second.size > 0) ? p->second.size : 0;
+		l.grosso		  = -1;
+		l.primo			  = 0;
+		l.ultimo		  = 0;
+		l.inizio		  = 0;
+		int64_t		 dummyc= 0;
+		int64_t		 dummya= 0;
+		bool		 dummyo= false;
+		int			 dummyv= 0;
+		franz_posix *dummyp= NULL;
+		bool		 dummyi= false;
+		decode_franz_block(false, p->second.franz_block, l.tipohash, l.hash, l.crc32, dummyc, dummya, dummyo, dummyv, dummyp, dummyi);
+		const int grosso= (apezzi && (l.dimensione > ZPAQ_TPEZZO)) ? testverify_grosso(p, l.file) : -1;
+		if (grosso == 0) /// not the same, and nothing to read: as equal() would say
+		{
+			tconfronto e;
+			e.fatto	= true;
+			e.uguale= false;
+			subito.push_back(e);
+			subitodove.push_back(fi);
+			continue;
+		}
+		if (grosso < 0)
+		{
+			lavori.push_back(l);
+			totale+= l.dimensione;
+			continue;
+		}
+		/// in pieces of about ZPAQ_TPEZZO, on the borders of its fragments
+		tgrosso g;
+		g.indice			  = fi;
+		const int64_t quanti  = (l.dimensione + ZPAQ_TPEZZO - 1) / ZPAQ_TPEZZO;
+		const int64_t obiettivo= (l.dimensione + quanti - 1) / quanti;
+		const size_t  frammenti= p->second.ptr.size();
+		unsigned	  primo	   = 0;
+		int64_t		  inizio   = 0;
+		int64_t		  accumulo = 0;
+		for (unsigned i= 0; i < frammenti; i++)
+		{
+			accumulo+= ht[p->second.ptr[i]].usize;
+			if (((accumulo >= obiettivo) && ((int64_t)g.pezzi.size() < quanti - 1)) || (i + 1 == frammenti))
+			{
+				tlavoro pezzo	= l;
+				pezzo.grosso	= (int)grossi.size();
+				pezzo.primo		= primo;
+				pezzo.ultimo	= i + 1;
+				pezzo.inizio	= inizio;
+				pezzo.dimensione= accumulo;
+				g.pezzi.push_back(lavori.size());
+				lavori.push_back(pezzo);
+				inizio+= accumulo;
+				totale+= accumulo;
+				accumulo= 0;
+				primo	= i + 1;
+			}
+		}
+		grossi.push_back(g);
+	}
+	unsigned int quanti= (howmanythreads > 0) ? (unsigned int)howmanythreads : (unsigned int)numberOfProcessors();
+	if (quanti > lavori.size())
+		quanti= (unsigned int)lavori.size();
+	if (quanti < 2)
+	{
+		if (grossi.empty() && subito.empty())
+			return;
+		quanti= 1; /// (one part, but a big file was already looked at: one thread for it)
+		if (lavori.empty())
+			quanti= 0;
+	}
+	o_esiti.resize(i_filelist.size());
+	for (size_t i= 0; i < subito.size(); i++)
+		o_esiti[subitodove[i]]= subito[i];
+	vector<tpezzo> pezzi(lavori.size());
+	if (quanti == 0)
+		return;
+	/// to the threads: the biggest first, each to the one with less to read
+	vector<size_t> ordine(lavori.size());
+	for (size_t i= 0; i < ordine.size(); i++)
+		ordine[i]= i;
+	tlavoro_ordine criterio;
+	criterio.l= &lavori;
+	std::sort(ordine.begin(), ordine.end(), criterio);
+	tverifica *t= new tverifica[quanti];
+	for (unsigned int i= 0; i < quanti; i++)
+	{
+		t[i].jidac = this;
+		t[i].lavori= &lavori;
+		t[i].esiti = &o_esiti;
+		t[i].pezzi = &pezzi;
+		t[i].grossi= &grossi;
+	}
+	for (size_t k= 0; k < ordine.size(); k++)
+	{
+		unsigned int meno= 0;
+		for (unsigned int i= 1; i < quanti; i++)
+			if (t[i].totale < t[meno].totale)
+				meno= i;
+		t[meno].miei.push_back(ordine[k]);
+		t[meno].totale+= lavori[ordine[k]].dimensione;
+	}
+	vector<int64_t>							   totali(quanti);
+	vector<vector<std::pair<int64_t, int> > > tipi(quanti);
+	for (unsigned int i= 0; i < quanti; i++)
+	{
+		totali[i]= t[i].totale;
+		for (size_t k= 0; k < t[i].miei.size(); k++)
+			tipi[i].push_back(std::make_pair(lavori[t[i].miei[k]].dimensione, (lavori[t[i].miei[k]].grosso < 0) ? 0 : 1));
+	}
+	char titolo[300];
+	if (grossi.empty())
+		snprintf(titolo, sizeof(titolo), "Comparing %s files (%s) with %u threads (-ssd)", migliaia((int64_t)file), tohuman(totale), quanti);
+	else
+		snprintf(titolo, sizeof(titolo), "Comparing %s files (%s) with %u threads (-ssd), %s big in %s pieces (lighter)", migliaia((int64_t)file), tohuman(totale), quanti, migliaia2((int64_t)grossi.size()), migliaia3((int64_t)(lavori.size() - (file - grossi.size() - subito.size()))));
+	franzbarre barre;
+	barre.inizia(titolo, totali, tipi);
+
+	pthread_t	  *threads= new pthread_t[quanti];
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	unsigned int partiti= 0;
+	for (unsigned int i= 0; i < quanti; i++)
+		if ((quanti > 1) && (pthread_create(&threads[partiti], &attr, tverifica_thread, (void *)&t[i]) == 0))
+			partiti++;
+		else
+		{
+			if (quanti > 1)
+				myprintf("03644! cannot start a thread: the rest here, one at a time\n");
+			tverifica_thread((void *)&t[i]);
+		}
+	pthread_attr_destroy(&attr);
+
+	const int64_t	inizio= mtime();
+	int64_t			ultimariga= 0;
+	vector<int64_t> fatti(quanti);
+	vector<int>		errori(quanti);
+	string			info;
+	for (bool tutti= false; !tutti;)
+	{
+		tutti		   = true;
+		int64_t letti  = 0;
+		int		parti  = 0;
+		int		diversi= (int)subito.size();
+		for (unsigned int i= 0; i < quanti; i++)
+		{
+			fatti[i] = t[i].fatti;
+			errori[i]= t[i].errori;
+			letti+= fatti[i];
+			parti+= t[i].parti;
+			diversi+= t[i].diversi;
+			if (!t[i].finito)
+				tutti= false;
+		}
+		for (size_t g= 0; g < grossi.size(); g++)
+			if (grossi[g].rotto)
+				diversi++;
+		const double secondi= (mtime() - inizio + 1) / 1000.0;
+		const double veloce = letti / secondi;
+		const int	 eta	= (veloce > 0) ? (int)((totale - letti) / veloce) : 0;
+		char		 riga[300];
+		snprintf(riga, sizeof(riga), "%3d%% %10s/%10s @ %10s/s ETA %02d:%02d:%02d  parts %s/%s  different %d",
+				 (totale > 0) ? (int)(100.0 * (double)letti / (double)totale) : 100, tohuman(letti), tohuman2(totale), tohuman3((int64_t)veloce),
+				 eta / 3600, (eta / 60) % 60, eta % 60, migliaia(parti), migliaia2((int64_t)lavori.size()), diversi);
+		info= riga;
+		if (barre.live())
+			barre.aggiorna(fatti, errori, info);
+		else if ((!flagnoeta) && ((mtime() - ultimariga > 1000) || tutti))
+		{
+			myprintf("03645: %s\r", info.c_str());
+			ultimariga= mtime();
+		}
+		if (!tutti)
+		{
+#ifdef _WIN32
+			Sleep(200);
+#else
+			usleep(200000);
+#endif
+		}
+	}
+	for (unsigned int i= 0; i < partiti; i++)
+	{
+		void *stato;
+		pthread_join(threads[i], &stato);
+	}
+	delete[] threads;
+	barre.finale(fatti, errori, info);
+	if ((!barre.live()) && (!flagnoeta))
+		myprintf("\n");
+	/// a big file: the same if every piece is, its CRC-32 put together in order
+	for (size_t g= 0; g < grossi.size(); g++)
+	{
+		tconfronto	   e;
+		e.fatto		 = true;
+		e.uguale	 = true;
+		bool primoesito= true;
+		for (size_t k= 0; k < grossi[g].pezzi.size(); k++)
+		{
+			const size_t n= grossi[g].pezzi[k];
+			if (!pezzi[n].buono)
+				e.uguale= false;
+			if (primoesito)
+				e.crc32= pezzi[n].crc32;
+			else
+				e.crc32= crc32_combine(e.crc32, pezzi[n].crc32, (size_t)lavori[n].dimensione);
+			primoesito= false;
+		}
+		o_esiti[grossi[g].indice]= e;
+	}
+	g_worked= 0;
+	for (unsigned int i= 0; i < quanti; i++)
+		g_worked+= t[i].fatti;
+	delete[] t;
+}
+/// 65.14i: w -test -verify (see twfile), the work of a thread: the RAM or the disk of a file
+struct twlavoro
+{
+	twfile *f;
+	bool    disco;
+	int64_t dimensione;
+};
+struct twthread
+{
+	vector<twlavoro> *lavori;
+	vector<size_t>    miei; /// in lavori
+	int64_t           totale;
+	volatile int64_t  fatti;
+	volatile int      parti;
+	volatile int      errori; /// disks not the same (the bar red)
+	volatile bool     finito;
+	twthread() : lavori(NULL), totale(0), fatti(0), parti(0), errori(0), finito(false)
+	{
+	}
+};
+/// the biggest first (the same size: in order)
+struct twlavoro_ordine
+{
+	const vector<twlavoro> *l;
+	bool                    operator()(size_t a, size_t b) const
+	{
+		if ((*l)[a].dimensione != (*l)[b].dimensione)
+			return (*l)[a].dimensione > (*l)[b].dimensione;
+		return a < b;
+	}
+};
+void *wconfronta_thread(void *i_arg)
+{
+	twthread *t= (twthread *)i_arg;
+	for (size_t k= 0; k < t->miei.size(); k++)
+	{
+		const twlavoro &l    = (*t->lavori)[t->miei[k]];
+		const int64_t   prima= t->fatti;
+		if (l.disco)
+		{
+			wconfronta_disco(*l.f, &t->fatti);
+			if (wconfronta_discodiverso(*l.f))
+				t->errori= t->errori + 1; /// (not ++: volatile, deprecated in C++20)
+		}
+		else
+			wconfronta_ram(*l.f, &t->fatti);
+		t->fatti= prima + l.dimensione; /// a disk that differs stops early: its part of the bar is done anyway
+		t->parti= t->parti + 1;
+	}
+	t->finito= true;
+	return NULL;
+}
+/// the files of a chunk of w (or a window of a big one): the RAM, and the disk with -verify, by threads, with the
+/// bars of t -ssd. The verdicts: wconfronta_esito
+static void wconfronta(vector<twfile *> &io_file, unsigned int i_thread)
+{
+	vector<twlavoro> lavori;
+	int64_t          totale= 0;
+	int64_t          inram = 0;
+	bool             disco = false;
+	for (size_t i= 0; i < io_file.size(); i++)
+	{
+		twlavoro l;
+		l.f         = io_file[i];
+		l.disco     = false;
+		l.dimensione= io_file[i]->lunghezza;
+		lavori.push_back(l);
+		totale+= l.dimensione;
+		inram+= l.dimensione;
+		if (io_file[i]->disco)
+		{
+			l.disco= true;
+			lavori.push_back(l);
+			totale+= l.dimensione;
+			disco= true;
+		}
+	}
+	if (lavori.empty())
+		return;
+	unsigned int quanti= (i_thread > 0) ? i_thread : 1;
+	if (quanti > lavori.size())
+		quanti= (unsigned int)lavori.size();
+	/// to the threads: the biggest first, each to the one with less to do
+	vector<size_t> ordine(lavori.size());
+	for (size_t i= 0; i < ordine.size(); i++)
+		ordine[i]= i;
+	twlavoro_ordine criterio;
+	criterio.l= &lavori;
+	std::sort(ordine.begin(), ordine.end(), criterio);
+	twthread *t= new twthread[quanti];
+	for (unsigned int i= 0; i < quanti; i++)
+		t[i].lavori= &lavori;
+	for (size_t k= 0; k < ordine.size(); k++)
+	{
+		unsigned int meno= 0;
+		for (unsigned int i= 1; i < quanti; i++)
+			if (t[i].totale < t[meno].totale)
+				meno= i;
+		t[meno].miei.push_back(ordine[k]);
+		t[meno].totale+= lavori[ordine[k]].dimensione;
+	}
+	vector<int64_t>                           totali(quanti);
+	vector<vector<std::pair<int64_t, int> > > tipi(quanti);
+	for (unsigned int i= 0; i < quanti; i++)
+	{
+		totali[i]= t[i].totale;
+		for (size_t k= 0; k < t[i].miei.size(); k++)
+			tipi[i].push_back(std::make_pair(lavori[t[i].miei[k]].dimensione, lavori[t[i].miei[k]].disco ? 0 : 1));
+	}
+	char titolo[300];
+	if (disco)
+		snprintf(titolo, sizeof(titolo), "Verifying %s files (%s) against the filesystem with %u threads (lighter: the RAM)", migliaia((int64_t)io_file.size()), tohuman(inram), quanti);
+	else
+		snprintf(titolo, sizeof(titolo), "Checking %s files (%s) in RAM with %u threads", migliaia((int64_t)io_file.size()), tohuman(inram), quanti);
+	franzbarre barre;
+	barre.inizia(titolo, totali, tipi);
+
+	/// always threads (one too): the bars move while they work
+	pthread_t     *threads= new pthread_t[quanti];
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	unsigned int partiti= 0;
+	for (unsigned int i= 0; i < quanti; i++)
+		if (pthread_create(&threads[partiti], &attr, wconfronta_thread, (void *)&t[i]) == 0)
+			partiti++;
+		else
+		{
+			myprintf("03647! cannot start a thread: the rest here, one at a time\n");
+			wconfronta_thread((void *)&t[i]);
+		}
+	pthread_attr_destroy(&attr);
+
+	const int64_t   inizio    = mtime();
+	int64_t         ultimariga= 0;
+	vector<int64_t> fatti(quanti);
+	vector<int>     errori(quanti);
+	string          info;
+	for (bool tutti= false; !tutti;)
+	{
+		tutti          = true;
+		int64_t letti  = 0;
+		int     parti  = 0;
+		int     diversi= 0;
+		for (unsigned int i= 0; i < quanti; i++)
+		{
+			fatti[i] = t[i].fatti;
+			errori[i]= t[i].errori;
+			letti+= fatti[i];
+			parti+= t[i].parti;
+			diversi+= t[i].errori;
+			if (!t[i].finito)
+				tutti= false;
+		}
+		const double secondi= (mtime() - inizio + 1) / 1000.0;
+		const double veloce = letti / secondi;
+		const int    eta    = (veloce > 0) ? (int)((totale - letti) / veloce) : 0;
+		char         riga[300];
+		snprintf(riga, sizeof(riga), "%3d%% %10s/%10s @ %10s/s ETA %02d:%02d:%02d  parts %s/%s  different %d",
+				 (totale > 0) ? (int)(100.0 * (double)letti / (double)totale) : 100, tohuman(letti), tohuman2(totale), tohuman3((int64_t)veloce),
+				 eta / 3600, (eta / 60) % 60, eta % 60, migliaia(parti), migliaia2((int64_t)lavori.size()), diversi);
+		info= riga;
+		if (barre.live())
+			barre.aggiorna(fatti, errori, info);
+		else if ((!flagnoeta) && ((mtime() - ultimariga > 1000) || tutti))
+		{
+			myprintf("03646: %s\r", info.c_str());
+			ultimariga= mtime();
+		}
+		if (!tutti)
+		{
+#ifdef _WIN32
+			Sleep(200);
+#else
+			usleep(200000);
+#endif
+		}
+	}
+	for (unsigned int i= 0; i < partiti; i++)
+	{
+		void *stato;
+		pthread_join(threads[i], &stato);
+	}
+	delete[] threads;
+	barre.finale(fatti, errori, info);
+	if ((!barre.live()) && (!flagnoeta))
+		myprintf("\n");
+	delete[] t;
+}
 int Jidac::testverify()
 {
 	if (files.size() == 0)
@@ -201690,8 +207536,11 @@ int Jidac::testverify()
 			filelist.push_back(a);
 		}
 	int64_t	 usize	= 0;
-	unsigned matches= 0, mismatches= 0, internal= 0, externalfile= 0, hashmatches= 0, folderscount= 0, filescount= 0,
-			 externalfolder= 0;
+	unsigned matches= 0, mismatches= 0, internal= 0, externalfile= 0, hashmatches= 0, filescount= 0, externalfolder= 0;
+	/// 65.14n: the "same" line says the files and folders that are the same. filescount (for "same file count")
+	/// counts the rows looked at: a file different twice (its row of the archive and its row of the disk), so it was
+	/// "843 = same (files 825 and folders 22)" with 821 files the same
+	unsigned samefiles= 0, samefolders= 0;
 	uint32_t	   crc32fromfile;
 	int64_t		   hashchecked= 0;
 	int64_t		   tobetested = 0;
@@ -201701,13 +207550,15 @@ int Jidac::testverify()
 	unsigned int   ultimapercentuale= 200;
 	unsigned int   percentuale;
 	int64_t		   starttime= mtime();
+	/// 65.14f: -ssd, the files compared by many threads at once (see testverify_ssd); this loop says how it went, as ever
+	vector<tconfronto> parallelo;
+	if (flagssd)
+		testverify_ssd(filelist, parallelo);
 	for (unsigned fi= 0; fi < filelist.size(); ++fi)
 	{
 		DTMap::iterator p= filelist[fi];
 
-		if (isdirectory(p->first))
-			folderscount++;
-		else
+		if (!isdirectory(p->first))
 			filescount++;
 
 		if (menoenne)
@@ -201764,7 +207615,16 @@ int Jidac::testverify()
 			if (flagdebug2)
 				myprintf("03348:  |%s| |%s| %s\n", myhashtype.c_str(), myhash.c_str(), p->first.c_str());
 
-			if (equal(p, p1->first.c_str(), crc32fromfile, myhashtype, myhash, hashfromfile)) // crc32 of second parameters
+			bool uguale;
+			if ((fi < parallelo.size()) && parallelo[fi].fatto) /// 65.14f: a thread did it
+			{
+				uguale		 = parallelo[fi].uguale;
+				crc32fromfile= parallelo[fi].crc32;
+				hashfromfile = parallelo[fi].hash;
+			}
+			else
+				uguale= equal(p, p1->first.c_str(), crc32fromfile, myhashtype, myhash, hashfromfile);
+			if (uguale) // crc32 of second parameters
 			{
 				if (flagquick)
 				{
@@ -201846,6 +207706,10 @@ int Jidac::testverify()
 		if (p->second.data == '=')
 		{
 			++matches;
+			if (isdirectory(p->first))
+				samefolders++;
+			else
+				samefiles++;
 		}
 		if (p->second.data == '#')
 			++mismatches;
@@ -201908,7 +207772,7 @@ int Jidac::testverify()
 				myprintf("%s", risultati[i].c_str());
 		}
 	if (matches)
-		myprintf("%08d =  same (files %s and folders %s)\n", matches, migliaia2(filescount), migliaia(folderscount));
+		myprintf("%08d =  same (files %s and folders %s)\n", matches, migliaia2(samefiles), migliaia(samefolders));
 	if (hashmatches)
 	{
 		if ((hashchecked == tobetested) && (hashmatches == filescount))
@@ -223127,43 +228991,6 @@ static int64_t usb_bitdiversi(const unsigned char *i_a, const unsigned char *i_b
 	return diversi;
 }
 
-/// colors of the map: 1 green, 2 yellow, 3 red, 4 cyan, 5 grey, 6 blue, 7 magenta, else the normal one
-static void usb_colore(int i_quale)
-{
-	switch (i_quale)
-	{
-	case 1:
-		color_green();
-		break;
-	case 2:
-		color_yellow();
-		break;
-	case 3:
-		color_red();
-		break;
-	case 4:
-		color_cyan();
-		break;
-	case 5: /// grey: still to do
-		if (flagnocolor)
-			break;
-#ifdef _WIN32
-		color_something(8);
-#else
-		printf("\x1b[90m");
-#endif
-		break;
-	case 6:
-		color_blue();
-		break;
-	case 7:
-		color_magenta();
-		break;
-	default:
-		color_restore();
-	}
-}
-
 /*
 	franzdash: a dashboard in the console (f -test, the images with -dashboard).
 	A title, two info lines, a map of cells (as many as the console can show,
@@ -242096,6 +247923,12 @@ int Jidac::ac_prepara()
 		myprintf("66004! ac: %c: is made of %u pieces (a dynamic disk, a mirror, a storage space): not for ac, for now. a %c: -image takes the volume alone\n", g_ac.lettera, (unsigned)pezzi, g_ac.lettera);
 		return 2;
 	}
+	if ((int)ndisco < 0) /// 65.14j: (a RAM disk, as the X: of a Windows PE: on no physical disk)
+	{
+		SetErrorMode(vecchio);
+		myprintf("66026! ac: %c: is on no physical disk (a RAM disk? A Windows PE runs from X:)\n", g_ac.lettera);
+		return 2;
+	}
 	g_ac.disco= (int)ndisco;
 	char nomedisco[64];
 	snprintf(nomedisco, sizeof(nomedisco), "\\\\.\\PhysicalDrive%d", g_ac.disco);
@@ -242351,7 +248184,7 @@ int Jidac::ac_prepara()
 			iwindows		= (int)i;
 		}
 	{
-		const string device= flagacfake ? string("") : ac_registro(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", L"SystemPartition"); /// (-acfake: not the disk of Windows, see the parser)
+		const string device= (flagacfake || g_acpe) ? string("") : ac_registro(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", L"SystemPartition"); /// (-acfake: not the disk of Windows, see the parser; 65.14j: a Windows PE, its registry is about itself)
 		DWORD		 d= 0, n= 0;
 		uint64_t	 da= 0, lungo= 0;
 		if ((device != "") && ac_dove(L"\\\\?\\GLOBALROOT" + utow(device.c_str()), d, da, lungo, n))
@@ -242889,6 +248722,12 @@ string Jidac::ac_metafile()
 		if (GetUserNameW(utente, &n))
 			ac_riga(t, "user=%s", ac_pulito(wtou(utente)).c_str());
 	}
+	if (g_acpe) /// 65.14j: the registry here is the one of the PE, not of the Windows saved
+	{
+		ac_riga(t, "windows=not running, on %c: (saved from Windows PE)", g_ac.lettera);
+		ac_riga(t, "winpe=yes");
+	}
+	else
 	{
 		const wchar_t *chiave= L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
 		string prodotto= ac_pulito(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"ProductName"));
@@ -244787,8 +250626,16 @@ int Jidac::sceglimodoimage()
 	SetErrorMode(vecchio);
 	const bool ntfs= (fs == "NTFS");
 	const bool fat = (fs == "FAT") || (fs == "FAT32") || (fs == "exFAT");
+	/// 65.14j: ac from a Windows PE: the Windows saved is not running, and a PE has no shadow copies
+	if (g_acpe && flagvss)
+	{
+		color_yellow();
+		myprintf("73911$ Windows PE: no shadow copies here (and the Windows saved is not running): -vss ignored\n");
+		color_restore();
+		flagvss= false;
+	}
 	/// 65.9j: a shadow copy by itself only for C:; elsewhere it is asked (-vss)
-	const bool vssdasolo= (toupper((unsigned char)lettera) == 'C');
+	const bool vssdasolo= (toupper((unsigned char)lettera) == 'C') && (!g_acpe);
 	bool	   vsssaltato= false; /// it would have been tried, before 65.9j: said in the line of the image
 	if ((!flagntfs) && (!flagraw))
 	{
@@ -244830,7 +250677,7 @@ int Jidac::sceglimodoimage()
 
 	const string mostra= (fs == "") ? "not formatted, or unknown to Windows" : fs;
 	color_cyan();
-	const char *comevss= (imagevss > 0) ? ", with VSS" : (vsssaltato ? ", without VSS (by itself for C: only; -vss to have it)" : "");
+	const char *comevss= (imagevss > 0) ? ", with VSS" : (g_acpe ? ", from Windows PE (not running: no shadow copy needed)" : (vsssaltato ? ", without VSS (by itself for C: only; -vss to have it)" : ""));
 	if (flagntfs)
 		myprintf("73904: Image of %c: (%s): the used clusters%s\n", lettera, mostra.c_str(), comevss);
 	else

@@ -128250,8 +128250,7 @@ string g_realtemp()
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
-#ifdef ZPAQFULL /// NOSFTPSTART
-
+/// 65.15z: not only ZPAQFULL: -lowram (pocaram) writes its cuts here, the open version too
 string g_gettempdirectory()
 {
 #if defined(_WIN32) || defined(_WIN64)
@@ -128304,8 +128303,6 @@ string g_gettempdirectory()
 	return randomfolder;
 #endif // corresponds to #if (#if defined(_WIN32) || defined(_WIN64))
 }
-
-#endif /// NOSFTPEND
 
 
 void remove_dir_if_empty(string i_path)

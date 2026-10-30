@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.15z"
-#define ZPAQ_DATE "(2026-10-25)"
+#define ZPAQ_VERSION "65.16i"
+#define ZPAQ_DATE "(2026-10-30)"
 
 
 /*
@@ -254,9 +254,9 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security-open-software
 #endif
 
 /// 65.15z11: without ANCIENT zpaqfranz is C++11. gcc 4.8 and 5 (Oracle Linux, CentOS, RHEL 7: 4.8.5) build C++98 by
-/// default: 67 errors, and the way out taken was -DANCIENT (an issue: there -tar does nothing). Say what to do
+/// default: 67 errors, and the way out taken was -DANCIENT (an issue: there -tar did nothing, up to 65.16g). Say what to do
 #if !defined(ANCIENT) && defined(__cplusplus) && (__cplusplus < 201103L) && !defined(_MSC_VER)
-#error "zpaqfranz needs C++11: add -std=c++11 (gcc 4.8 and 5: Oracle Linux, CentOS, RHEL 7). -DANCIENT is for compilers with no C++11, and has less (-tar, ...)"
+#error "zpaqfranz needs C++11: add -std=c++11 (gcc 4.8 and 5: Oracle Linux, CentOS, RHEL 7). -DANCIENT is for compilers with no C++11, and has less (-m8, franzen, ...)"
 #endif
 
 /// no -m8 on the old compilers (gcc 3.4 of ESXi): no push_macro, no
@@ -2087,7 +2087,9 @@ Two things are needed: -std=c++11 (gcc 4.8.5 is C++98 by default) and -ldl
 (before glibc 2.34 dlopen is in libdl). The precise line:
 g++ -O3 -Dunix -std=c++11 zpaqfranz.cpp -pthread -ldl -o zpaqfranz
 Or with the Makefile (it adds both by itself, and SFTP): make
-Do NOT use -DANCIENT: it builds, but without some functions (-tar the first)
+Do NOT use -DANCIENT: it builds, but slower and without some functions
+(-m8 and the other zstd methods, franzen, the multithread add). -tar is there
+(65.16h), with the times to the second if the system has no utimensat
 
 Solaris 11.4 gcc 7.3.0
 OmniOS r151042 gcc 7.5.0
@@ -87751,6 +87753,24 @@ int64_t g_allocatedram= 0;
 int64_t g_arrayram	  = 0;
 
 bool g_control_c		 = false;
+/// 65.16f: the thread of the control-C handler (Windows: a thread of its own; *nix: the one the signal took). From then
+/// on only it colors the console: the others go on for a while (a map, the bars of t -ssd) and their last color stayed
+/// after the exit (all grey, yellow, green)
+#ifdef _WIN32
+DWORD g_filo_controlc= 0;
+#else
+pthread_t g_filo_controlc;
+#endif
+/*
+	65.16g: repack writes its new archive as <to>.tmp (<to>.tmp.franzen), renamed only at the end: control-C deletes
+	it. Windows (the handler is a thread of its own, an open file cannot be deleted): the thread of repack is asked to
+	stop where it draws its map (g_rp_fermo 1, then 2 when stopped), then the handler closes the files on it
+*/
+std::string	 g_rp_temporaneo; /// the .tmp of a repack going on ("": none). Its handles: g_rp_fp, g_rp_franzenlettore (std::: before using std::string)
+volatile int g_rp_fermo= 0;
+#ifdef _WIN32
+DWORD g_rp_filo= 0; /// the thread of repack
+#endif
 int	 g_incomplete_version= 0;
 int64_t g_frammentiorfani= 0; /// read_archive: fragments that no file uses (a lost i block, 72414): a warning
 
@@ -88102,6 +88122,9 @@ bool flagpakka;
 bool flagcatpaqmode;
 bool flagdistinct;
 bool flagparanoid;
+int64_t g_nomicollisi	  = 0; /// 65.16i: files renamed: for Windows their name was the one of another file (a WARNING)
+int64_t g_closefalliti	  = 0; /// 65.16i: the date or the attributes of a file not set by close(), 00163 00165 (a WARNING)
+int64_t g_closedispositivi= 0; /// 65.16i: "files" that were devices, their data gone: 03808 (an ERROR)
 bool flagpaq;
 bool flagcollision;
 bool flagramdisk;
@@ -88645,6 +88668,18 @@ MAPPAERRORS				  g_errors;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 int g_console_attributes= -1;
+int g_console_iniziali	= -1; /// 65.16f: the colors of the console at the start, whatever they were (put back at the end)
+/// 65.16f: a thread that must not color the console any more: there was a control-C, and it is not its handler
+static bool colore_fermo()
+{
+	if (!g_control_c)
+		return false;
+#ifdef _WIN32
+	return GetCurrentThreadId() != g_filo_controlc;
+#else
+	return !pthread_equal(pthread_self(), g_filo_controlc);
+#endif
+}
 bool iswindowsxp()
 {
 #ifdef _WIN32
@@ -88728,7 +88763,10 @@ void color_save()
 	if (hconsole == INVALID_HANDLE_VALUE)
 		return;
 	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
-	GetConsoleScreenBufferInfo(hconsole, &csbiInfo);
+	if (!GetConsoleScreenBufferInfo(hconsole, &csbiInfo)) /// 65.16f: not a console (it was read uninitialized)
+		return;
+	if (g_console_iniziali < 0) /// 65.16f: the first time: as the console was before any color of ours
+		g_console_iniziali= csbiInfo.wAttributes;
 	if ((csbiInfo.wAttributes & MYFOREGROUND_BLUE) &&
 		(csbiInfo.wAttributes & MYFOREGROUND_GREEN) &&
 		(csbiInfo.wAttributes & MYFOREGROUND_RED))
@@ -88795,6 +88833,8 @@ void color_something(int i_color)
 {
 	if (flagnocolor)
 		return;
+	if (colore_fermo()) /// 65.16f
+		return;
 	if (g_console_attributes < 0)
 		return;
 	HANDLE hconsole= GetStdHandle(STD_OUTPUT_HANDLE);
@@ -88808,6 +88848,8 @@ void color_red()
 {
 	if (flagnocolor)
 		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
+		return;
 	if (outbuf_color("\x1b[1;31m"))
 		return;
 #ifdef _WIN32
@@ -88819,6 +88861,8 @@ void color_red()
 void color_green()
 {
 	if (flagnocolor)
+		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
 		return;
 	if (outbuf_color("\x1b[1;32m"))
 		return;
@@ -88832,6 +88876,8 @@ void color_cyan()
 {
 	if (flagnocolor)
 		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
+		return;
 	if (outbuf_color("\x1b[1;36m"))
 		return;
 #ifdef _WIN32
@@ -88844,6 +88890,8 @@ void color_yellow()
 {
 	if (flagnocolor)
 		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
+		return;
 	if (outbuf_color("\x1b[1;33m"))
 		return;
 #ifdef _WIN32
@@ -88855,6 +88903,8 @@ void color_yellow()
 void color_blackongreen()
 {
 	if (flagnocolor)
+		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
 		return;
 	if (outbuf_color("\x1b[30m\x1b[102m"))
 		return;
@@ -88876,6 +88926,8 @@ void color_blue()
 {
 	if (flagnocolor)
 		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
+		return;
 	if (outbuf_color("\x1b[94m"))
 		return;
 #ifdef _WIN32
@@ -88888,6 +88940,8 @@ void color_blue()
 void color_magenta()
 {
 	if (flagnocolor)
+		return;
+	if (colore_fermo()) /// 65.16f: after a control-C, the handler only
 		return;
 	if (outbuf_color("\x1b[95m"))
 		return;
@@ -126237,6 +126291,7 @@ franzcri *g_p_franzenfile	   = 0;
 /// of the run is written there again, with its sizes). g_p_franzenfile is the one of the part being written
 franzcri *g_p_franzenprimo	   = 0;
 int64_t	  g_franzen_jidacheader= -1;
+franzcri *g_rp_franzenlettore  = 0; /// 65.16g: the franzen file of the .tmp of repack, read by its check (control-C closes it)
 /*
 	65.11l: the index (a -index, backup) of a franzen archive is a franzen file of its own
 	(x.index.franzen): what goes to the index is written there, and only there. Before, the bytes of
@@ -127964,6 +128019,15 @@ bool close(const char *filename, int64_t date, int64_t attr, FP fp= FPNULL)
 #else
 	const bool ads	= strstr(filename, ":$DATA") != 0; // alternate data stream?
 	bool	   allok= true;
+	/// 65.16i: what is open is not a file (nul with -nosanitize, a device name nobody saw): the data went nowhere, and it
+	/// is an ERROR. Before: only a 00163 on the time of a device, nobody looked at it, all OK and rc 0
+	if ((fp != FPNULL) && (!flagstdout) && (GetFileType(fp) != FILE_TYPE_DISK))
+	{
+		myprintf("03808! <<%Z>> is a device for Windows, not a file: its data are NOT there\n", filename);
+		g_closedispositivi++;
+		CloseHandle(fp);
+		return false;
+	}
 	if (date > 0 && !ads)
 	{
 		if (fp == FPNULL) // Windows require HANDLE
@@ -127988,6 +128052,7 @@ bool close(const char *filename, int64_t date, int64_t attr, FP fp= FPNULL)
 			{
 				myprintf("00163! WARN cannot set filetime (error %s) on %Z\n", migliaia((int64_t)GetLastError()), filename);
 				allok= false;
+				g_closefalliti++; /// 65.16i: nobody looks at what close() gives back
 			}
 		}
 	}
@@ -128004,6 +128069,7 @@ bool close(const char *filename, int64_t date, int64_t attr, FP fp= FPNULL)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 				myprintf("00165! WARN kind %s cannot set attributes on %Z\n", migliaia((int64_t)err), filename);
 				allok= false;
+				g_closefalliti++; /// 65.16i
 			}
 	return allok;
 #endif // corresponds to #ifdef (#ifdef unix)
@@ -129125,6 +129191,9 @@ void redraw_input(sinputstate *state, const string& i_testo)
 	fflush(stdout);
 }
 
+/// 65.16g: w (tw) on more archives (a * in the name): a password nobody can type ends that archive (an ERROR), not the
+/// run (an archive whose first bytes are damaged looks encrypted). multisomething catches it
+bool g_tantiarchivi= false;
 /// stdin at EOF (script, cron, < /dev/null): nobody can type the password, do not spin forever
 void password_eof()
 {
@@ -129133,6 +129202,8 @@ void password_eof()
 	color_red();
 	myprintf("42265! Password required, but stdin is closed (EOF): cannot read it. Use -key\n");
 	color_restore();
+	if (g_tantiarchivi)
+		throw std::runtime_error("no password (-key)");
 	exit(2);
 }
 
@@ -129267,6 +129338,8 @@ string mygetpasswordblind(const string& i_default)
 			color_red();
 			myprintf("42267! Password required, but stdin is not a console: nobody can type it. Use -key\n");
 			color_restore();
+			if (g_tantiarchivi) /// 65.16g
+				throw std::runtime_error("no password (-key)");
 			exit(2);
 		}
 	}
@@ -129334,6 +129407,8 @@ bool g_franzen_alreadywritten;
 	
 
 // Base of InputArchive and OutputArchive
+FP g_rp_fp= FPNULL; /// 65.16g: the .tmp of repack being written (plain, AES): control-C closes it, see g_rp_temporaneo
+
 class ArchiveBase
 {
   protected:
@@ -129424,6 +129499,8 @@ class InputArchive : public ArchiveBase, public libzpaq::Reader
 		for (unsigned i= 0; i < franzen_parti.size(); i++)
 			if (franzen_parti[i] != NULL)
 			{
+				if (franzen_parti[i] == g_rp_franzenlettore)
+					g_rp_franzenlettore= 0;
 				franzen_parti[i]->close();
 				delete franzen_parti[i];
 				franzen_parti[i]= NULL;
@@ -129854,6 +129931,8 @@ franzcri *InputArchive::franzen_parte(unsigned i_parte)
 			return NULL;
 		}
 		franzen_parti[i_parte] = nuovo;
+		if ((g_rp_temporaneo != "") && (franzen_nomi[i_parte] == franzenname(g_rp_temporaneo)))
+			g_rp_franzenlettore= nuovo; /// 65.16g: the check of repack reads its .tmp: control-C closes it
 	}
 	return franzen_parti[i_parte];
 }
@@ -145438,6 +145517,7 @@ class Jidac
 	int setpassword_franzen();		   // 65.13n: -franzen2
 	int checkpassword();			   // check if password is OK
 	int extractw();					   // chunked-extract, return 1 if error else 0
+	int extractwnomi();				   /// 65.16i
 	int info();						   // wrap for list
 	int findj();					   // find files
 	int zpaqdirsize();				   // get size of a folder
@@ -145479,6 +145559,7 @@ class Jidac
 	int zero();		  // Delete empty directory
 	int trim();		  // Trim incomplete transaction
 	int crop();		  // Truncate
+	int repackversions(); /// 65.16a: the repack command, a new archive with only some versions
 #ifdef ZPAQFULL		  /// NOSFTPSTART
 	int rd();		  // Remove dir (rd /s or rm-f)
 #endif				  /// NOSFTPEND
@@ -145608,6 +145689,8 @@ class Jidac
 	string zfs_get_snaplist(string i_header, string i_footer, vector<string> &o_array_primachiocciola, vector<string> &o_array_dopochiocciola, vector<string> &o_array_size);
 	string sanitizzanomefile(string i_filename, int i_filelength, int &io_collisioni, MAPPAFILEHASH &io_mappacollisioni);
 	uint32_t sanitizzawindows();
+	bool	 nomesanato(const string &i_nome, string &o_fixato); /// 65.16i
+	uint32_t collisioniwindows();								 /// 65.16i
 #ifdef ZPAQFULL /// NOSFTPSTART
 	int writesfxmodule(string i_filename);
 #endif /// NOSFTPEND
@@ -150649,9 +150732,35 @@ uint64_t Jidac::hashastringa(const string &i_string)
 	myhash.add(i_string.c_str(), i_string.size());
 	return myhash.hash();
 }
+#if defined(_WIN32) || !defined(ANCIENT)
+/*
+	65.16i: the name of a file whose name is taken: nome.ext => nome_00000001.ext, no extension => nome_00000001, and
+	.bashrc => .bashrc_00000001 (all extension: it came out the same, and two files on one name). It is a key of dt: no
+	-to in it, rename() puts it (it was there twice). i_togli: no //?/, so Windows will drop dots and spaces at the end:
+	not kept, or the new name would be taken too
+*/
+static string nomecollisione(const string &i_nome, int i_numero, bool i_togli)
+{
+	char numero[32];
+	snprintf(numero, sizeof(numero), "_%08d", i_numero);
+	const size_t barra	 = i_nome.rfind('/');
+	const string percorso= (barra == string::npos) ? "" : i_nome.substr(0, barra + 1);
+	string		 nome	 = (barra == string::npos) ? i_nome : i_nome.substr(barra + 1);
+	size_t		 fine	 = nome.size();
+	if (i_togli)
+		while ((fine > 0) && ((nome[fine - 1] == '.') || (nome[fine - 1] == ' ')))
+			fine--;
+	if (fine > 0)
+		nome= nome.substr(0, fine);
+	const size_t punto= nome.rfind('.');
+	if ((punto == string::npos) || (punto == 0) || ((nome.size() - punto) > 20))
+		return percorso + nome + numero;
+	return percorso + nome.substr(0, punto) + numero + nome.substr(punto);
+}
+#endif
 #ifdef _WIN32
 
-void changeKey(DTMap& m, const std::string& oldKey, const std::string& newKey) 
+void changeKey(DTMap& m, const std::string& oldKey, const std::string& newKey)
 {
     DTMap::iterator it = m.find(oldKey);  // iteratore esplicito
     if (it != m.end()) {
@@ -150674,6 +150783,37 @@ void Jidac::changedtmapkey(string i_oldkey, string i_newkey)
 	dt[i_newkey]	= olddt;
 	myp->second.date= 0; /// fake delete
 }
+/*
+	65.16i: what Windows compares, as a key: the case does not count (of all Unicode: not a-z only), and without //?/
+	the dots and spaces at the end of every piece of the path go away (finale. and finale are one file)
+*/
+static string chiavewindows(const string &i_nome)
+{
+	string nome;
+	if (islongpath(i_nome))
+		nome= i_nome;
+	else
+	{
+		nome.reserve(i_nome.size());
+		for (size_t i= 0; i < i_nome.size(); i++)
+		{
+			size_t dopo= i;
+			while ((dopo < i_nome.size()) && ((i_nome[dopo] == '.') || (i_nome[dopo] == ' ')))
+				dopo++;
+			const bool finepezzo= (dopo > i) && ((dopo == i_nome.size()) || (i_nome[dopo] == '/'));
+			if (finepezzo && (i > 0) && (i_nome[i - 1] != '/')) /// a piece of only dots stays: it is a piece
+			{
+				i= dopo - 1;
+				continue;
+			}
+			nome+= i_nome[i];
+		}
+	}
+	std::wstring largo= utow(nome.c_str());
+	if (!largo.empty())
+		LCMapStringW(LOCALE_INVARIANT, LCMAP_UPPERCASE, largo.c_str(), (int)largo.size(), &largo[0], (int)largo.size());
+	return string((const char *)largo.data(), largo.size() * sizeof(wchar_t));
+}
 uint32_t Jidac::casekollision(DTMap &i_dtmap, vector<string> &o_collisions, bool i_fix= false)
 {
 	int64_t startkoll= mtime();
@@ -150683,7 +150823,7 @@ uint32_t Jidac::casekollision(DTMap &i_dtmap, vector<string> &o_collisions, bool
 	o_collisions.clear();
 	vector<uint64_t> hashedstrings;
 	for (DTMap::iterator p= i_dtmap.begin(); p != i_dtmap.end(); ++p)
-		if (all || p->second.date)
+		if ((all || p->second.date) && (!isdirectory(p->first))) /// 65.16i: Dir/ and dir/ are one folder, nothing to fix
 		{
 			string	 fn		 = rename(p->first);
 			string	 filename= stringtolower(fn);
@@ -150692,23 +150832,12 @@ uint32_t Jidac::casekollision(DTMap &i_dtmap, vector<string> &o_collisions, bool
 			{
 				if (i_fix)
 				{
-					char   buf[32];
-					string percorso	 = extractfilepath(fn);
-					string nomefile	 = prendinomefileebasta(fn);
-					string estensione= prendiestensione(fn);
 					int	   iterazione= 1;
 					string rifatto	 = "";
 					do
 					{
-						snprintf(buf, sizeof(buf), "_%08d", iterazione++);
-						if (percorso != "")
-							rifatto= percorso;
-						string pezzetto= buf;
-						if (nomefile != "")
-							rifatto+= nomefile + buf;
-						if (estensione != "")
-							rifatto+= "." + estensione;
-						hashato= hashastringa(rifatto);
+						rifatto= nomecollisione(p->first, iterazione++, false); /// 65.16i: a key: from the key, not from rename()
+						hashato= hashastringa(stringtolower(rename(rifatto)));
 						if (binary_search(hashedstrings.begin(), hashedstrings.end(), hashato) == false)
 							break;
 					} while (iterazione < 1000);
@@ -153588,6 +153717,133 @@ string Jidac::sanitizzanomefile(string i_filename, int i_filelength, int &io_col
 	perfectly legal on *nix and forbidden on Windows (ERROR_INVALID_NAME 123).
 	Returns how many names have been changed.
 */
+#ifdef _WIN32
+/*
+	65.16i: a name that is a device for this Windows: there would be no file (nul: the data written to nothing, and x
+	said all OK). WHICH ones depends on the Windows: 11 24H2 only nul after a folder (con.txt, aux, lpt1 are files), a
+	con with no folder before it; 10 all of them, with an extension too. So Windows is asked (GetFullPathNameW gives
+	\\.\NUL), on the path that will be opened. nomeforsedispositivo: only the few names that can be get that far
+*/
+static bool nomeforsedispositivo(const string &i_nome, size_t i_inizio, size_t i_fine)
+{
+	size_t fine= i_inizio;
+	while ((fine < i_fine) && (i_nome[fine] != '.') && (i_nome[fine] != ' '))
+		fine++;
+	const size_t lunghezza= fine - i_inizio;
+	if ((lunghezza != 3) && (lunghezza != 4) && (lunghezza != 6) && (lunghezza != 7))
+		return false;
+	const string maiuscolo= stringtoupper(i_nome.substr(i_inizio, lunghezza));
+	if ((maiuscolo == "CONIN$") || (maiuscolo == "CONOUT$")) /// Windows 10: devices too, not in the table of -fixreserved
+		return true;
+	for (unsigned int j= 0; j < forbiddenstringsize; j++)
+		if (maiuscolo == forbiddenstring[j])
+			return true;
+	return false;
+}
+static bool nomedispositivo(const string &i_percorso)
+{
+	const std::wstring largo= utow(i_percorso.c_str());
+	const DWORD		   serve= GetFullPathNameW(largo.c_str(), 0, NULL, NULL);
+	if (serve == 0)
+		return false;
+	vector<wchar_t> pieno(serve + 1);
+	const DWORD		fatto= GetFullPathNameW(largo.c_str(), serve + 1, &pieno[0], NULL);
+	return (fatto > 0) && (fatto <= serve) && (wcsncmp(&pieno[0], L"\\\\.\\", 4) == 0);
+}
+/// 65.16i: the name as Windows can have it: franzsanitizepath, and a _ before a piece of the path that is a device here
+/// (a folder too: makepath asks for it with no / at the end, and that is the device)
+bool Jidac::nomesanato(const string &i_nome, string &o_fixato)
+{
+	bool   cambiato= franzsanitizepath(i_nome, o_fixato);
+	size_t inizio  = 0;
+	while (inizio < o_fixato.size())
+	{
+		size_t fine= o_fixato.find('/', inizio);
+		if (fine == string::npos)
+			fine= o_fixato.size();
+		if (nomeforsedispositivo(o_fixato, inizio, fine))
+			if (nomedispositivo(rename(o_fixato.substr(0, fine))))
+			{
+				o_fixato.insert(inizio, "_");
+				cambiato= true;
+				fine++;
+			}
+		inizio= fine + 1;
+	}
+	return cambiato;
+}
+/*
+	65.16i: the last look, after every change of the names, at the names Windows will really see. Two names of an
+	archive that are one file for Windows (Case.txt case.txt, finale. finale, Dir/a dir/a, .bashrc .BASHRC): the last one
+	written wins, the other one is lost, all OK and rc 0. Every step looked at its own form of the name, none at the
+	final one. Here: the first keeps its name, the others nome_00000001.ext, each one said, and a WARNING at the end
+	(the data are all there, but case.txt on the disk may hold what was Case.txt). Not with //?/: only the case, there
+	finale. and finale are two files. A folder is never renamed: Dir/ and dir/ are one, their files are compared; a
+	folder keeps its name from a file (Mix and mix/a.txt: the file could not be created, rc 2).
+	8 bytes for each file and each folder, and only when the archive comes from a *nix: nothing stays if no name repeats
+*/
+uint32_t Jidac::collisioniwindows()
+{
+	if (!searchunixfile())
+		return 0;
+	vector<uint64_t> tutti;
+	vector<uint64_t> cartelle;
+	string			 ultima;
+	tutti.reserve(dt.size());
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		if (p->second.date && (p->first != ""))
+		{
+			const string nome = rename(p->first);
+			const size_t barra= nome.rfind('/');
+			if (!isdirectory(p->first))
+				tutti.push_back(hashastringa(chiavewindows(nome)));
+			if (barra == string::npos)
+				continue;
+			const string padre= nome.substr(0, barra);
+			if (padre == ultima) /// dt is sorted: the files of a folder one after the other
+				continue;
+			ultima= padre;
+			for (size_t j= 1; j <= padre.size(); j++)
+				if ((j == padre.size()) || (padre[j] == '/'))
+					cartelle.push_back(hashastringa(chiavewindows(padre.substr(0, j))));
+		}
+	std::sort(tutti.begin(), tutti.end());
+	std::sort(cartelle.begin(), cartelle.end());
+	cartelle.erase(std::unique(cartelle.begin(), cartelle.end()), cartelle.end());
+	bool occupato= (std::adjacent_find(tutti.begin(), tutti.end()) != tutti.end());
+	for (size_t i= 0; (!occupato) && (i < tutti.size()); i++)
+		occupato= std::binary_search(cartelle.begin(), cartelle.end(), tutti[i]);
+	if (!occupato)
+		return 0;
+	std::set<uint64_t>						visti(cartelle.begin(), cartelle.end());
+	vector<std::pair<string, string> >		cambi;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		if (p->second.date && (p->first != "") && (!isdirectory(p->first)))
+		{
+			const string nome= rename(p->first);
+			if (visti.insert(hashastringa(chiavewindows(nome))).second)
+				continue;
+			string	 nuovo;
+			uint64_t hnuovo= 0;
+			int		 numero= 0;
+			do
+			{
+				nuovo = nomecollisione(p->first, ++numero, !islongpath(nome));
+				hnuovo= hashastringa(chiavewindows(rename(nuovo)));
+			} while (std::binary_search(tutti.begin(), tutti.end(), hnuovo) || (visti.count(hnuovo) > 0));
+			visti.insert(hnuovo);
+			cambi.push_back(std::make_pair(p->first, nuovo));
+		}
+	for (size_t i= 0; i < cambi.size(); i++)
+	{
+		myprintf("03807$ For Windows <<%Z>> is the name of another file: extracted as <<%Z>>\n", cambi[i].first.c_str(), cambi[i].second.c_str());
+		changeKey(dt, cambi[i].first, cambi[i].second); /// the old key goes (w counts every key of dt, deleted or not)
+	}
+	g_nomicollisi+= cambi.size();
+	myprintf("03809$ %s file(s) renamed, the same name for Windows: their data are all there, not their names (a WARNING)\n", migliaia((int64_t)cambi.size()));
+	return (uint32_t)cambi.size();
+}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 uint32_t Jidac::sanitizzawindows()
 {
 	uint32_t cambiati= 0;
@@ -153601,7 +153857,7 @@ uint32_t Jidac::sanitizzawindows()
 	*/
 	string fixato;
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
-		if (franzsanitizepath(p->first, fixato))
+		if (nomesanato(p->first, fixato)) /// 65.16i
 		{
 			cambiati++;
 			if (flagverbose)
@@ -153612,7 +153868,7 @@ uint32_t Jidac::sanitizzawindows()
 		}
 	if (cambiati == 0)
 		return 0;
-	myprintf("71339: Windows: %s filename(s) sanitized (chars Windows cannot store).\n", migliaia((int64_t)cambiati));
+	myprintf("71339: Windows: %s filename(s) sanitized (chars or names Windows cannot store).\n", migliaia((int64_t)cambiati));
 	myprintf("71340:          Turn off with -nosanitize, -fixreserved is stricter\n");
 	if (!flagverbose)
 		myprintf("71341:          use -verbose to get the full list\n");
@@ -153622,26 +153878,32 @@ uint32_t Jidac::sanitizzawindows()
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 	{
 		string nuovonome= p->first;
-		if (franzsanitizepath(p->first, fixato))
+		if (nomesanato(p->first, fixato)) /// 65.16i
 			nuovonome= fixato;
 		std::pair<DTMap::iterator, bool> ret= mymap.insert(std::pair<string, DT>(nuovonome, p->second));
 		if (ret.second == false)
 		{
+			/// 65.16i: a file deleted in the archive takes no name, and gives way to one that is there
+			if (p->second.date == 0)
+				continue;
+			if (ret.first->second.date == 0)
+			{
+				ret.first->second= p->second;
+				continue;
+			}
 			/// two different *nix names can collapse into the very same Windows name.
 			/// folders do not care (same target folder), files do
 			if (!isdirectory(nuovonome))
 			{
-				char numero[40];
-				snprintf(numero, sizeof(numero), "_%08d", (int)++kollisioni);
-				string estensione= prendiestensione(nuovonome);
+				/// 65.16i: the first free one (a name that was there too was lost), and a WARNING at the end
 				string collisionato;
-				if (estensione != "")
-					collisionato= nuovonome.substr(0, nuovonome.size() - estensione.size() - 1) + numero + "." + estensione;
-				else
-					collisionato= nuovonome + numero;
+				do
+					collisionato= nomecollisione(nuovonome, (int)++kollisioni, false);
+				while ((mymap.find(collisionato) != mymap.end()) || (dt.find(collisionato) != dt.end()));
 				myprintf("71337$ WARNING sanitize collision <<%Z>>\n", nuovonome.c_str());
 				myprintf("71338:                         to <<%Z>>\n", collisionato.c_str());
 				mymap.insert(std::pair<string, DT>(collisionato, p->second));
+				g_nomicollisi++;
 			}
 		}
 	}
@@ -155532,6 +155794,101 @@ static const franz_helpriga g_helprighe[]=
 	HBREVE(450, "crop", "Discard the latest version(s) of .zpaq (reduce size)"),
 	HIT(450, 0x3BC26004, "Scarta le ultime versioni di un .zpaq (riduce la dimensione)"),
 	HRU(450, 0x3BC26004, "Отбросить последние версии .zpaq (уменьшить размер)"),
+	/// repack (65.16a)
+	HU(1809, "repack", "CMD repack", "A new archive with only some versions of another one|What they do not use is thrown away, the rest is decompressed, checked|and compressed again (-m): every version taken = the archive in another method|Versions: 1,5,10-20 (version 1, version 5, from 10 to 20)|7-last (from 7 to the last one), 47last (the last 47), last (the last one)|By date: 7d4w12my = the last version of each of the newest 7 days,|4 weeks, 12 months, and of every year (h d w m y; no number: all)|(-n X: the last X kept too, default 10; -test: what would be kept)|Written only if ALL checks: read again, every block decompressed,|every version compared with the one it comes from"),
+	HIT(1809, 0x998E17D9, "Un archivio nuovo con solo alcune versioni di un altro|Quello che non usano si butta, il resto si decomprime, si controlla|e si comprime di nuovo (-m): tutte le versioni = l'archivio in un altro metodo|Versioni: 1,5,10-20 (la versione 1, la 5, dalla 10 alla 20)|7-last (dalla 7 all'ultima), 47last (le ultime 47), last (l'ultima)|Per data: 7d4w12my = l'ultima versione di ognuno dei 7 giorni piu' recenti,|4 settimane, 12 mesi, e di ogni anno (h d w m y; senza numero: tutti)|(-n X: tenute anche le ultime X, di default 10; -test: cosa si terrebbe)|Scritto solo se TUTTO torna: riletto, ogni blocco decompresso,|ogni versione confrontata con quella da cui viene"),
+	HRU(1809, 0x998E17D9, "Новый архив только с некоторыми версиями другого|Неиспользуемое ими выбрасывается, остальное распаковывается,|проверяется и сжимается заново (-m): все версии = архив другим методом|Версии: 1,5,10-20 (версия 1, версия 5, с 10 по 20)|7-last (с 7-й до последней), 47last (последние 47), last (последняя)|По дате: 7d4w12my = последняя версия каждого из 7 последних дней,|4 недель, 12 месяцев и каждого года (h d w m y; без числа: все)|(-n X: последние X тоже сохраняются, по умолчанию 10; -test: что будет сохранено)|Записывается, только если ВСЁ сходится: перечитывается, каждый блок|распаковывается, каждая версия сравнивается с исходной"),
+	HU(1810, "repack", "-to new.zpaq", "The new archive (one file)"),
+	HIT(1810, 0x458B051D, "L'archivio nuovo (un file solo)"),
+	HRU(1810, 0x458B051D, "Новый архив (один файл)"),
+	HU(1811, "repack", "-m X", "Its method (default -m8, -m1 without zstd)"),
+	HIT(1811, 0x70703AD4, "Il suo metodo (di default -m8, -m1 senza zstd)"),
+	HRU(1811, 0x70703AD4, "Его метод (по умолчанию -m8, -m1 без zstd)"),
+	HU(1812, "repack", "-force", "Replace -to if it is there (at the end, when all is good)"),
+	HIT(1812, 0x3A2D25C7, "Sostituisce -to se c'e' (alla fine, se tutto va bene)"),
+	HRU(1812, 0x3A2D25C7, "Заменить -to, если он есть (в конце, когда всё в порядке)"),
+	HU(1813, "repack", "-key X", "AES password of the archive (the output keeps it, without -key2)"),
+	HIT(1813, 0x765EB3C9, "Password AES dell'archivio (l'uscita la tiene, senza -key2)"),
+	HRU(1813, 0x765EB3C9, "Пароль AES архива (вывод сохраняет его без -key2)"),
+	HU(1820, "repack", "-key2 X", "AES of the output: password X, . for none (no X: asked twice)"),
+	HIT(1820, 0x229D2E93, "AES in uscita: X, . per nessuna (senza X: chiesta 2 volte)"),
+	HRU(1820, 0x229D2E93, "AES вывода: пароль X, . без него (без X: спросит дважды)"),
+	HU(1821, "repack", "-franzen X", "Franzen password of the archive (with none: the output gets it)"),
+	HIT(1821, 0x14D59D15, "Password Franzen dell'archivio (se non ce l'ha: va all'uscita)"),
+	HRU(1821, 0x14D59D15, "Пароль Franzen архива (если его нет: получит вывод)"),
+	HU(1822, "repack", "-franzen2 X", "Franzen of the output: password X, . for none"),
+	HIT(1822, 0xEDDD132E, "Franzen dell'uscita: password X, . per nessuna"),
+	HRU(1822, 0xEDDD132E, "Franzen вывода: пароль X, . без него"),
+	HU(1814, "repack", "-t N", "Threads to decompress and to compress"),
+	HIT(1814, 0x5BFC4A58, "Thread per decomprimere e per comprimere"),
+	HRU(1814, 0x5BFC4A58, "Потоки для распаковки и сжатия"),
+	HU(1819, "repack", "-nodashboard", "No map: a line every second"),
+	HIT(1819, 0x5662DA9E, "Niente mappa: una riga al secondo"),
+	HRU(1819, 0x5662DA9E, "Без карты: строка каждую секунду"),
+	HU(1827, "repack", "-all", "Every version (no list): the archive compressed again (-m)"),
+	HIT(1827, 0x2DE233A9, "Tutte le versioni (senza elenco): archivio ricompresso (-m)"),
+	HRU(1827, 0x2DE233A9, "Все версии (без списка): архив, сжатый заново (-m)"),
+	HU(1835, "repack", "-n X", "With h d w m y: the last X versions are kept too (default 10)"),
+	HIT(1835, 0x5E556B4D, "Con h d w m y: tenute anche le ultime X versioni (di default 10)"),
+	HRU(1835, 0x5E556B4D, "С h d w m y: последние X версий тоже сохраняются (по умолчанию 10)"),
+	HU(1836, "repack", "-test", "What would be kept, and why: nothing written (no -to needed)"),
+	HIT(1836, 0x6495D9A1, "Cosa si terrebbe, e perche': non scrive nulla (senza -to)"),
+	HRU(1836, 0x6495D9A1, "Что будет сохранено и почему: ничего не пишется (без -to)"),
+	HU(1841, "repack", "-quick", "Blocks whose data are all kept: copied as they are|(not decompressed: their bytes checked); -m for the others"),
+	HIT(1841, 0x919DEDB0, "Blocchi con tutti i dati tenuti: copiati come sono|(non decompressi: controllati i loro byte); -m per gli altri"),
+	HRU(1841, 0x919DEDB0, "Блоки, все данные которых сохраняются: копируются как есть|(не распаковываются: сверяются их байты); -m для остальных"),
+	HESEMPI("repack", 'b'),
+	HE(1815, "repack", "The first and the last version", "repack z:\\1.zpaq 1,last -to z:\\2.zpaq"),
+	HIT(1815, 0xC6D93BD0, "La prima e l'ultima versione"),
+	HRU(1815, 0xC6D93BD0, "Первая и последняя версия"),
+	HE(1816, "repack", "Every version, compressed again -m1", "repack z:\\1.zpaq -to z:\\2.zpaq -all -m1"),
+	HIT(1816, 0x76BBD314, "Tutte le versioni, ricompresse -m1"),
+	HRU(1816, 0x76BBD314, "Все версии, сжатые заново -m1"),
+	HE(1817, "repack", "Some versions of a backup", "repack z:\\back.zpaq 1,10,20-25 -to z:\\2.zpaq"),
+	HIT(1817, 0xB9557452, "Alcune versioni di un backup"),
+	HRU(1817, 0xB9557452, "Некоторые версии резервной копии"),
+	HE(1828, "repack", "From version 7 to the last one", "repack z:\\1.zpaq 7-last -to z:\\2.zpaq"),
+	HIT(1828, 0x6A6DFB16, "Dalla versione 7 all'ultima"),
+	HRU(1828, 0x6A6DFB16, "С версии 7 до последней"),
+	HE(1829, "repack", "The last 47 versions", "repack z:\\1.zpaq 47last -to z:\\2.zpaq"),
+	HIT(1829, 0xC379506E, "Le ultime 47 versioni"),
+	HRU(1829, 0xC379506E, "Последние 47 версий"),
+	HE(1830, "repack", "The first version and the last 30", "repack z:\\1.zpaq 1,30last -to z:\\2.zpaq"),
+	HIT(1830, 0xB7371CDF, "La prima versione e le ultime 30"),
+	HRU(1830, 0xB7371CDF, "Первая версия и последние 30"),
+	HE(1837, "repack", "Grandfather-father-son", "repack z:\\1.zpaq 7d4w12my -to z:\\2.zpaq"),
+	HIT(1837, 0x087F7165, "Nonno-padre-figlio"),
+	HRU(1837, 0x087F7165, "Дед-отец-сын"),
+	HE(1838, "repack", "What would be kept (nothing written)", "repack z:\\1.zpaq 7d4w12my -test"),
+	HIT(1838, 0xD5222F5C, "Cosa si terrebbe (non scrive nulla)"),
+	HRU(1838, 0xD5222F5C, "Что сохранится (ничего не пишется)"),
+	HE(1839, "repack", "Hourly: a day of them, then 30 days", "repack z:\\1.zpaq 24h30d -to z:\\2.zpaq"),
+	HIT(1839, 0xCCCD25EB, "Orari: un giorno, poi 30 giorni"),
+	HRU(1839, 0xCCCD25EB, "По часам: день, затем 30 дней"),
+	HE(1840, "repack", "The first too, and a reserve of 30", "repack z:\\1.zpaq 1,7d4w12my -n 30 -to z:\\2.zpaq"),
+	HIT(1840, 0x258A4042, "Anche la prima, e una riserva di 30"),
+	HRU(1840, 0x258A4042, "Также первая версия и запас в 30"),
+	HE(1842, "repack", "Prune fast (whole blocks copied)", "repack z:\\1.zpaq 7d4w12my -quick -to z:\\2.zpaq"),
+	HIT(1842, 0x66091557, "Pota veloce (blocchi interi copiati)"),
+	HRU(1842, 0x66091557, "Быстрая обрезка (целые блоки копируются)"),
+	HE(1843, "repack", "The same, by its other name purge", "purge z:\\1.zpaq 7d4w12my -to z:\\2.zpaq"),
+	HIT(1843, 0x4B947965, "Lo stesso, col suo altro nome purge"),
+	HRU(1843, 0x4B947965, "То же, под другим именем purge"),
+	HE(1823, "repack", "AES => plain", "repack z:\\1.zpaq -to z:\\2.zpaq -all -key old -key2 ."),
+	HIT(1823, 0x9D194AF3, "AES => in chiaro"),
+	HRU(1823, 0x9D194AF3, "AES => без шифрования"),
+	HE(1824, "repack", "AES => AES, another password", "repack z:\\1.zpaq -to z:\\2.zpaq -all -key old -key2 new"),
+	HIT(1824, 0x3E48B4C4, "AES => AES, un'altra password"),
+	HRU(1824, 0x3E48B4C4, "AES => AES, другой пароль"),
+	HE(1825, "repack", "AES => Franzen", "repack z:\\1.zpaq -to z:\\2.zpaq -all -key old -key2 . -franzen2 pw"),
+	HIT(1825, 0x590F2E8F, "AES => Franzen"),
+	HRU(1825, 0x590F2E8F, "AES => Franzen"),
+	HE(1826, "repack", "Plain => AES+Franzen", "repack z:\\1.zpaq -to z:\\2.zpaq -all -key2 k -franzen2 pw"),
+	HIT(1826, 0xE1028A26, "In chiaro => AES+Franzen"),
+	HRU(1826, 0xE1028A26, "Без шифрования => AES+Franzen"),
+	HBREVE(1818, "repack", "A new archive with only the versions given (data compressed again)"),
+	HIT(1818, 0x4C8CC3A7, "Archivio nuovo con le sole versioni date (dati ricompressi)"),
+	HRU(1818, 0x4C8CC3A7, "Новый архив только с указанными версиями (данные сжаты заново)"),
 	/// @sub
 	HRIGA(451, "@sub", 'a', " ", "Substitute %hour %min %sec %weekday %year %month %day"),
 	HIT(451, 0x838E0F16, "Sostituisce %hour %min %sec %weekday %year %month %day"),
@@ -156486,9 +156843,9 @@ losetup -d /dev/loop0
 	HIT(730, 0x298B201A, "Stima della compressione (0=nessuna, 255=alta)"),
 	HRU(730, 0x298B201A, "Оценка сжимаемости (0=нет, 255=высокая)"),
 	/// w
-	HU(731, "w", "CMD w", "Chunked-extraction|Extract/test in chunks, on disk or 'ramdisk' (RAM)|The output -to folder MUST BE EMPTY|-test: no -to needed (-test -verify -to: the copy to check)"), /// 65.15a: the -to of -test
-	HIT(731, 0x67EE08A8, "Estrazione a pezzi|Estrae/prova a pezzi, su disco o 'ramdisk' (RAM)|La cartella -to di output DEVE ESSERE VUOTA|-test: senza -to (-test -verify -to: copia da controllare)"),
-	HRU(731, 0x67EE08A8, "Извлечение кусками|Извлечь/проверить кусками, на диск или в 'ramdisk' (RAM)|Папка вывода -to ДОЛЖНА БЫТЬ ПУСТОЙ|-test: -to не нужен (-test -verify -to: проверяемая копия)"),
+	HU(731, "w", "CMD w", "Chunked-extraction|Extract/test in chunks, on disk or 'ramdisk' (RAM)|The output -to folder MUST BE EMPTY|-test: no -to needed (-test -verify -to: the copy to check)|A * in the archive name: every archive (-to: a folder each, named after it)"), /// 65.15a: the -to of -test; 65.16g: *
+	HIT(731, 0x7A04BE68, "Estrazione a pezzi|Estrae/prova a pezzi, su disco o 'ramdisk' (RAM)|La cartella -to di output DEVE ESSERE VUOTA|-test: senza -to (-test -verify -to: copia da controllare)|Un * nel nome dell'archivio: ogni archivio (-to: una cartella ciascuno, col suo nome)"),
+	HRU(731, 0x7A04BE68, "Извлечение кусками|Извлечь/проверить кусками, на диск или в 'ramdisk' (RAM)|Папка вывода -to ДОЛЖНА БЫТЬ ПУСТОЙ|-test: -to не нужен (-test -verify -to: проверяемая копия)|* в имени архива: каждый архив (-to: у каждого своя папка с его именем)"),
 	HU(732, "w", "-maxsize X", "Maxsize of the chunk @ X bytes"),
 	HIT(732, 0xF75D4764, "Dimensione massima del pezzo @ X byte"),
 	HRU(732, 0xF75D4764, "Максимальный размер куска @ X байт"),
@@ -156561,13 +156918,19 @@ losetup -d /dev/loop0
 	HIT(751, 0xE2CE025E, "Il test migliore (con scrittura su disco SSD z:\\)"),
 	HRU(751, 0xE2CE025E, "Лучший тест (с записью на SSD z:\\)"),
 #endif
+	HE(1833, "w", "Test in RAM every archive of a folder", "w z:\\test\\*.zpaq -ramdisk -test -checksum -ssd"),
+	HIT(1833, 0xF0180CB3, "Prova in RAM ogni archivio di una cartella"),
+	HRU(1833, 0xF0180CB3, "Тест в RAM каждого архива папки"),
+	HE(1834, "w", "Extract every archive (a folder each)", "w z:\\test\\*.zpaq -to p:\\out -ramdisk"),
+	HIT(1834, 0xF13676CE, "Estrae ogni archivio (una cartella ciascuno)"),
+	HRU(1834, 0xF13676CE, "Извлечь каждый архив (у каждого своя папка)"),
 	HBREVE(752, "w", "Extract/test large files in chunks"),
 	HIT(752, 0x1F1A26F0, "Estrae/prova file grandi a pezzi"),
 	HRU(752, 0x1F1A26F0, "Извлечь/проверить большие файлы кусками"),
 	/// tw (65.15b)
-	HU(1794, "tw", "CMD tw", "Test in RAM: every file decompressed, its whole|hash against the stored one; nothing written|(w -ramdisk -test -checksum -ssd, a dashboard)|A folder after the archive: against the files on disk|too, as t archive folder (+external, -internal)"),
-	HIT(1794, 0x05181A2F, "Prova in RAM: ogni file decompresso, il suo hash|intero contro quello salvato; non scrive nulla|(w -ramdisk -test -checksum -ssd, con cruscotto)|Una cartella dopo l'archivio: anche contro i file|sul disco, come t archivio cartella (+external, -internal)"),
-	HRU(1794, 0x05181A2F, "Тест в RAM: каждый файл распаковывается, его полный|хеш сверяется с сохранённым; ничего не пишется|(w -ramdisk -test -checksum -ssd, с панелью)|Папка после архива: ещё и сверка с файлами на|диске, как t архив папка (+external, -internal)"),
+	HU(1794, "tw", "CMD tw", "Test in RAM: every file decompressed, its whole|hash against the stored one; nothing written|(w -ramdisk -test -checksum -ssd, a dashboard)|A folder after the archive: against the files on disk|too, as t archive folder (+external, -internal)|A * in the archive name: every archive, one after the other"),
+	HIT(1794, 0x4805DE09, "Prova in RAM: ogni file decompresso, il suo hash|intero contro quello salvato; non scrive nulla|(w -ramdisk -test -checksum -ssd, con cruscotto)|Una cartella dopo l'archivio: anche contro i file|sul disco, come t archivio cartella (+external, -internal)|Un * nel nome dell'archivio: ogni archivio, uno dopo l'altro"),
+	HRU(1794, 0x4805DE09, "Тест в RAM: каждый файл распаковывается, его полный|хеш сверяется с сохранённым; ничего не пишется|(w -ramdisk -test -checksum -ssd, с панелью)|Папка после архива: ещё и сверка с файлами на|диске, как t архив папка (+external, -internal)|* в имени архива: каждый архив, один за другим"),
 	HU(1801, "tw", "-to X", "Against the files where x -to X would put them"),
 	HIT(1801, 0xFEE10B4D, "Contro i file dove x -to X li metterebbe"),
 	HRU(1801, 0xFEE10B4D, "Сверка с файлами там, куда их положил бы x -to X"),
@@ -156587,6 +156950,12 @@ losetup -d /dev/loop0
 	HE(1802, "tw", "Against what x -to put out", "tw z:\\1.zpaq -to d:\\restored"),
 	HIT(1802, 0xEC4C639D, "Contro quello che x -to ha estratto"),
 	HRU(1802, 0xEC4C639D, "Сверка с тем, что извлёк x -to"),
+	HE(1831, "tw", "Every archive of a folder", "tw z:\\test\\*.zpaq"),
+	HIT(1831, 0xC7680A10, "Ogni archivio di una cartella"),
+	HRU(1831, 0xC7680A10, "Каждый архив папки"),
+	HE(1832, "tw", "Every archive (*NIX: in quotes)", "tw \"/copie/*.zpaq\""),
+	HIT(1832, 0xC12FEEF6, "Ogni archivio (*NIX: tra virgolette)"),
+	HRU(1832, 0xC12FEEF6, "Каждый архив (*NIX: в кавычках)"),
 	HE(1799, "tw", "With less RAM", "tw z:\\1.zpaq -frugal"),
 	HIT(1799, 0x4D8C19B2, "Con meno RAM"),
 	HRU(1799, 0x4D8C19B2, "С меньшим объёмом RAM"),
@@ -159498,6 +159867,13 @@ losetup -d /dev/loop0
 	HTESTO(1621, "@frasi", 'a', 0, " zpaqfranz -he a           => ask examples for command 'a'"),
 	HIT(1621, 0x2C788537, " zpaqfranz -he a           => esempi del comando 'a'"),
 	HRU(1621, 0x2C788537, " zpaqfranz -he a           => примеры команды 'a'"),
+	/// 65.16g: the search of the switches, and with * ?
+	HTESTO(1844, "@frasi", 'a', 0, " zpaqfranz   h -key        => what -key does, in every command"),
+	HIT(1844, 0xD7C0F671, " zpaqfranz   h -key        => cosa fa -key, in ogni comando"),
+	HRU(1844, 0xD7C0F671, " zpaqfranz   h -key        => что делает -key, в каждой команде"),
+	HTESTO(1845, "@frasi", 'a', 0, " zpaqfranz   h -no*        => every switch -no..., * and ? as jolly"),
+	HIT(1845, 0xDFE4C452, " zpaqfranz   h -no*        => ogni switch -no..., * e ? come jolly"),
+	HRU(1845, 0xDFE4C452, " zpaqfranz   h -no*        => каждый ключ -no..., * и ? как шаблон"),
 	HTESTO(1622, "@frasi", 'a', 0, "Usage full:"),
 	HIT(1622, 0xCCBBE1E5, "Uso completo:"),
 	HRU(1622, 0xCCBBE1E5, "Полное использование:"),
@@ -159953,12 +160329,12 @@ losetup -d /dev/loop0
 	HTESTO(1767, "@flag", 'a', 0, "Drive image"),
 	HIT(1767, 0xAC1C3DEA, "Immagine di un'unita'"),
 	HRU(1767, 0xAC1C3DEA, "Образ диска"),
-	HTESTO(1768, "@flag", 'a', 0, "-image: a live map of the source (default)"),
-	HIT(1768, 0x467B6981, "-image: una mappa dal vivo della sorgente (default)"),
-	HRU(1768, 0x467B6981, "-image: живая карта источника (по умолчанию)"),
-	HTESTO(1769, "@flag", 'a', 0, "-image: no live map, the classic progress line"),
-	HIT(1769, 0x6DDF2410, "-image: niente mappa dal vivo, la classica riga di avanzamento"),
-	HRU(1769, 0x6DDF2410, "-image: без живой карты, классическая строка прогресса"),
+	HTESTO(1768, "@flag", 'a', 0, "A live map (or bars) on the console (default)"),
+	HIT(1768, 0xF6818F43, "Una mappa (o barre) dal vivo sulla console (default)"),
+	HRU(1768, 0xF6818F43, "Живая карта (или полосы) на консоли (по умолчанию)"),
+	HTESTO(1769, "@flag", 'a', 0, "No live map nor bars (every command): the classic lines"),
+	HIT(1769, 0xECCB0492, "Niente mappa ne' barre dal vivo (ogni comando): le righe classiche"),
+	HRU(1769, 0xECCB0492, "Без живой карты и полос (все команды): классические строки"),
 	HTESTO(1770, "@flag", 'a', 0, "ac, xc, f: choose on a screen (what to take, where to restore, what f does)"),
 	HIT(1770, 0x20C5102F, "ac, xc, f: sceglie a video (cosa prendere, dove ripristinare, cosa fa f)"),
 	HRU(1770, 0x20C5102F, "ac, xc, f: выбор на экране (что брать, куда восстанавливать, что делает f)"),
@@ -160230,6 +160606,8 @@ static const franz_helpcomando g_helpcomandi[]=
 	{"collision", "collision", "Admin    ", 7},
 	{"consolidate", "consolidatebackup", "Admin    ", 7},
 	{"crop", "crop", "Admin    ", 7},
+	{"repack", "repack", "Admin    ", 7}, /// 65.16a
+	{"purge", "repack", "Admin    ", 7}, /// 65.16g: repack, by another name
 	{"dump", "dump", "Admin    ", 7},
 	{"k", "k", "Admin    ", 7},
 	{"m", "m", "Admin    ", 7},
@@ -160662,14 +161040,27 @@ static size_t help_distanza(const string &i_a, const string &i_b)
 	}
 	return riga[i_b.size()];
 }
-/// the switch of the help nearest to a mistyped one ("": none near enough)
-static string help_vicino(const string &i_switch)
+/*
+	65.16g: every switch the help knows: its lines, the flags, the hashes. i_dentro (h a -no*): only in those helps
+	(the flags and the hashes if one of them lists them)
+*/
+static void help_tutti(std::set<string> &o_tutti, const std::set<string> *i_dentro)
 {
-	std::set<string> tutti;
-	vector<string>	 s;
+	vector<string> s;
+	bool		   flags = (i_dentro == NULL);
+	bool		   hashes= (i_dentro == NULL);
 	for (size_t i= 0; i < g_helpquante; i++)
 	{
 		const franz_helpriga &r= g_helprighe[i];
+		if ((i_dentro != NULL) && (!i_dentro->count(r.comando)))
+			continue;
+		if (r.tipo == 'g')
+		{
+			if (r.colore == 'f')
+				flags= true;
+			if ((r.colore == 'h') || (r.colore == 'H'))
+				hashes= true;
+		}
 		if ((r.tipo == 'r') || (r.tipo == 'g'))
 			help_switch(r.testata, s);
 		else if (r.tipo == 't')
@@ -160677,14 +161068,42 @@ static string help_vicino(const string &i_switch)
 		else
 			continue;
 		for (size_t k= 0; k < s.size(); k++)
-			tutti.insert(s[k]);
+			o_tutti.insert(s[k]);
 	}
-	for (MAPPAFLAGS::iterator p= g_programflags.mappaflags.begin(); p != g_programflags.mappaflags.end(); ++p)
-		if (p->first.find(' ') == string::npos)
-			tutti.insert(p->first);
-	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
-		if (p->second.switchname != "")
-			tutti.insert(p->second.switchname);
+	if (flags)
+		for (MAPPAFLAGS::iterator p= g_programflags.mappaflags.begin(); p != g_programflags.mappaflags.end(); ++p)
+			if (p->first.find(' ') == string::npos)
+				o_tutti.insert(p->first);
+	if (hashes)
+		for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+			if (p->second.switchname != "")
+				o_tutti.insert(p->second.switchname);
+}
+/// 65.16g: a switch against a jolly: * any characters (none too), ? one
+static bool help_jolly(const char *i_jolly, const char *i_testo)
+{
+	for (; *i_jolly; ++i_jolly, ++i_testo)
+	{
+		if (*i_jolly == '*')
+		{
+			for (const char *t= i_testo;; ++t)
+			{
+				if (help_jolly(i_jolly + 1, t))
+					return true;
+				if (*t == 0)
+					return false;
+			}
+		}
+		if ((*i_testo == 0) || ((*i_jolly != '?') && (*i_jolly != *i_testo)))
+			return false;
+	}
+	return *i_testo == 0;
+}
+/// the switch of the help nearest to a mistyped one ("": none near enough)
+static string help_vicino(const string &i_switch)
+{
+	std::set<string> tutti;
+	help_tutti(tutti, NULL);
 	string vicino;
 	size_t meglio= 3;
 	for (std::set<string>::iterator p= tutti.begin(); p != tutti.end(); ++p)
@@ -160774,6 +161193,41 @@ int help_cerca(int i_argc, const char **i_argv)
 				helps.push_back(c);
 		}
 	int			   esito= 0;
+	/// 65.16g: h -no*: a switch with * or ? is every switch of the help that matches it (h a -no*: of a), one name for
+	/// each key (-nofast and -fast are one), said first; then each one as if asked by itself
+	vector<string> espansi;
+	for (size_t n= 0; n < cercati.size(); n++)
+	{
+		const string &c= cercati[n];
+		if (c.find_first_of("*?") == string::npos)
+		{
+			espansi.push_back(c);
+			continue;
+		}
+		std::set<string> tutti;
+		help_tutti(tutti, (comando != "") ? &dentro : NULL);
+		std::set<string> chiavi;
+		string			 elenco;
+		int				 quanti= 0;
+		for (std::set<string>::iterator p= tutti.begin(); p != tutti.end(); ++p)
+			if ((p->size() > 1) && ((*p)[0] == '-') && (p->find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_", 1) == string::npos) && /// (not what a text says: -no*, -no...)
+				help_jolly(c.c_str(), p->c_str()) && chiavi.insert(help_chiave(*p)).second)
+			{
+				espansi.push_back(*p);
+				elenco+= " " + *p;
+				++quanti;
+			}
+		if (quanti == 0)
+		{
+			myprintf("03805$ %s: no switch of this zpaqfranz is like it%s%s\n", c.c_str(), (comando != "") ? " in " : "", comando.c_str());
+			esito= 1;
+			continue;
+		}
+		color_yellow();
+		myprintf("03806: %s: %s switch(es):%s\n", c.c_str(), migliaia(quanti), elenco.c_str());
+		color_restore();
+	}
+	cercati.swap(espansi);
 	vector<string> s;
 	for (size_t n= 0; n < cercati.size(); n++)
 	{
@@ -161347,7 +161801,7 @@ void Jidac::usage(bool i_flagdie= true)
 	color_restore();
 	moreprint(": zpaqfranz h ", true);
 	color_green();
-	moreprint("-key -n", true);
+	moreprint("-key -no*", true); /// 65.16g: -no* with a jolly (it was -n)
 	color_restore();
 	moreprint((string(" ") + help_t("(switches in every command)") + "  zpaqfranz h ").c_str(), true);
 	color_green();
@@ -161447,6 +161901,8 @@ void Jidac::usageall(string i_command)
 		moreprint(help_t(" zpaqfranz   h all -nomore => everything, ready to be piped"));
 		moreprint(help_t(" zpaqfranz   h a           => ask help and examples for command 'a'"));
 		moreprint(help_t(" zpaqfranz -he a           => ask examples for command 'a'"));
+		moreprint(help_t(" zpaqfranz   h -key        => what -key does, in every command")); /// 65.16g
+		moreprint(help_t(" zpaqfranz   h -no*        => every switch -no..., * and ? as jolly"));
 		help_lingue(); /// 65.14m: the languages there are
 		moreprint(" ");
 		for (MAPPAHELP::iterator p= help_map.begin(); p != help_map.end(); ++p)
@@ -162066,7 +162522,7 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 			if ((command=='a') || (command=='Z') || (command=='O'))
 				nuovoarchivio=!fileexists(get_final_part(archive));
 			/// 65.13m: the new key of password (-key2) is a new archive's too: twice
-			const bool duevolte=nuovoarchivio || ((command=='6') && (i_string=="-key2"));
+			const bool duevolte=nuovoarchivio || (((command=='6') || (command==4)) && (i_string=="-key2")); /// 65.16c: repack too
 			if (spassword!="")
 			{
 				if (duevolte)
@@ -162856,8 +163312,8 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagslow,			"-slow",				"Reduce CPU usage",											"");
 	g_programflags.add(&flagshutdown,		"-shutdown",			"Shutdown-after-add",											"");
 	g_programflags.add(&flagimage,			"-image",				"Drive image",										"");
-	g_programflags.add(&flagdashboard,		"-dashboard",			"-image: a live map of the source (default)",		"",nuovodefault);
-	g_programflags.add(&flagnodashboard,	"-nodashboard",			"-image: no live map, the classic progress line",	"");
+	g_programflags.add(&flagdashboard,		"-dashboard",			"A live map (or bars) on the console (default)",		"",nuovodefault);
+	g_programflags.add(&flagnodashboard,	"-nodashboard",			"No live map nor bars (every command): the classic lines",	"");
 	g_programflags.add(&flagelevated,		"-elevated",			"",												""); /// not in the help: set by the relaunch of mount
 #ifdef _WIN32
 	g_programflags.add(&flagacfake,			"-acfake",				"",												""); /// not in the help: for the tests of xc (ac on a disk that is not the one of Windows)
@@ -163736,6 +164192,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"big",			'/',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"count",	    '[',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"consolidate",	'Y',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"repack",		4,argc,argv,&i)); /// 65.16a
+		else if (cli_filesandcommand(opt,"purge",		4,argc,argv,&i)); /// 65.16g: repack, by another name
 		else if (cli_filesandcommand(opt,"zfsrestore",	'%',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfslist",		'B',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfspurge",	'C',argc,argv,&i));
@@ -163936,7 +164394,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 			fullarchive="";
 
-			if ((command=='x') || (command=='t'))
+			if ((command=='x') || (command=='t') || (command=='w')) /// 65.16g: w and tw too
 			{
 				const char* star	=strrchr(argv[i], '*');
 				///const char* qmark	=NULL; //conflict with multipart strrchr(argv[i], '?');
@@ -167305,9 +167763,17 @@ inline string mount_winfsp_mountpoint(const string& mountpoint)
 		return string("\\\\.\\")+(char)toupper((unsigned char)mountpoint[0])+":";
 	return mountpoint;
 }
+inline DWORD used_drive_letters()
+{
+	return GetLogicalDrives() | mapped_network_drives();
+}
+inline bool drive_letter_in_use(const string& i_lettera)
+{
+	return (used_drive_letters() & (1u<<(toupper((unsigned char)i_lettera[0])-'A')))!=0;
+}
 inline string first_free_drive_letter()
 {
-	DWORD used= GetLogicalDrives() | mapped_network_drives();
+	DWORD used= used_drive_letters();
 	for (char c= 'Z'; c>='D'; --c)
 		if (!(used & (1u<<(c-'A')))) return string(1, c)+":";
 	return "";
@@ -168382,13 +168848,14 @@ int Jidac::mount()
 	bool apri_finder= false; /// mountpoint made by us: show it in the Finder
 #endif
 #ifdef _WIN32
+	// No mountpoint or "*": first free drive letter, announced BEFORE the
+	// (possibly long) scan, with an Explorer window opened once mounted.
+	/// 65.16g: chosen again just before mounting, see below
+	const bool auto_drive= mountpoint=="" || mountpoint=="*";
 	{
 		// WinFsp missing: download, verify and (admin + captcha) install it, then quit
 		if (kickstart_mount()!=0)
 			return 2;
-		// No mountpoint or "*": first free drive letter, announced BEFORE the
-		// (possibly long) scan, with an Explorer window opened once mounted.
-		bool auto_drive= mountpoint=="" || mountpoint=="*";
 		if (auto_drive)
 		{
 			mountpoint= first_free_drive_letter();
@@ -168398,8 +168865,6 @@ int Jidac::mount()
 				return 2;
 			}
 			myprintf("94013: Mount point (first free drive letter) %s\n", mountpoint.c_str());
-			if (!flagtest) /// -test: nobody is looking, and it unmounts in a moment
-				open_explorer_when_mounted(mountpoint);
 		}
 		else
 		if (mount_is_drive_letter(mountpoint) && isadmin())
@@ -168412,6 +168877,12 @@ int Jidac::mount()
 				myprintf("94031! %c: is a network drive mapped by this user: choose another letter (or none)\n", c);
 				return 2;
 			}
+		}
+		/// 65.16g: a letter in use (another mount): said now, not after the scan by WinFsp ("mount point in use")
+		if ((!auto_drive) && mount_is_drive_letter(mountpoint) && drive_letter_in_use(mountpoint))
+		{
+			myprintf("94034! %c: is in use (another mount?): choose another letter (or none: the first free one)\n", (char)toupper((unsigned char)mountpoint[0]));
+			return 2;
 		}
 	}
 #else
@@ -168644,6 +169115,34 @@ int Jidac::mount()
 			myprintf("94305: mount test: %s files to check (index read again, as x does)\n", migliaia(prova.files.size()));
 	}
 
+#ifdef _WIN32
+	/*
+		65.16g: the letter again, now. Another mount (another shell) may have taken it while this one read its index:
+		both chose it before their scan, the first one mounted got it, WinFsp gave the other "mount point in use".
+		The first free one is taken now; a letter given: an error. Explorer only now (before, a scan longer than its
+		30 s of waiting and it never opened)
+	*/
+	if (mount_is_drive_letter(mountpoint) && drive_letter_in_use(mountpoint))
+	{
+		if (!auto_drive)
+		{
+			myprintf("94034! %c: is in use (another mount?): choose another letter (or none: the first free one)\n", (char)toupper((unsigned char)mountpoint[0]));
+			g_mount= NULL;
+			return 2;
+		}
+		const string prima= mountpoint;
+		mountpoint		  = first_free_drive_letter();
+		if (mountpoint=="")
+		{
+			myprintf("94012! no free drive letter available\n");
+			g_mount= NULL;
+			return 2;
+		}
+		myprintf("94035: %s was taken meanwhile (another mount?): mount point %s\n", prima.c_str(), mountpoint.c_str());
+	}
+	if (auto_drive && (!flagtest)) /// -test: nobody is looking, and it unmounts in a moment
+		open_explorer_when_mounted(mountpoint);
+#endif
 	// FUSE argv: program, mountpoint, options
 	vector<string> fargs;
 	fargs.push_back("zpaqfranz");
@@ -168994,6 +169493,7 @@ int Jidac::doCommand()
 	}
 #endif
 	else if (command=='+') return crop();
+	else if (command==4)   return repackversions(); /// 65.16a: repack
 #ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='!') return isopen();
 #endif ///NOSFTPEND
@@ -169117,7 +169617,7 @@ int Jidac::doCommand()
 	else if (command=='t') return multisomething();
 	else if (command=='u') return utf();
 	else if (command=='v') return verify(true);
-	else if (command=='w') return flagtw ? conlastoria(extractw()) : extractw(); /// 65.15t: tw is a test
+	else if (command=='w') return multisomething(); /// 65.16g: w and tw with a * in the name, every archive (65.15t: tw is a test)
 	else if (command=='x') return multisomething();
 #ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='y') return sfx();
@@ -172441,8 +172941,17 @@ int set_creation_time(const char *filepath, time_t creation_time)
 	return -1;
 }
 
+/// 65.16h: -tar in every ANCIENT build too, not only NAS (the issue again, on 65.15: Oracle Linux 7.9 built by hand
+/// with -DANCIENT, "79531! Cannot get metadata" for every file). What it needs is old POSIX (lstat, readlink, lchown,
+/// mknod, mkfifo, utime). Not on ESXi (not wanted there: refused, see add), and OPEN does not save (as before).
+/// TAR_SECONDS: no utimensat here (UTIME_NOW comes with it: glibc 2.6, macOS 10.13) => times in seconds, as utime()
+/// gives them back, and the symlinks keep the time of the extraction
+#if defined(ANCIENT) && !defined(NAS) && !defined(UTIME_NOW)
+#define TAR_SECONDS
+#endif
+
 /// The nanoseconds of the times (0 where struct stat does not have them)
-#if (defined(ANCIENT) && !defined(NAS)) || defined(ESX) || defined(OPEN) /// 65.15z10: NAS (musl) has st_mtim
+#if defined(TAR_SECONDS) || defined(ESX) || defined(OPEN) /// 65.15z10: NAS (musl) has st_mtim
 #define TAR_MTIMENS(x) 0
 #define TAR_ATIMENS(x) 0
 #elif defined(__APPLE__)
@@ -172457,10 +172966,10 @@ int set_creation_time(const char *filepath, time_t creation_time)
 /// i_hardlinkto: the archived name of the first file of its hard link group, if it is not the first
 /// 65.15z10: the NAS builds too (ANCIENT for the rest): a static NAS binary is what runs on an old Linux (an issue,
 /// Oracle Linux 7.9: "79531! Cannot get metadata" for every file, -tar did nothing). Only with -tar: on a NAS that
-/// has not something of it, it fails there, and -tar is not given
+/// has not something of it, it fails there, and -tar is not given. 65.16h: every ANCIENT but ESX (see TAR_SECONDS)
 int savefilemetadata(const char *filepath, struct franz_tar *o_tar, const string &i_hardlinkto)
 {
-#if (defined(ANCIENT) && !defined(NAS)) || defined(OPEN) /// 65.15z10: NAS too (see above)
+#if defined(ESX) || defined(OPEN) /// 65.16h: was (ANCIENT && !NAS) || OPEN
 	(void)filepath;
 	(void)o_tar;
 	(void)i_hardlinkto;
@@ -172565,7 +173074,7 @@ int savefilemetadata(const char *filepath, struct franz_tar *o_tar, const string
 	return 0;
 #endif
 }
-#if !defined(ANCIENT) || defined(NAS) /// 65.15z10
+#ifndef ESX /// 65.15z10; 65.16h: every ANCIENT but ESX
 static int validate_metadata(const struct franz_posix *metadata)
 {
 	if (metadata == NULL)
@@ -172628,7 +173137,7 @@ static int validate_metadata(const struct franz_posix *metadata)
 	return 0;
 }
 #endif
-#if !defined(ANCIENT) || defined(NAS) /// 65.9z: for restorefilemetadata(), that does nothing there: unused functions (-Wall); 65.15z10: NAS too
+#ifndef ESX /// 65.9z: for restorefilemetadata(), that does nothing there: unused functions (-Wall); 65.15z10: NAS too; 65.16h: every ANCIENT but ESX
 /// -numeric off: by name, if that name exists here (as tar), else the number
 static uid_t tar_restoreuid(const struct franz_posix *i_posix)
 {
@@ -172665,7 +173174,7 @@ static int tar_settimes(const char *i_filepath, const struct franz_posix *i_posi
 	tar_getext(i_posix, ext);
 	const time_t mtime= (time_t)atoll(tar_field(i_posix->mtime, sizeof(i_posix->mtime)).c_str());
 	const time_t atime= (time_t)atoll(tar_field(i_posix->atime, sizeof(i_posix->atime)).c_str());
-#if (defined(ANCIENT) && !defined(NAS)) || defined(ESX) /// 65.15z10: NAS has utimensat
+#ifdef TAR_SECONDS /// 65.15z10: NAS has utimensat; 65.16h: so does an ANCIENT on a glibc >= 2.6
 	if (i_link)
 		return 0;
 	struct utimbuf times;
@@ -172687,7 +173196,7 @@ int g_tarnotroot= 0; /// x -tar not as root: owners and devices that could not b
 /// i_hardlinkto: where the first name of its hard link group is now (LNKTYPE), else ""
 int restorefilemetadata(const char *filepath, const struct franz_posix *metadata, const string &i_hardlinkto)
 {
-#if defined(ANCIENT) && !defined(NAS) /// 65.15z10
+#ifdef ESX /// 65.15z10; 65.16h: was ANCIENT && !NAS
 	(void)filepath;
 	(void)metadata;
 	(void)i_hardlinkto;
@@ -176608,7 +177117,7 @@ void *scriviramtodisk(void *t)
 			if (myfile == FPNULL)
 			{
 				myprintf("\n");
-				myprintf("00851! Hard guru during fopen (no free RAM?)!\n");
+				myprintf("00851! Hard guru: cannot create <<%Z>>\n", par->filenameondisk[i].c_str()); /// 65.16i: it said "no free RAM?"
 				seppuku();
 			}
 			par->o_timefilesystem+= (mtime() - startfilesystem);
@@ -178238,7 +178747,7 @@ int Jidac::mycopy()
 	{
 		vista= CP_RIGA;
 #ifndef ANCIENT
-		if (sourcelist.size() == 1)
+		if ((sourcelist.size() == 1) && (!flagnodashboard)) /// 65.16b: -nodashboard, the line with the bar
 			vista= CP_MAPPA;
 #endif
 	}
@@ -180824,6 +181333,103 @@ int Jidac::isopen()
 	Section: main
 */
 
+/*
+	65.16f: the console as it was, written straight on it (no buffer of the program in between): its colors (Windows:
+	the attributes of the start, and ESC[0m when it takes ANSI; *nix: ESC[0m), the cursor shown. With i_finale the mode
+	of the console l changed too (not before: the text of l still to be written has its escapes in it). At the start of
+	the control-C handler, just before its exit, at any exit (atexit). Nothing on what is not a console
+*/
+void colori_ripristina(bool i_finale)
+{
+#ifdef _WIN32
+	const HANDLE h	 = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD		 modo= 0;
+	if ((h == INVALID_HANDLE_VALUE) || (h == NULL) || (!GetConsoleMode(h, &modo)))
+		return;
+	if (!flagnocolor)
+	{
+		if (modo & ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+		{
+			DWORD scritti= 0;
+			WriteConsoleA(h, "\x1b[0m", 4, &scritti, NULL);
+		}
+		const int colori= (g_console_attributes >= 0) ? g_console_attributes : g_console_iniziali;
+		if (colori >= 0)
+			SetConsoleTextAttribute(h, (WORD)colori);
+	}
+	if (i_finale && g_outbuf_vt)
+		SetConsoleMode(h, g_outbuf_mode);
+	CONSOLE_CURSOR_INFO cursore;
+	if (GetConsoleCursorInfo(h, &cursore) && (!cursore.bVisible))
+	{
+		cursore.bVisible= TRUE;
+		SetConsoleCursorInfo(h, &cursore);
+	}
+#else
+	(void)i_finale;
+	if (!isatty(STDOUT_FILENO))
+		return;
+	const char	 *ripristino= flagnocolor ? "\x1b[?25h" : "\x1b[0m\x1b[?25h";
+	const ssize_t scritti	= write(STDOUT_FILENO, ripristino, strlen(ripristino));
+	(void)scritti;
+#endif
+}
+static void colori_alluscita()
+{
+	colori_ripristina(true);
+}
+
+/*
+	65.16g: control-C during repack: its new archive, never finished (<to>.tmp, <to>.tmp.franzen), is deleted.
+	Windows: first the thread of repack stops where it draws its map (up to 5 s: then on all the same), then the
+	files on the .tmp are closed (what writes it; what reads it in the check, Franzen: only if that thread stopped,
+	else it may be reading it), then deleted. *nix: deleted at once (an open file can be)
+*/
+static void rp_controlc()
+{
+	if (g_rp_temporaneo == "")
+		return;
+	const string nomi[2]= {g_rp_temporaneo, franzenname(g_rp_temporaneo)};
+#ifdef _WIN32
+	if (GetCurrentThreadId() != g_rp_filo)
+	{
+		g_rp_fermo		 = 1;
+		const DWORD inizio= GetTickCount(); /// (by the clock: a Sleep(10) is 15.6 ms)
+		while ((g_rp_fermo != 2) && (GetTickCount() - inizio < 5000))
+			Sleep(10);
+	}
+	if (g_rp_fp != FPNULL)
+	{
+		if (g_archivefp == g_rp_fp) /// (closed here: not again by what comes after)
+			g_archivefp= FPNULL;
+		myfclose(&g_rp_fp);
+	}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (g_p_franzenfile) /// the output with Franzen, being written
+	{
+		g_p_franzenfile->close();
+		g_p_franzenfile= 0;
+	}
+	if ((g_rp_fermo == 2) && g_rp_franzenlettore)
+	{
+		g_rp_franzenlettore->close();
+		g_rp_franzenlettore= 0;
+	}
+#endif /// NOSFTPEND
+#endif
+#endif
+	for (int i= 0; i < 2; ++i)
+		if (exists(nomi[i]))
+		{
+			if (delete_file(nomi[i].c_str()))
+				myprintf("03791: repack: the new archive was not finished: <<%Z>> deleted\n", nomi[i].c_str());
+			else
+				myprintf("03792! repack: cannot delete <<%Z>> (not finished: delete it)\n", nomi[i].c_str());
+		}
+	g_rp_temporaneo= "";
+}
+
 /// control-c handler
 void my_handler(int s)
 {
@@ -180832,10 +181438,18 @@ void my_handler(int s)
 		g_usbtest_stop= true;
 		return;
 	}
+	/// 65.16f: this thread only colors the console from now on (colore_fermo): the others go on for a while
+#ifdef _WIN32
+	g_filo_controlc= GetCurrentThreadId();
+#else
+	g_filo_controlc= pthread_self();
+#endif
 	g_control_c= true; // block open new files for write
-	color_restore();
-	resetconsolecolor();
-	fflush(stdout);
+	/// 65.16f: l was buffering: what is said now goes to the screen (it went into that buffer, never written)
+	g_outbuf_on= false;
+	/// (color_restore went into that buffer too; resetconsolecolor kept the color there was)
+	fflush(stdout); /// first: a color still in the buffer of stdout would come after the restore
+	colori_ripristina(false);
 	myprintf("\n\n");
 	if (g_fermatafatale)
 		myprintf("01249: STOPPED by an error, try some housekeeping...\n");
@@ -180880,6 +181494,7 @@ void my_handler(int s)
 	tty.c_lflag|= ECHO;
 	tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 #endif // corresponds to #ifdef (#ifdef unix)
+	rp_controlc(); /// 65.16g
 
 	if (g_chunk_size > 0)
 	{
@@ -181174,6 +181789,8 @@ void my_handler(int s)
 #endif // corresponds to #ifndef (#ifndef _WIN32)
 
 	myprintf("\nGoodbye after %1.3f seconds (%s)\n", (mtime() - g_start) / 1000.0, timetohuman((uint32_t)((mtime() - g_start) / 1000.0)).c_str());
+	fflush(stdout);
+	colori_ripristina(true); /// 65.16f: once more, the last: another thread may have colored after the first one
 	exit(g_fermatafatale ? g_fermatafatale : 1);
 }
 
@@ -181423,6 +182040,12 @@ int zpaq_main_internal(int argc, const char **argv)
 #else
     signal(SIGINT, my_handler); // the control-C handler
 #endif
+    static bool colorialluscita= false; /// 65.16f: the colors and the cursor of the console as they were, whatever the
+    if (!colorialluscita)               /// exit (once: this runs again in the same process as a DLL)
+    {
+        colorialluscita= true;
+        atexit(colori_alluscita);
+    }
 
 #ifdef _WIN32
     if (!flagnoconsole)
@@ -184923,6 +185546,8 @@ int Jidac::multisomething()
 			return extract();
 		else if (command == 't')
 			return conlastoria(test()); /// 65.15t
+		else if (command == 'w')
+			return extractwnomi(); /// 65.16i
 		else
 		{
 			myprintf("01526! unknown multisomething %c\n", command);
@@ -184986,6 +185611,12 @@ int Jidac::multisomething()
 #endif // corresponds to #ifdef (#ifdef unix)
 	}
 
+	/// 65.16g: a folder the jolly takes too (a * alone) is not an archive
+	for (DTMap::iterator p= thedt.begin(); p != thedt.end();)
+		if ((p->first != "") && (p->first[p->first.size() - 1] == '/'))
+			thedt.erase(p++);
+		else
+			++p;
 	if (thedt.size() == 0)
 	{
 		myprintf("01533: no archive found => quit\n");
@@ -184994,6 +185625,16 @@ int Jidac::multisomething()
 	myprintf("01534: Founded %s archive(s), working\n", migliaia(thedt.size()));
 	int risultato= 0;
 	int therun	 = 0;
+	/// 65.16g: w (tw) changes its files, its -to and some flags while it works (-test: a -to of its own; tw: -verify
+	/// with a folder): every archive starts from the command line
+	const vector<string> filesprima	  = files;
+	const vector<string> tofilesprima = tofiles;
+	const bool			 verifyprima  = flagverify;
+	const bool			 ramdiskprima = flagramdisk;
+	const bool			 paranoidprima= flagparanoid;
+	int					 quanti[3]	  = {0, 0, 0}; /// 65.16g: OK, WARNING, ERROR, said at the end
+	vector<string>		 nonok;
+	vector<string>		 nonokstato;
 	for (DTMap::iterator p= thedt.begin(); p != thedt.end(); ++p)
 	{
 		therun++;
@@ -185005,6 +185646,34 @@ int Jidac::multisomething()
 			riscomando= extract();
 		else if (command == 't')
 			riscomando= conlastoria(test()); /// 65.15t
+		else if (command == 'w')
+		{
+			files		= filesprima;
+			tofiles		= tofilesprima;
+			flagverify	= verifyprima;
+			flagramdisk = ramdiskprima;
+			flagparanoid= paranoidprima;
+			/// a real extraction wants an EMPTY -to: every archive into a folder of its own, named after it
+			if ((!flagtest) && (tofiles.size() == 1))
+			{
+				string cartella= tofiles[0];
+				if ((cartella != "") && (cartella[cartella.size() - 1] != '/') && (cartella[cartella.size() - 1] != '\\'))
+					cartella+= '/';
+				tofiles[0]= cartella + prendinomefileebasta(archive) + "/";
+				myprintf("03793: w: <<%Z>> into <<%Z>>\n", archive.c_str(), tofiles[0].c_str());
+			}
+			g_tantiarchivi= true; /// a password nobody can type: this archive only
+			try
+			{
+				riscomando= extractwnomi(); /// 65.16i
+			}
+			catch (std::exception &e) /// (the throws of extractw come before its threads): the next archive all the same
+			{
+				myprintf("03794! <<%Z>>: %s\n", archive.c_str(), e.what());
+				riscomando= 2;
+			}
+			g_tantiarchivi= false;
+		}
 
 		string stato= "";
 		if (riscomando == 0)
@@ -185031,7 +185700,32 @@ int Jidac::multisomething()
 
 		if (riscomando > risultato) /// the worst archive decides: two WARNING are not an ERROR
 			risultato= riscomando;
+		quanti[(riscomando >= 2) ? 2 : ((riscomando == 1) ? 1 : 0)]++;
+		if (riscomando != 0)
+		{
+			nonok.push_back(archive);
+			nonokstato.push_back(stato);
+		}
 	}
+	/// 65.16g: all of them at the end (the lines of every run are far above)
+	if (risultato == 0)
+	{
+		color_green();
+		myprintf("03795: %s archive(s): %s OK, %s WARNING, %s ERROR\n", migliaia(thedt.size()), migliaia2(quanti[0]), migliaia3(quanti[1]), migliaia4(quanti[2]));
+	}
+	else if (risultato == 1)
+	{
+		color_yellow();
+		myprintf("03795$ %s archive(s): %s OK, %s WARNING, %s ERROR\n", migliaia(thedt.size()), migliaia2(quanti[0]), migliaia3(quanti[1]), migliaia4(quanti[2]));
+	}
+	else
+	{
+		color_red();
+		myprintf("03795! %s archive(s): %s OK, %s WARNING, %s ERROR\n", migliaia(thedt.size()), migliaia2(quanti[0]), migliaia3(quanti[1]), migliaia4(quanti[2]));
+	}
+	color_restore();
+	for (size_t i= 0; i < nonok.size(); i++)
+		myprintf("03796: %-7s <<%Z>>\n", nonokstato[i].c_str(), nonok[i].c_str());
 	return risultato;
 }
 
@@ -193109,8 +193803,12 @@ int Jidac::extractw()
 				++p;
 	}
 #ifdef _WIN32
+	g_nomicollisi= 0; /// 65.16i
 	if ((!flagtest) || confronto)
+	{
 		sanitizzawindows(); /// filenames Windows cannot create, see extract() (-test -verify: where x puts them)
+		collisioniwindows(); /// 65.16i: as x: w lost them, and a test must look where x puts them
+	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	for (unsigned i= 0; i < block.size(); ++i)
 	{
@@ -193507,7 +194205,19 @@ int Jidac::extractw()
 			rc= gravita_danno(recordvinfo, false);
 		return rc;
 	}
-	return errors > 0;
+	/// 65.16i: errors is a count, > 0 was 1, "with warnings": w -paranoid -verify with files that are not as stored. An
+	/// ERROR; only the errors of read_archive: as above, it depends on what is missing
+	if (errors == 0)
+		return 0;
+	if ((erroriletti > 0) && (errors == erroriletti))
+		return gravita_danno(recordvinfo, false);
+	return 2;
+}
+/// 65.16i: w and tw, and the names changed: every file there, not with its name: a WARNING, as x
+int Jidac::extractwnomi()
+{
+	const int rc= flagtw ? conlastoria(extractw()) : extractw(); /// 65.15t: tw is a test
+	return ((rc == 0) && (g_nomicollisi > 0)) ? 1 : rc;
 }
 /// 65.15b tw archive folder: as t archive folder, the files on disk that are not in the archive (+external), and the
 /// ones of the archive not in the folder (-internal). As t: with bytes rc 2, only empty ones rc 1 (the files are good,
@@ -194225,6 +194935,17 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, i
 			string myhash	 = "";
 			string mycrc32	 = "";
 			string myhashtype= "";
+			/*
+				65.16g: a file not decompressed whole (its block skipped: a bad checksum) has no RAM (NULL: w -ramdisk
+				-checksum crashed here) or not all of it (w -ramdisk -test said 0). Not written, not hashed: an error,
+				as w without -ramdisk says (02497) and -test -verify, tw (wconfronta)
+			*/
+			if ((!isdirectory(finalfile)) && (!job.windowed) && (p->second.ptr.size() > 0) && ((p->second.pramfile == NULL) || (p->second.data != (int64_t)p->second.ptr.size())))
+			{
+				myprintf("03797! NOT EXTRACTED: %s of %s fragments (a damaged block?) <<%Z>>\n", migliaia((p->second.data > 0) ? p->second.data : 0), migliaia2(p->second.ptr.size()), p->first.c_str()); /// (the stored name: -test has a -to of its own)
+				errors++;
+				continue;
+			}
 			if (!isdirectory(finalfile))
 			{
 				int64_t		 mycreationtime= 0;
@@ -194238,9 +194959,10 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, i
 								   myhashtype,
 								   myhash,
 								   mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
-				myfilesize.push_back((*p->second.pramfile).filesize);
-				expected+= (*p->second.pramfile).filesize;
-				mydata.push_back((*p->second.pramfile).data);
+				const bool ram= (p->second.pramfile != NULL); /// (an empty file: no fragment, maybe no RAM)
+				myfilesize.push_back(ram ? (*p->second.pramfile).filesize : 0);
+				expected+= ram ? (*p->second.pramfile).filesize : 0;
+				mydata.push_back(ram ? (*p->second.pramfile).data : NULL);
 				file_expected++;
 			}
 			else
@@ -208752,7 +209474,7 @@ static void usb_colore(int i_quale)
 		color_cyan();
 		break;
 	case 5: /// grey: still to do
-		if (flagnocolor)
+		if (flagnocolor || colore_fermo()) /// 65.16f
 			break;
 #ifdef _WIN32
 		color_something(8);
@@ -209059,7 +209781,7 @@ void franzbarre::grigio(int i_tipo)
 		usb_colore(5);
 		return;
 	}
-	if (flagnocolor)
+	if (flagnocolor || colore_fermo()) /// 65.16f
 		return;
 #ifdef _WIN32
 	color_something(7);
@@ -209070,7 +209792,7 @@ void franzbarre::grigio(int i_tipo)
 void franzbarre::inizia(const string &i_titolo, const vector<int64_t> &i_totali, const vector<vector<std::pair<int64_t, int> > > &i_tipi)
 {
 	m_titolo= i_titolo;
-	m_live	= (!isAnyOutputRedirected()) && (!flagnoeta) && (!flagsilent) && (!flagpakka) && (!flagterse) && (!flagstdout);
+	m_live	= (!isAnyOutputRedirected()) && (!flagnoeta) && (!flagsilent) && (!flagpakka) && (!flagterse) && (!flagstdout) && (!flagnodashboard); /// 65.16b
 #ifdef _WIN32
 	m_utf8= (!flagnocolor) && (!flagnoconsole);
 #else
@@ -216331,31 +217053,10 @@ int Jidac::extract()
 			backupdir_basekey= backupdir_comparekey(includetrailingbackslash(backupdir_slashes(backupdir_roots[0])));
 	}
 
-#ifdef _WIN32
-	bool flagunix= false;
-	flagunix	 = searchunixfile();
-	if (flagunix)
-	{
-		myprintf("00900: Found Unix attributes on Windows => checking for collision\n");
-		vector<string> kollisioni;
-		uint32_t	   fixati		= casekollision(dt, kollisioni, true);
-		int			   casecollision= kollisioni.size();
-		if (casecollision > 0)
-		{
-			myprintf("00901: Case collisions        %9s (try -fixcase)\n", migliaia(casecollision));
-			if (flagverbose)
-				for (unsigned int i= 0; i < kollisioni.size(); i++)
-				{
-					myprintf("     collision  <<%Z>>\n", kollisioni[i].c_str());
-				}
-			if (fixati > 0)
-				myprintf("00902: -fixcase fixed         %9s files\n", migliaia(fixati));
-			kollisioni.clear();
-		}
-		else
-			myprintf("00903: No unfixed case collision (extracting Unix filenames on Windows)\n");
-	}
-#endif // corresponds to #ifdef (#ifdef _WIN32)
+	/// 65.16i: what the end of this run says about the names
+	g_nomicollisi	  = 0;
+	g_closefalliti	  = 0;
+	g_closedispositivi= 0;
 
 #ifdef _WIN32
 	if ((flagutf) || (flagflat) || flagfix255 || flagfixcase || (flagparanoid) || (flagfixreserved))
@@ -216388,7 +217089,28 @@ int Jidac::extract()
 			std::pair<map<string, DT>::iterator, bool> ret;
 			ret= mymap.insert(std::pair<string, DT>(newname, p->second));
 			if (ret.second == false)
-				myprintf("00904: KOLLISION! %s\n", newname.c_str());
+			{
+				/// 65.16i: it was only said, and the file was lost (-fixreserved: finale. and finale; -fix255...), as
+				/// in sanitizzawindows: a deleted one takes no name, a file gets the first free one, and a WARNING
+				if (p->second.date == 0)
+					continue;
+				if (ret.first->second.date == 0)
+				{
+					ret.first->second= p->second;
+					continue;
+				}
+				if (!isdirectory(newname))
+				{
+					string libero;
+					int	   numero= 0;
+					do
+						libero= nomecollisione(newname, ++numero, false);
+					while ((mymap.find(libero) != mymap.end()) || (dt.find(libero) != dt.end()));
+					myprintf("00904$ KOLLISION! <<%Z>> extracted as <<%Z>>\n", newname.c_str(), libero.c_str());
+					mymap.insert(std::pair<string, DT>(libero, p->second));
+					g_nomicollisi++;
+				}
+			}
 		}
 #endif // corresponds to #ifndef (#ifndef ANCIENT)
 		dt= mymap;
@@ -216424,7 +217146,10 @@ int Jidac::extract()
 		if (!flagtest)
 			if (repack == "")
 				if (!flagzip) /// inside a zip every *nix name is legal: do not touch them
+				{
 					sanitizzawindows();
+					collisioniwindows(); /// 65.16i: after them, on the final names (it was casekollision, before them)
+				}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 #ifdef _WIN32
 	/// inside a zip a >255 name is perfectly legal: nothing to warn about
@@ -217901,6 +218626,10 @@ int Jidac::extract()
 #endif
 	if ((sullarchivio > 0) && (errors < 2))
 		errors= 2;
+	if ((g_closedispositivi > 0) && (errors < 2)) /// 65.16i: a "file" that was a device: its data are not there
+		errors= 2;
+	if (((g_nomicollisi > 0) || (g_closefalliti > 0)) && (errors == 0)) /// 65.16i: names changed, or a date not set
+		errors= 1;
 	if (nienteselezionato && (errors == 0))
 		errors= 1;
 	if ((skipped_diversi > 0) && (errors == 0))
@@ -223887,8 +224616,8 @@ static const franzscegliriga g_sceglirighe[]= {
 	{"v", "-ssd -verbose -noeta", "", "", "", false},
 	{"p", "-verify -verbose -noeta", "", "", "", false},
 	{"pp", "-verify -paranoid -ssd -verbose -noeta", "", "", "", false},
-	{"w", "-ramdisk -frugal -ssd -test -verbose -checksum -verify -paranoid -longpath", "-to", "Where to extract (an EMPTY folder)", "", false},
-	{"tw", "-frugal -verbose -noeta", "", "", "", false}, /// 65.15b
+	{"w", "-ramdisk -frugal -ssd -test -verbose -checksum -verify -paranoid -longpath", "-to", "Where to extract (an EMPTY folder)", "", true}, /// 65.16g: more archives too
+	{"tw", "-frugal -verbose -noeta", "", "", "", true}, /// 65.15b, 65.16g: more archives too
 	{"zip", "-all -deflate -force -space", "-to", "The .zip to write (nothing: next to the archive)", "", false},
 	{"image", "-raw -image -force -space", "-to", "Where: x.vhd x.vhdx x.vmdk x.raw, a folder, a drive (G: with -image)", "", false},
 	{"crop", "-kill -force", "-to", "The smaller archive to write", "", false},
@@ -231589,7 +232318,7 @@ void franzdash::inizia(const string &i_titolo, int64_t i_blocchi, int64_t i_byte
 	m_bytesblocco= i_bytesblocco > 0 ? i_bytesblocco : 1;
 	m_blocchi	 = i_blocchi > 0 ? i_blocchi : 1;
 	m_totale	 = i_totale;
-	m_live		 = !isAnyOutputRedirected();
+	m_live		 = (!isAnyOutputRedirected()) && (!flagnodashboard); /// 65.16b: -nodashboard for every map (not live: a line every 10 s)
 #ifdef _WIN32
 	m_utf8= (!flagnocolor) && (!flagnoconsole);
 #else
@@ -236792,6 +237521,2426 @@ string cp_copia(const string &i_infile, const string &i_cartella, bool i_append,
 	}
 	franzcopia copia(i_infile, destinazione, i_verifica, i_percento, i_vista);
 	return copia.copia(i_append) ? destinazione : "";
+}
+
+/*
+	65.16a: repack archive versions -to new.zpaq [-m X] [-force] [-key X] [-t N] [-nodashboard]
+	A new archive with only the versions given: 1,5,10-20 (version 1, version 5, from 10 to 20; in any
+	order: they are sorted, each one once). What none of them uses is thrown away; what they use is
+	decompressed, checked and compressed again with -m (default -m8, -m1 in a build without zstd). Every
+	version taken: the same archive, compressed in another way.
+	Version j of the new archive is version K(j) of the old one, as -until K(j) sees it: the same files,
+	with the same dates, attributes and franz blocks (hashes, CRC-32) byte by byte, and the same date of
+	its c block (-until with a date says the same). The fragments are numbered again from 1, in the order
+	they are written (a d block has 0 as its first fragment: movable, see add); a fragment goes into the
+	first version taken whose files use it (every fragment of a version is used by a file of it, as
+	read_archive -until wants), and a d block of the old archive that no version taken uses is never
+	read. Not carried: VFILE-info, the -fast history and the state of -fastadd (they
+	speak of the versions of the old archive: the next add starts them again). VCOMMENT goes with its
+	version, renumbered.
+	Apart from the rest of the program: its own reader of the index (c h i blocks; strict: what does not
+	check is an error, nothing is skipped), the CompressJob of add to write. No "hopefully": the new
+	archive is written as <name>.tmp, read again from the disk by the same reader, every block of it
+	decompressed and every fragment checked by its SHA-1, every version compared with the one of the old
+	archive it comes from (names, dates, attributes, the SHA-1 and size of every fragment of every file).
+	Only then it gets its name. Anything wrong: rc 2, no output.
+	Not yet: multipart, backup, -chunk as output. As input: what InputArchive opens (a file, a multipart
+	with ????, a backup)
+	65.16b: what it does is shown (rp_cruscotto): on a console the map of the archive (franzdash, as cp and
+	f), its cells filled while the index is read, then the state of its d blocks: skipped (no version taken
+	uses it: never read), to do, read, decompressed and checked, compressed, written. Compressed and written
+	are seen as one: the CompressJob of add says when a block is written, not when it is compressed. Then the
+	map of the new archive while it is checked. -nodashboard (and an ANCIENT build): a line every second
+	65.16c: the encryption of the output, as the switches of password: as the source by default; -key2 X
+	another AES key (-key2 . none: AES => plain), -franzen2 X another Franzen password (. none); -franzen on a
+	source without Franzen: the output with it. So plain, AES, Franzen, AES+Franzen into any of them
+	65.16d: -all instead of the list: every version (the archive compressed again, or encrypted again)
+*/
+/// a fragment of an archive read by repack
+struct rp_frammento
+{
+	char	 sha1[20];
+	uint32_t usize;
+	uint32_t blocco; /// its d block (in rp_archivio::blocchi)
+};
+/// a d block: where, how big, which fragments
+struct rp_blocco
+{
+	int64_t	 offset;   /// where it starts (an offset of InputArchive)
+	uint32_t bsize;	   /// its compressed size (from its h block)
+	uint32_t primo;	   /// its first fragment
+	uint32_t quanti;   /// how many
+	int		 versione; /// the version that wrote it
+};
+/// a record of an i block: a file (data not 0) or a deletion
+struct rp_record
+{
+	string			 nome;
+	int64_t			 data;
+	string			 attr; /// the attribute bytes as they are (the franz block of zpaqfranz in them)
+	vector<uint32_t> ptr;
+	rp_record() : data(0)
+	{
+	}
+};
+struct rp_versione
+{
+	int64_t			  data;		/// of its c block
+	uint32_t		  primo;	/// its first fragment (the number of its c block)
+	vector<rp_record> record;	/// files and deletions, as in its i blocks
+	bool			  commento; /// it has a VCOMMENT...
+	string			  testo;	/// ...with this text
+	int				  scartati; /// VFILE-info and -fast pointers (not carried)
+	rp_versione() : data(0), primo(0), commento(false), scartati(0)
+	{
+	}
+};
+struct rp_archivio
+{
+	vector<rp_versione>	 versioni;	 /// from 1 ([0] is not a version)
+	vector<rp_frammento> frammenti;	 /// from 1 ([0] is not a fragment)
+	vector<rp_blocco>	 blocchi;
+	bool				 incompleta; /// a transaction not finished at the end: ignored, as everybody does
+	int64_t				 dimensione;
+	rp_archivio() : incompleta(false), dimensione(0)
+	{
+	}
+};
+
+/*
+	The d blocks of a version, compressed as add does: the CompressJob with its threads (one thread: here, as
+	add on ESXi). 65.16b: never waiting on it with the map still: a block is given only when the queue has room,
+	the end only when every block is written, waiting a little at a time (attesa: the map, drawn again)
+*/
+class rp_compressore
+{
+	OutputArchive	&out;
+	int				 threads;
+	CompressJob		*job;
+	vector<ThreadID> tid;
+	ThreadID		 wid;
+	int				 prima;		  /// blocks written by the versions before this one
+	int				 contati;	  /// blocks of this version already counted
+	int				 dati;		  /// blocks of this version given to compress
+	int64_t			 bytes;		  /// what the blocks written took, compressed (every version)
+	int64_t			 crudiscritti; /// ...and their data before
+	vector<int64_t>	 crudi;		  /// the data of every block given, every version
+	void (*attesa)(void *);		  /// while waiting (or NULL)
+	void *attesadato;
+	/// the blocks of this version written up to now
+	int scrittiora()
+	{
+		lock(job->mutex);
+		const int quanti= (int)job->csize.size();
+		release(job->mutex);
+		return quanti;
+	}
+	void aspetta()
+	{
+		if (attesa != NULL)
+			attesa(attesadato);
+#ifdef _WIN32
+		Sleep(50);
+#else
+		usleep(50000);
+#endif
+	}
+
+  public:
+	vector<int> csize;
+	rp_compressore(OutputArchive &i_out, int i_threads) : out(i_out), threads(i_threads), job(NULL), prima(0), contati(0), dati(0), bytes(0), crudiscritti(0), attesa(NULL), attesadato(NULL)
+	{
+	}
+	void attendi(void (*i_attesa)(void *), void *i_dato)
+	{
+		attesa	  = i_attesa;
+		attesadato= i_dato;
+	}
+	/// what is written up to now, every version: blocks, bytes, their data before (the write thread pushes the size of a block when it writes it)
+	void conta(int &o_blocchi, int64_t &o_bytes, int64_t &o_crudi)
+	{
+		if (job != NULL)
+			lock(job->mutex);
+		const vector<int> &v= (job != NULL) ? job->csize : csize;
+		while (contati < (int)v.size())
+		{
+			bytes+= v[contati];
+			if (prima + contati < (int)crudi.size())
+				crudiscritti+= crudi[prima + contati];
+			++contati;
+		}
+		if (job != NULL)
+			release(job->mutex);
+		o_blocchi= prima + contati;
+		o_bytes	 = bytes;
+		o_crudi	 = crudiscritti;
+	}
+	void inizia()
+	{
+		int		blocchi= 0;
+		int64_t quanti = 0;
+		int64_t prime  = 0;
+		conta(blocchi, quanti, prime); /// the version before: all of it
+		prima+= contati;
+		contati= 0;
+		dati   = 0;
+		csize.clear();
+		if (threads > 1)
+		{
+			tid.resize(threads * 2 - 1);
+			job= new CompressJob(threads, tid.size(), &out);
+			for (unsigned i= 0; i < tid.size(); ++i)
+				run(tid[i], compressThread, job);
+			run(wid, writeThread, job);
+		}
+	}
+	/// i_crudi: its data (the block without its list at the end)
+	void blocco(StringBuffer &io_sb, const string &i_nome, const string &i_metodo, int64_t i_crudi)
+	{
+		crudi.push_back(i_crudi);
+		++dati;
+		if (job != NULL)
+		{
+			while (dati - 1 - scrittiora() >= (int)tid.size()) /// the queue is full: appendz would wait, still
+				aspetta();
+			job->appendz(io_sb, i_nome.c_str(), i_metodo);
+			return;
+		}
+		StringBuffer compresso;
+		libzpaq::compressBlock(&io_sb, &compresso, i_metodo.c_str(), i_nome.c_str(), "jDC\x01");
+		io_sb.resize(0);
+		csize.push_back(compresso.size());
+		const char	 *p= compresso.c_str();
+		int64_t		  n= compresso.size();
+		const int64_t N= 1 << 30;
+		while (n > N)
+		{
+			out.write(p, N);
+			p+= N;
+			n-= N;
+		}
+		if (n > 0)
+			out.write(p, (int)n);
+	}
+	/// every block written (its threads end)
+	void finisci()
+	{
+		if (job == NULL)
+			return;
+		while (scrittiora() < dati)
+			aspetta();
+		StringBuffer vuoto;
+		job->appendz(vuoto, 0, "");
+		for (unsigned i= 0; i < tid.size(); ++i)
+			join(tid[i]);
+		join(wid);
+		csize= job->csize;
+		delete job;
+		job= NULL;
+	}
+};
+
+/// the states of a piece of an archive on the map of repack
+enum
+{
+	RP_VUOTO= 0,	   /// the index is not read up to here yet
+	RP_INDICE,		   /// c h i blocks
+	RP_SALTATO,		   /// a d block no version taken uses: never read
+	RP_DAFARE,		   /// a d block to read
+	RP_LETTURA,		   /// being read
+	RP_DECOMPRESSIONE, /// being decompressed and checked
+	RP_COMPRESSIONE,   /// decompressed and checked: its fragments to the compressor
+	RP_SCRITTO,		   /// compressed again and written
+	RP_CONTROLLATO,	   /// the new archive: decompressed and checked
+	RP_ERRORE,
+	RP_STATI
+};
+#ifndef ANCIENT
+/// a cell with more blocks shows the strongest: an error, the work going on, what is still to do, what is done
+static int rp_forza(int i_stato)
+{
+	static const int forza[RP_STATI]= {0, 1, 2, 5, 9, 8, 7, 4, 4, 10};
+	return ((i_stato >= 0) && (i_stato < RP_STATI)) ? forza[i_stato] : 0;
+}
+#endif
+/// 65.16g: control-C (Windows): the thread of repack stops here for ever, the handler deletes its .tmp and exits
+static void rp_fermati()
+{
+#ifdef _WIN32
+	if (g_rp_fermo != 1)
+		return;
+	g_rp_fermo= 2;
+	while (true)
+		Sleep(1000);
+#endif
+}
+/// 65.16g: while repack has its .tmp, a control-C deletes it (g_rp_temporaneo)
+struct rp_guardia
+{
+	rp_guardia(const string &i_temporaneo)
+	{
+		g_rp_fermo= 0;
+		g_rp_fp	  = FPNULL;
+#ifdef _WIN32
+		g_rp_filo= GetCurrentThreadId();
+#endif
+		g_rp_temporaneo= i_temporaneo;
+	}
+	~rp_guardia()
+	{
+		g_rp_temporaneo= "";
+		g_rp_fp		   = FPNULL;
+	}
+};
+/*
+	What repack shows. A console (not -nodashboard, -noeta, -terse, -silent, catpaq; not an ANCIENT build):
+	the map of the archive (franzdash), a cell for a piece of it, and two lines of numbers. -nodashboard (an
+	ANCIENT build): the two lines as one, every second. Redirected: nothing (the lines at the end say it)
+*/
+class rp_cruscotto
+{
+  public:
+	rp_cruscotto();
+	~rp_cruscotto()
+	{
+		finale();
+	}
+	void inizia(const string &i_titolo, const rp_archivio *i_arc, int64_t i_totale, bool i_controllo);
+	void letto(int64_t i_pos, int i_versioni);					  /// the index is read up to here
+	void righe(const string &i_riga1, const string &i_riga2);	  /// lines of their own, until lavoro()
+	void lavoro(int64_t i_totale, int64_t i_dacomprimere); /// from here the lines are the numbers of the work
+	void compressore(rp_compressore *i_compressore)
+	{
+		m_comp= i_compressore;
+	}
+	/// 65.16g -quick: the blocks taken as they are, how big all of them are; one more written
+	void copie(int64_t i_totale)
+	{
+		m_copietotale= i_totale;
+	}
+	void copiato(int64_t i_bytes)
+	{
+		m_copiati+= i_bytes;
+	}
+	/// 65.16g: the index of a version being written (i blocks): how many files of how many (0, 0: done)
+	void indice(int64_t i_fatti, int64_t i_totale)
+	{
+		m_indice   = i_fatti;
+		m_indicetot= i_totale;
+		aggiorna();
+	}
+	/// ...and how big the other blocks are (compressed): the share of the copies in the work
+	void altri(int64_t i_bytes)
+	{
+		m_altri= i_bytes;
+	}
+	void fase(const string &i_fase)
+	{
+		m_fase= i_fase;
+	}
+	void blocco(uint32_t i_blocco, int i_stato);
+	void rimaste(uint32_t i_blocco, int i_letture);	   /// the reads still to come of a block (one, but data used again)
+	void inscrittura(uint32_t i_blocco, int i_ultimo); /// its fragments went into the blocks of the new archive up to i_ultimo
+	void aggiorna(bool i_subito= false);
+	void pulisci(); /// the line away, before a myprintf
+	void finale();
+	bool mappa() const
+	{
+		return m_mappa;
+	}
+
+  private:
+	bool							  m_mappa;
+	bool							  m_riga;
+	bool							  m_acceso;
+	bool							  m_controllo;
+	int								  m_modo; /// 0 the index, 1 lines of their own, 2 the work
+	const rp_archivio				 *m_arc;
+	rp_compressore					 *m_comp;
+	int64_t							  m_totale;
+	int64_t							  m_letto;
+	int								  m_versioni;
+	int64_t							  m_ultimo; /// the last draw (ms)
+	vector<uint8_t>					  m_stato;
+	vector<int>						  m_rimaste;
+	vector<std::pair<int, uint32_t> > m_attesa; /// blocks waiting to be written: (the last block of the new archive, the block)
+	size_t							  m_primaattesa;
+	string							  m_riga1;
+	string							  m_riga2;
+	string							  m_fase;
+	string							  m_corta;	 /// the work in one line (no map)
+	int64_t							  m_dafare;	 /// bytes to decompress
+	int64_t							  m_letti;	 /// compressed bytes read
+	int64_t							  m_fatti;	 /// decompressed and checked
+	int64_t							  m_scritti;	  /// compressed and written
+	int64_t							  m_dacomprimere; /// bytes to compress again (0: nothing to compress, the check)
+	int64_t							  m_compressi;	  /// ...compressed and written
+	int64_t							  m_inizio;		  /// of the work (ms)
+	int64_t							  m_copietotale;  /// 65.16g -quick: the blocks to copy as they are (bytes)
+	int64_t							  m_copiati;	  /// ...copied
+	int64_t							  m_altri;		  /// ...the other blocks (compressed bytes)
+	int64_t							  m_indice;		  /// 65.16g: the index being written, files done
+	int64_t							  m_indicetot;	  /// ...of (0: no index being written)
+	int								  m_lunga;	 /// the line on the console (to be cleared)
+#ifndef ANCIENT
+	franzdash m_dash;
+	int		  m_aspetto[RP_STATI];
+	void	  celle();
+#endif
+	int64_t dati(uint32_t i_blocco) const;
+	void	numeri(int64_t i_adesso);
+};
+rp_cruscotto::rp_cruscotto() : m_mappa(false), m_riga(false), m_acceso(false), m_controllo(false), m_modo(0), m_arc(NULL), m_comp(NULL), m_totale(1), m_letto(0), m_versioni(0), m_ultimo(0), m_primaattesa(0), m_dafare(0), m_letti(0), m_fatti(0), m_scritti(0), m_dacomprimere(0), m_compressi(0), m_inizio(0), m_copietotale(0), m_copiati(0), m_altri(0), m_indice(0), m_indicetot(0), m_lunga(0)
+{
+#ifndef ANCIENT
+	for (int i= 0; i < RP_STATI; ++i)
+		m_aspetto[i]= 0;
+#endif
+}
+void rp_cruscotto::inizia(const string &i_titolo, const rp_archivio *i_arc, int64_t i_totale, bool i_controllo)
+{
+	m_arc	   = i_arc;
+	m_totale   = (i_totale > 0) ? i_totale : 1;
+	m_controllo= i_controllo;
+	const bool console= (!isAnyOutputRedirected()) && (!flagnoeta) && (!flagterse) && (!flagsilent) && (!flagnoconsole) && (!flagcatpaqmode);
+	m_mappa			  = false;
+#ifndef ANCIENT
+	m_mappa= console && (!flagnodashboard);
+#endif
+	m_riga	= console && (!m_mappa);
+	m_acceso= m_mappa || m_riga;
+#ifndef ANCIENT
+	if (!m_mappa)
+		return;
+	m_aspetto[RP_VUOTO]			= m_dash.aspetto(' ', 0, false, "");
+	m_aspetto[RP_INDICE]		= m_dash.aspetto('i', 2, true, "index");
+	m_aspetto[RP_SALTATO]		= m_dash.aspetto('.', 5, false, "skipped (no version taken uses it)");
+	m_aspetto[RP_DAFARE]		= m_dash.aspetto('?', 5, true, i_controllo ? "to check" : "to do");
+	m_aspetto[RP_LETTURA]		= m_dash.aspetto('R', 7, true, "reading");
+	m_aspetto[RP_DECOMPRESSIONE]= m_dash.aspetto('D', 4, true, i_controllo ? "decompressing and checking" : "decompressing");
+	m_aspetto[RP_COMPRESSIONE]	= m_dash.aspetto('C', 6, true, "compressing");
+	m_aspetto[RP_SCRITTO]		= m_dash.aspetto('W', 1, true, "written");
+	m_aspetto[RP_CONTROLLATO]	= m_dash.aspetto('V', 1, true, "checked");
+	m_aspetto[RP_ERRORE]		= m_dash.aspetto('X', 3, true, "error");
+	m_dash.voce(m_aspetto[RP_DAFARE], i_controllo ? "to check" : "to do");
+	if (!i_controllo)
+		m_dash.voce(m_aspetto[RP_SALTATO], "skipped");
+	m_dash.voce(m_aspetto[RP_INDICE], "index");
+	m_dash.voce(m_aspetto[RP_LETTURA], "read");
+	m_dash.voce(m_aspetto[RP_DECOMPRESSIONE], i_controllo ? "check" : "decompress");
+	if (i_controllo)
+		m_dash.voce(m_aspetto[RP_CONTROLLATO], "good");
+	else
+	{
+		m_dash.voce(m_aspetto[RP_COMPRESSIONE], "compress");
+		m_dash.voce(m_aspetto[RP_SCRITTO], "written");
+	}
+	m_dash.voce(m_aspetto[RP_ERRORE], "error");
+	m_dash.inizia(i_titolo, m_totale, 1, m_totale, m_aspetto[RP_VUOTO]);
+#else
+	(void)i_titolo;
+#endif
+}
+void rp_cruscotto::letto(int64_t i_pos, int i_versioni)
+{
+	m_modo	  = 0;
+	m_letto	  = i_pos;
+	m_versioni= i_versioni;
+	aggiorna();
+}
+void rp_cruscotto::righe(const string &i_riga1, const string &i_riga2)
+{
+	m_modo = 1;
+	m_riga1= i_riga1;
+	m_riga2= i_riga2;
+}
+void rp_cruscotto::lavoro(int64_t i_totale, int64_t i_dacomprimere)
+{
+	m_modo		  = 2;
+	m_dafare	  = i_totale;
+	m_dacomprimere= i_dacomprimere;
+	m_inizio	  = mtime();
+}
+int64_t rp_cruscotto::dati(uint32_t i_blocco) const
+{
+	int64_t			 quanti= 0;
+	const rp_blocco &b	   = m_arc->blocchi[i_blocco];
+	for (uint32_t f= b.primo; f < b.primo + b.quanti; ++f)
+		quanti+= m_arc->frammenti[f].usize;
+	return quanti;
+}
+void rp_cruscotto::blocco(uint32_t i_blocco, int i_stato)
+{
+	if ((m_arc == NULL) || (i_blocco >= m_arc->blocchi.size()))
+		return;
+	if (m_stato.size() < m_arc->blocchi.size())
+		m_stato.resize(m_arc->blocchi.size(), (uint8_t)RP_DAFARE);
+	const int prima= m_stato[i_blocco];
+	if ((i_stato == RP_DECOMPRESSIONE) && (prima != RP_DECOMPRESSIONE))
+		m_letti+= m_arc->blocchi[i_blocco].bsize;
+	if (((i_stato == RP_COMPRESSIONE) || (i_stato == RP_CONTROLLATO)) && (prima == RP_DECOMPRESSIONE))
+		m_fatti+= dati(i_blocco);
+	m_stato[i_blocco]= (uint8_t)i_stato;
+}
+void rp_cruscotto::rimaste(uint32_t i_blocco, int i_letture)
+{
+	if (m_rimaste.size() <= i_blocco)
+		m_rimaste.resize(i_blocco + 1, 0);
+	m_rimaste[i_blocco]= i_letture;
+}
+void rp_cruscotto::inscrittura(uint32_t i_blocco, int i_ultimo)
+{
+	if ((i_blocco < m_rimaste.size()) && (m_rimaste[i_blocco] > 0))
+		--m_rimaste[i_blocco];
+	m_attesa.push_back(std::make_pair(i_ultimo, i_blocco));
+}
+/*
+	The two lines of the work: what is read, decompressed, compressed again; how fast, how long still. The
+	done is the slower of the two (the decompression of the old archive, the compression of the new one: with
+	a slow method the second); the ETA from it
+*/
+void rp_cruscotto::numeri(int64_t i_adesso)
+{
+	const double secondi= (i_adesso - m_inizio) / 1000.0;
+	double		 fatto	= (m_dafare > 0) ? (double)m_fatti / m_dafare : 1;
+	if ((m_dacomprimere > 0) && ((double)m_compressi / m_dacomprimere < fatto))
+		fatto= (double)m_compressi / m_dacomprimere;
+	/// 65.16g -quick: the blocks copied as they are count too, by their bytes, against the bytes of the others (to write:
+	/// in the source; to check: in the new archive). Without copies, as before
+	const bool copie= (m_copietotale > 0);
+	if (copie)
+	{
+		const double altri= (m_altri > 0) ? (double)m_altri : 0;
+		fatto			  = ((double)m_copiati + fatto * altri) / ((double)m_copietotale + altri);
+	}
+	if (fatto > 1)
+		fatto= 1;
+	char eta[32]= "--:--:--";
+	if ((fatto > 0.001) && (secondi > 0.5))
+	{
+		const int resto= (int)(secondi * (1 - fatto) / fatto);
+		snprintf(eta, sizeof(eta), "%02d:%02d:%02d", resto / 3600, (resto / 60) % 60, resto % 60);
+	}
+	const int64_t dentro= (secondi > 0.1) ? (int64_t)(m_fatti / secondi) : 0;
+	const int64_t fuori = (secondi > 0.1) ? (int64_t)(m_compressi / secondi) : 0;
+	const int64_t copia = (secondi > 0.1) ? (int64_t)(m_copiati / secondi) : 0; /// 65.16g
+	/// 65.16e: the size the new archive will have, as the blocks written so far go (their compressed size on their
+	/// data, for all the data): its d blocks, the index is little. ? until the first block is written
+	/// 65.16g -quick: the blocks copied are as big as they were
+	char proiezione[32]= "?";
+	if (m_compressi > 0)
+		snprintf(proiezione, sizeof(proiezione), "%s", tohuman(m_copietotale + (int64_t)((double)m_scritti * m_dacomprimere / m_compressi)));
+	else if (m_dacomprimere == 0)
+		snprintf(proiezione, sizeof(proiezione), "%s", tohuman(m_copietotale));
+	const int64_t nuovi= m_scritti + m_copiati;
+	char		  percento[16];
+	snprintf(percento, sizeof(percento), "%5.1f%%", 100.0 * fatto);
+	const string letti= tohuman(m_letti + m_copiati); /// 65.16g: what is read, the copies too
+	int			 larga= terminalwidth() - 1;		  /// a console too narrow: what counts less goes away
+	if (larga < 39)
+		larga= 39;
+	/// (80 columns: each line within them)
+	string riga1;
+	string riga2;
+	if (m_controllo)
+	{
+		riga1= m_fase + "  decompressed and checked " + tohuman2(m_fatti) + "/" + tohuman3(m_dafare);
+		if (copie)
+			riga1+= string("  compared ") + tohuman4(m_copiati) + "/" + tohuman5(m_copietotale);
+		riga2= string(percento) + "  ETA " + eta + "  read " + letti + "  " + tohuman4(dentro) + "/s";
+		if (copie)
+			riga2+= string("  compare ") + tohuman5(copia) + "/s";
+	}
+	else
+	{
+		riga1= m_fase + "  decompressed " + tohuman2(m_fatti) + "/" + tohuman3(m_dafare) + "  compressed " + tohuman4(m_compressi) + "/" + tohuman5(m_dacomprimere);
+		if (copie)
+		{
+			riga1+= string("  copied ") + tohuman(m_copiati) + "/" + tohuman2(m_copietotale);
+			if ((int)riga1.size() > larga)
+				riga1= m_fase + "  dec " + tohuman2(m_fatti) + "/" + tohuman3(m_dafare) + "  comp " + tohuman4(m_compressi) + "/" + tohuman5(m_dacomprimere) + "  copy " + tohuman(m_copiati) + "/" + tohuman2(m_copietotale);
+		}
+		const string velocita= string("  in ") + tohuman(dentro) + "/s  out " + tohuman2(fuori) + "/s" + (copie ? string("  copy ") + tohuman3(copia) + "/s" : string(""));
+		const string coda	 = string("  new ") + tohuman4(nuovi) + "=>" + proiezione;
+		riga2				 = string(percento) + "  ETA " + eta + "  read " + letti + velocita + coda;
+		if ((int)riga2.size() > larga) /// read goes away, the projection stays
+			riga2= string(percento) + "  ETA " + eta + velocita + coda;
+		if (copie && ((int)riga2.size() > larga)) /// ...then in and out: the copies are the work
+			riga2= string(percento) + "  ETA " + eta + "  copy " + tohuman3(copia) + "/s" + coda;
+	}
+	if ((!m_controllo) && (m_indicetot > 0)) /// 65.16g: a big index takes its time: what goes on
+		riga1= m_fase + "  writing its index " + migliaia(m_indice) + "/" + migliaia2(m_indicetot) + " files";
+	m_riga1= riga1;
+	m_riga2= riga2;
+	/// the line without the map: what counts first
+	char corta[300];
+	if (m_controllo)
+		snprintf(corta, sizeof(corta), "%s %5.1f%%  ETA %s  checked %s/%s", m_fase.c_str(), 100.0 * fatto, eta, tohuman(m_fatti + m_copiati), tohuman2(m_dafare + m_copietotale));
+	else if (m_indicetot > 0)
+		snprintf(corta, sizeof(corta), "%s  writing its index %s/%s files  new %s", m_fase.c_str(), migliaia(m_indice), migliaia2(m_indicetot), tohuman3(nuovi));
+	else
+		snprintf(corta, sizeof(corta), "%s %5.1f%%  ETA %s  new %s=>%s  out %s/%s", m_fase.c_str(), 100.0 * fatto, eta, tohuman3(nuovi), proiezione, tohuman(m_compressi), tohuman2(m_dacomprimere));
+	m_corta= corta;
+}
+#ifndef ANCIENT
+/// every cell: index (where the index is read), else the strongest state of its d blocks
+void rp_cruscotto::celle()
+{
+	const int64_t	quante= m_dash.celle();
+	vector<uint8_t> cella((size_t)quante, (uint8_t)RP_VUOTO);
+	for (int64_t c= 0; c < quante; ++c)
+		if (m_dash.primoblocco(c) < m_letto)
+			cella[(size_t)c]= RP_INDICE;
+	if (m_arc != NULL)
+		for (size_t b= 0; b < m_arc->blocchi.size(); ++b)
+		{
+			const rp_blocco &bb= m_arc->blocchi[b];
+			const int		 s = (b < m_stato.size()) ? m_stato[b] : RP_DAFARE;
+			const int64_t	 c1= m_dash.cella(bb.offset + bb.bsize - 1);
+			for (int64_t c= m_dash.cella(bb.offset); (c <= c1) && (c < quante); ++c)
+			{
+				uint8_t &x= cella[(size_t)c];
+				if ((x <= RP_INDICE) || (rp_forza(s) > rp_forza(x)))
+					x= (uint8_t)s;
+			}
+		}
+	for (int64_t c= 0; c < quante; ++c)
+		m_dash.imposta(c, m_aspetto[cella[(size_t)c]]);
+}
+#endif
+void rp_cruscotto::aggiorna(bool i_subito)
+{
+	rp_fermati(); /// 65.16g: control-C (Windows)
+	if (m_comp != NULL) /// what the compressor wrote: the blocks whose fragments are all in it are done
+	{
+		int		blocchi= 0;
+		int64_t bytes  = 0;
+		int64_t crudi  = 0;
+		m_comp->conta(blocchi, bytes, crudi);
+		m_scritti  = bytes;
+		m_compressi= crudi;
+		while ((m_primaattesa < m_attesa.size()) && (m_attesa[m_primaattesa].first < blocchi))
+		{
+			const uint32_t b= m_attesa[m_primaattesa++].second;
+			blocco(b, ((b < m_rimaste.size()) && (m_rimaste[b] > 0)) ? RP_DAFARE : RP_SCRITTO);
+		}
+	}
+	if (!m_acceso)
+		return;
+	const int64_t adesso= mtime();
+	if ((!i_subito) && (adesso - m_ultimo < (m_mappa ? 200 : 1000)))
+		return;
+	m_ultimo= adesso;
+	if (m_modo == 0)
+	{
+		char riga[200];
+		snprintf(riga, sizeof(riga), "%s %5.1f%%  %s of %s  versions %s", m_controllo ? "Reading the index of the new archive" : "Reading the index", 100.0 * m_letto / m_totale, tohuman(m_letto), tohuman2(m_totale), migliaia(m_versioni));
+		m_riga1= riga;
+		m_riga2= "";
+	}
+	else if (m_modo == 2)
+		numeri(adesso);
+#ifndef ANCIENT
+	if (m_mappa)
+	{
+		celle();
+		m_dash.righe(m_riga1, m_riga2);
+		m_dash.disegna();
+		return;
+	}
+#endif
+	string riga= (m_modo == 2) ? m_corta : m_riga1;
+	if ((m_modo != 2) && (m_riga2 != ""))
+		riga+= "  " + m_riga2;
+	int larga= terminalwidth() - 1;
+	if (larga < 39)
+		larga= 39;
+	if ((int)riga.size() > larga)
+		riga.resize(larga);
+	printf("\r%s", riga.c_str());
+	for (int i= (int)riga.size(); i < m_lunga; ++i)
+		printf(" ");
+	m_lunga= (int)riga.size();
+	fflush(stdout);
+}
+void rp_cruscotto::pulisci()
+{
+	if ((!m_riga) || (m_lunga == 0))
+		return;
+	printf("\r%*s\r", m_lunga, "");
+	fflush(stdout);
+	m_lunga= 0;
+}
+void rp_cruscotto::finale()
+{
+	if (!m_acceso)
+		return;
+	aggiorna(true);
+#ifndef ANCIENT
+	if (m_mappa)
+		m_dash.finale();
+#endif
+	pulisci();
+	m_acceso= false;
+}
+/// for rp_compressore: while it waits, the map is drawn again
+static void rp_attendi(void *i_cruscotto)
+{
+	((rp_cruscotto *)i_cruscotto)->aggiorna();
+}
+
+/// a version of a list: digits, or last (65.16g). -1 if neither
+static int rp_numero(const string &i_testo, int i_ultima)
+{
+	if (i_testo == "last")
+		return i_ultima;
+	if ((i_testo == "") || (i_testo.size() > 9) || (i_testo.find_first_not_of("0123456789") != string::npos))
+		return -1;
+	return atoi(i_testo.c_str());
+}
+/// 65.16g: "7d4w12my" => its rules (unit, how many periods; 0: all of them). "" if good, else what is wrong.
+/// o_regole empty: not rules (a version, a range, last)
+static string rp_regole(const string &i_pezzo, vector<std::pair<char, int> > &o_regole)
+{
+	o_regole.clear();
+	if ((i_pezzo == "") || (i_pezzo.find_first_not_of("0123456789hdwmy") != string::npos) || isdigit((unsigned char)i_pezzo[i_pezzo.size() - 1]))
+		return "";
+	size_t k= 0;
+	while (k < i_pezzo.size())
+	{
+		const size_t inizio= k;
+		while (isdigit((unsigned char)i_pezzo[k]))
+			++k;
+		const char unita= i_pezzo[k];
+		if (k - inizio > 9)
+			return "too many digits";
+		const int quanti= (k > inizio) ? atoi(i_pezzo.substr(inizio, k - inizio).c_str()) : 0;
+		if ((k > inizio) && (quanti < 1))
+			return string("0") + unita + ": from 1 (no number: all of them)";
+		o_regole.push_back(std::make_pair(unita, quanti));
+		++k;
+	}
+	return "";
+}
+/// 65.16g: the days from 1970-01-01 of a date of the civil calendar
+static int64_t rp_giorni(int i_anno, int i_mese, int i_giorno)
+{
+	const int	  y	 = i_anno - ((i_mese <= 2) ? 1 : 0);
+	const int64_t era= ((y >= 0) ? y : y - 399) / 400;
+	const int64_t yoe= y - era * 400;
+	const int64_t doy= (153 * (i_mese + ((i_mese > 2) ? -3 : 9)) + 2) / 5 + i_giorno - 1;
+	const int64_t doe= yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + doe - 719468;
+}
+/// 65.16g: the period of a date ("YYYY-MM-DD HH:MM:SS", as l shows it) for a unit. The week: the day of its Monday
+static int64_t rp_periodo(const string &i_data, char i_unita)
+{
+	if (i_data.size() < 19)
+		return 0;
+	const int	  anno	= atoi(i_data.substr(0, 4).c_str());
+	const int	  mese	= atoi(i_data.substr(5, 2).c_str());
+	const int	  giorno= atoi(i_data.substr(8, 2).c_str());
+	const int	  ora	= atoi(i_data.substr(11, 2).c_str());
+	const int64_t giorni= rp_giorni(anno, mese, giorno);
+	switch (i_unita)
+	{
+		case 'h':
+			return giorni * 24 + ora;
+		case 'd':
+			return giorni;
+		case 'w':
+			return giorni - (((giorni % 7) + 7 + 3) % 7); /// (1970-01-01 was a Thursday)
+		case 'm':
+			return anno * 100 + mese;
+		default:
+			return anno;
+	}
+}
+/*
+	"1,5,10-20" => the versions (1..ultima), sorted, each one once. "" if good, else what is wrong.
+	65.16g: last is the last version (7-last: from 7 to the last), Nlast the last N (all of them, if fewer).
+	65.16g: rules by date (7d4w12my, h d w m y, no number: all the periods): for each one the last version (the
+	highest number) of each of its N newest periods that have versions, counted from the last version (not from
+	today: an archive whose backups stopped is not emptied), the periods as l shows the dates (local; -utc).
+	The last version is always taken (every rule starts there); with rules the last i_riserva too (-n): a date
+	gone wrong cannot empty the archive. i_date: the date of every version (from 1). o_perche: why each one is
+	taken, o_conti: how many each rule took
+*/
+static string rp_elenco(const string &i_testo, const vector<int64_t> &i_date, int i_riserva, vector<int> &o_versioni, vector<string> &o_perche, string &o_conti)
+{
+	const int i_ultima= (int)i_date.size() - 1;
+	o_versioni.clear();
+	o_perche.assign(i_ultima + 1, "");
+	o_conti= "";
+	if (i_testo == "")
+		return "no version given";
+	vector<bool>				  presa(i_ultima + 1, false);
+	vector<std::pair<char, int> > regole;
+	size_t						  inizio= 0;
+	while (true)
+	{
+		const size_t virgola= i_testo.find(',', inizio);
+		const string pezzo	= i_testo.substr(inizio, (virgola == string::npos) ? string::npos : virgola - inizio);
+		string		 minuscolo;
+		for (size_t k= 0; k < pezzo.size(); ++k)
+			minuscolo+= (char)tolower((unsigned char)pezzo[k]);
+		vector<std::pair<char, int> > qui;
+		const string				  sbaglio= rp_regole(minuscolo, qui);
+		if (sbaglio != "")
+			return "\"" + pezzo + "\": " + sbaglio;
+		for (size_t i= 0; i < qui.size(); ++i)
+		{
+			for (size_t j= 0; j < regole.size(); ++j)
+				if (regole[j].first == qui[i].first)
+					return "\"" + pezzo + "\": " + string(1, qui[i].first) + " twice";
+			regole.push_back(qui[i]);
+		}
+		if (qui.empty())
+		{
+			const size_t trattino= minuscolo.find('-');
+			int			 da		 = rp_numero(minuscolo.substr(0, trattino), i_ultima);
+			int			 a		 = (trattino == string::npos) ? da : rp_numero(minuscolo.substr(trattino + 1), i_ultima);
+			if ((trattino == string::npos) && (minuscolo.size() > 4) && (minuscolo.compare(minuscolo.size() - 4, 4, "last") == 0))
+			{
+				const string n	   = minuscolo.substr(0, minuscolo.size() - 4);
+				const int	 quante= (n.find_first_not_of("0123456789") == string::npos) ? rp_numero(n, i_ultima) : -1; /// Nlast: N in digits
+				if (quante == 0)
+					return "\"" + pezzo + "\": Nlast are the last N versions, N from 1";
+				a = i_ultima;
+				da= (quante < 0) ? -1 : ((quante < i_ultima) ? i_ultima - quante + 1 : 1);
+			}
+			if ((da < 0) || (a < 0))
+				return "\"" + pezzo + "\" is not a version (N, A-B, A-last, last, Nlast, 7d4w12my)";
+			if ((da < 1) || (da > i_ultima) || (a > i_ultima))
+				return "\"" + pezzo + "\": the versions are from 1 to " + itos(i_ultima);
+			if (da > a)
+				return "\"" + pezzo + "\": the first version is after the last one";
+			for (int v= da; v <= a; ++v)
+			{
+				if (!presa[v])
+					o_perche[v]+= " " + minuscolo;
+				presa[v]= true;
+			}
+		}
+		if (virgola == string::npos)
+			break;
+		inizio= virgola + 1;
+	}
+	if (!regole.empty())
+	{
+		vector<string> date(i_ultima + 1);
+		for (int v= 1; v <= i_ultima; ++v)
+			date[v]= dateToString(flagutc, i_date[v]);
+		for (size_t r= 0; r < regole.size(); ++r)
+		{
+			const char		  unita = regole[r].first;
+			const int		  quanti= regole[r].second;
+			std::set<int64_t> visti;
+			for (int v= i_ultima; v >= 1; --v)
+			{
+				const int64_t periodo= rp_periodo(date[v], unita);
+				if (visti.count(periodo))
+					continue;
+				if ((quanti > 0) && ((int)visti.size() >= quanti))
+					break;
+				visti.insert(periodo);
+				presa[v]= true;
+				o_perche[v]+= " " + itos((int64_t)visti.size()) + unita;
+			}
+			o_conti+= ((quanti > 0) ? itos(quanti) : string("")) + unita + " " + itos((int64_t)visti.size()) + ", ";
+		}
+		int aggiunte= 0;
+		for (int v= ((i_riserva < i_ultima) ? i_ultima - i_riserva + 1 : 1); v <= i_ultima; ++v)
+			if (!presa[v])
+			{
+				presa[v]= true;
+				o_perche[v]+= " reserve";
+				++aggiunte;
+			}
+		o_conti+= "reserve (-n " + itos(i_riserva) + ") " + itos(aggiunte);
+	}
+	for (int v= 1; v <= i_ultima; ++v)
+		if (presa[v])
+			o_versioni.push_back(v);
+	return "";
+}
+
+/// the digits of a block name (jDC, 14 of date, the type, 10 of number)
+static int64_t rp_cifre(const string &i_nome, size_t i_da, size_t i_quante)
+{
+	int64_t numero= 0;
+	for (size_t k= i_da; k < i_da + i_quante; ++k)
+		numero= numero * 10 + (i_nome[k] - '0');
+	return numero;
+}
+
+/*
+	The index of an archive: c h i blocks, decompressed and checked (name, comment, size, SHA-1 of the
+	segment, one segment); the d blocks are jumped over, by the size in their c block, and they must be
+	exactly the ones of the h blocks. Strict: c and h numbered by fragment with no hole, i from 1 in every
+	version, every fragment of a file declared before it, nothing between the blocks. A transaction not
+	finished (its c says -1) ends the reading: it is not a version. "" if good, else what is wrong.
+	io_cr (or NULL): where it is, for the map
+*/
+static string rp_leggi(const string &i_nome, rp_archivio &o_arc, rp_cruscotto *io_cr)
+{
+	o_arc= rp_archivio();
+	o_arc.versioni.resize(1);
+	o_arc.frammenti.resize(1);
+	try
+	{
+		InputArchive in(i_nome.c_str()); /// 65.16c: Franzen too (-franzen), AES (-key): InputArchive decrypts
+		if (!in.isopen())
+			return "cannot open it";
+		o_arc.dimensione= in.totalsize();
+		int64_t pos		= in.tell(); /// 32 with -key: the salt
+		{
+			char	  s[4]= {0};
+			const int letti= in.read(s, 4);
+			if ((letti != 4) || (memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || (s[3] < 1))))
+				return (g_password != NULL) ? "wrong password, or not a zpaq archive" : "not a zpaq archive (encrypted? -key)";
+		}
+		int64_t	 datiqui = 0; /// where the next d block of this version is
+		int64_t	 datifine= 0; /// where its d blocks end
+		uint32_t attesoi = 1; /// its next i block
+		while (pos < o_arc.dimensione)
+		{
+			if (io_cr != NULL)
+				io_cr->letto(pos, (int)o_arc.versioni.size() - 1);
+			in.seek(pos, SEEK_SET);
+			libzpaq::Decompresser d;
+			d.setInput(&in);
+			if (!d.findBlock())
+				return itos(o_arc.dimensione - pos) + " bytes at the end that are not a block (a block cut? trim)";
+			if ((d.saltati > 0) || (d.corto > 0))
+				return "bytes that are not a block at offset " + itos(pos);
+			StringWriter nome, commento;
+			if (!d.findFilename(&nome))
+				return "a block with no segment at offset " + itos(pos);
+			d.readComment(&commento);
+			const string &n	   = nome.s;
+			bool		  buono= (n.size() == 28) && (n.compare(0, 3, "jDC") == 0) && (n[17] != 0) && (strchr("cdhi", n[17]) != NULL);
+			for (size_t k= 3; buono && (k < 28); ++k)
+				if ((k != 17) && (!isdigit((unsigned char)n[k])))
+					buono= false;
+			if (!buono)
+				return "a block that is not of a journaling archive at offset " + itos(pos) + " (streaming?)";
+			int64_t usize= 0;
+			size_t	k	 = 0;
+			while ((k < commento.s.size()) && (k < 10) && isdigit((unsigned char)commento.s[k]))
+				usize= usize * 10 + (commento.s[k++] - '0');
+			if ((k == 0) || (usize > 0xffffffffLL) || (commento.s.compare(k, string::npos, " jDC\x01") != 0))
+				return "the block " + n + " has not the comment of a journaling block";
+			const char	  tipob= n[17];
+			const int64_t data = rp_cifre(n, 3, 14);
+			const int64_t num  = rp_cifre(n, 18, 10);
+			if (tipob == 'd')
+				return "a d block where the index should be (" + n + ")";
+			StringBuffer os;
+			os.setLimit((size_t)usize);
+			libzpaq::SHA1 sha1;
+			d.setOutput(&os);
+			d.setSHA1(&sha1);
+			d.decompress();
+			char fine[21]= {0};
+			d.readSegmentEnd(fine);
+			if ((int64_t)os.size() != usize)
+				return "the block " + n + " is not as big as it says";
+			if (fine[0] && memcmp(fine + 1, sha1.result(), 20))
+				return "the block " + n + " has a bad SHA-1";
+			if (d.findFilename())
+				return "the block " + n + " has a second segment";
+			pos= in.tell() - d.buffered();
+			const char		 *s= os.c_str();
+			const char *const e= s + os.size();
+			const int		  v= (int)o_arc.versioni.size() - 1; /// the version being read (0: none yet)
+			if (tipob == 'c')
+			{
+				if ((v > 0) && (datiqui != datifine))
+					return "version " + itos(v) + ": its d blocks are not the ones its h blocks say";
+				if (os.size() != 8)
+					return "the c block " + n + " is not of 8 bytes";
+				const int64_t salto= btol(s);
+				if (salto < 0)
+				{
+					o_arc.incompleta= true;
+					break;
+				}
+				if (num != (int64_t)o_arc.frammenti.size())
+					return "version " + itos(v + 1) + ": first fragment " + itos(num) + ", " + itos(o_arc.frammenti.size()) + " expected";
+				if (pos + salto > o_arc.dimensione)
+					return "version " + itos(v + 1) + ": its data go beyond the end of the archive";
+				o_arc.versioni.push_back(rp_versione());
+				o_arc.versioni.back().data = data;
+				o_arc.versioni.back().primo= (uint32_t)num;
+				datiqui					   = pos;
+				datifine				   = pos + salto;
+				attesoi					   = 1;
+				pos						   = datifine;
+			}
+			else if (v == 0)
+				return "the block " + n + " before the first c block";
+			else if (tipob == 'h')
+			{
+				if ((os.size() < 28) || (os.size() % 24 != 4))
+					return "the h block " + n + " is not of 4+24*N bytes";
+				const uint32_t quanti= (uint32_t)((os.size() - 4) / 24);
+				if (num != (int64_t)o_arc.frammenti.size())
+					return "version " + itos(v) + ": fragment table " + itos(num) + ", " + itos(o_arc.frammenti.size()) + " expected";
+				if (num + quanti > 0xfffffff0LL)
+					return "too many fragments";
+				const uint32_t bsize= btoi(s);
+				if ((bsize == 0) || (datiqui + bsize > datifine))
+					return "version " + itos(v) + ": the d block of " + n + " is not inside the data of the version";
+				rp_blocco b;
+				b.offset  = datiqui;
+				b.bsize	  = bsize;
+				b.primo	  = (uint32_t)num;
+				b.quanti  = quanti;
+				b.versione= v;
+				o_arc.blocchi.push_back(b);
+				datiqui+= bsize;
+				for (uint32_t i= 0; i < quanti; ++i)
+				{
+					rp_frammento f;
+					memcpy(f.sha1, s, 20);
+					s+= 20;
+					f.usize= btoi(s);
+					if (f.usize > 0x7fffffff)
+						return "a fragment too big in " + n;
+					f.blocco= (uint32_t)(o_arc.blocchi.size() - 1);
+					o_arc.frammenti.push_back(f);
+				}
+			}
+			else /// i
+			{
+				if (num != attesoi)
+					return "version " + itos(v) + ": index block " + itos(num) + ", " + itos(attesoi) + " expected";
+				++attesoi;
+				rp_versione &ver= o_arc.versioni.back();
+				while (s < e)
+				{
+					if (e - s < 9)
+						return "a record cut in " + n;
+					rp_record r;
+					r.data			= btol(s);
+					const char *zero= (const char *)memchr(s, 0, e - s);
+					if ((zero == NULL) || (zero - s > 65535))
+						return "a name with no end in " + n;
+					r.nome.assign(s, zero - s);
+					s= zero + 1;
+					if (r.data == 0)
+					{
+						/// not files: what this version said of itself (-fast, VFILE-info), its comment
+						if (fl_ispointer(r.nome.c_str()) || (strncmp(r.nome.c_str(), "filelistpointer:", 16) == 0) || vinfo_isinfo(r.nome.c_str()))
+						{
+							++ver.scartati;
+							continue;
+						}
+						int	   numero= 0;
+						string testo;
+						if (vcomment_leggi(r.nome, numero, testo))
+						{
+							ver.commento= true;
+							ver.testo	= testo;
+							continue;
+						}
+						ver.record.push_back(r);
+						continue;
+					}
+					if (e - s < 4)
+						return "attributes cut in " + n;
+					const uint32_t na= btoi(s);
+					if ((na > 65535) || ((int64_t)(e - s) < (int64_t)na))
+						return "attributes too long in " + n;
+					r.attr.assign(s, na);
+					s+= na;
+					if (e - s < 4)
+						return "a fragment list cut in " + n;
+					const uint32_t ni= btoi(s);
+					if ((int64_t)ni > (int64_t)(e - s) / 4)
+						return "a fragment list too long in " + n;
+					r.ptr.resize(ni);
+					for (uint32_t i= 0; i < ni; ++i)
+					{
+						r.ptr[i]= btoi(s);
+						if ((r.ptr[i] == 0) || (r.ptr[i] >= o_arc.frammenti.size()))
+							return "version " + itos(v) + ": <<" + r.nome + ">> uses fragment " + itos(r.ptr[i]) + ", not declared before";
+					}
+					ver.record.push_back(r);
+				}
+			}
+		}
+		if ((!o_arc.incompleta) && (o_arc.versioni.size() > 1) && (datiqui != datifine))
+			return "the last version: its d blocks are not the ones its h blocks say";
+		if (io_cr != NULL)
+		{
+			io_cr->letto(o_arc.dimensione, (int)o_arc.versioni.size() - 1);
+			io_cr->aggiorna(true);
+		}
+	}
+	catch (std::exception &e)
+	{
+		return string("error ") + e.what();
+	}
+	if (o_arc.versioni.size() < 2)
+		return "not one version in it";
+	return "";
+}
+
+/// the compressed bytes of a d block, from the archive
+static string rp_prendi(InputArchive &io_in, const rp_blocco &i_b, StringBuffer &o_sb)
+{
+	o_sb.resize(0);
+	io_in.seek(i_b.offset, SEEK_SET);
+	vector<char> buf(1 << 20);
+	uint32_t	 resto= i_b.bsize;
+	while (resto > 0)
+	{
+		const int quanto= (resto > buf.size()) ? (int)buf.size() : (int)resto;
+		const int letti = io_in.read(&buf[0], quanto);
+		if (letti <= 0)
+			return "the archive ends inside the d block of fragment " + itos(i_b.primo);
+		o_sb.write(&buf[0], letti);
+		resto-= (uint32_t)letti;
+	}
+	return "";
+}
+
+/*
+	A d block (its compressed bytes in io_compresso) decompressed into o_dati and checked against its h
+	block: its name, its comment, nothing before and after it, its size, the list at its end (the size of
+	every fragment, 0 or its first fragment, how many), the SHA-1 of every fragment. "" if good
+*/
+static string rp_decomprimi(const rp_archivio &i_arc, uint32_t i_blocco, StringBuffer &io_compresso, StringBuffer &o_dati)
+{
+	const rp_blocco &b	   = i_arc.blocchi[i_blocco];
+	const string	 dove  = "the d block of fragment " + itos(b.primo);
+	uint64_t		 attesi= 8 + 4 * (uint64_t)b.quanti;
+	for (uint32_t k= 0; k < b.quanti; ++k)
+		attesi+= i_arc.frammenti[b.primo + k].usize;
+	if (attesi > 0xffffffffULL)
+		return dove + ": too big";
+	try
+	{
+		o_dati.resize(0);
+		o_dati.setLimit((size_t)attesi);
+		libzpaq::Decompresser d;
+		d.setInput(&io_compresso);
+		if (!d.findBlock())
+			return dove + ": no block in it";
+		if ((d.saltati > 0) || (d.corto > 0))
+			return dove + ": bytes before it";
+		StringWriter nome, commento;
+		if (!d.findFilename(&nome))
+			return dove + ": no segment";
+		d.readComment(&commento);
+		const string &n= nome.s;
+		if ((n.size() != 28) || (n.compare(0, 3, "jDC") != 0) || (n[17] != 'd') || (n.compare(18, 10, itos(b.primo, 10)) != 0))
+			return dove + ": its name is " + n;
+		if (commento.s != itos((int64_t)attesi) + " jDC\x01")
+			return dove + ": its comment does not say " + itos((int64_t)attesi) + " bytes";
+		libzpaq::SHA1 sha1;
+		d.setOutput(&o_dati);
+		d.setSHA1(&sha1);
+		d.decompress();
+		char fine[21]= {0};
+		d.readSegmentEnd(fine);
+		if (fine[0] && memcmp(fine + 1, sha1.result(), 20))
+			return dove + ": bad SHA-1 of its segment";
+		if (d.findFilename())
+			return dove + ": a second segment";
+		char resto= 0;
+		if ((d.buffered() != 0) || (io_compresso.read(&resto, 1) != 0))
+			return dove + ": bytes after its end";
+		if (o_dati.size() != attesi)
+			return dove + ": " + itos((int64_t)o_dati.size()) + " bytes, " + itos((int64_t)attesi) + " expected";
+		const char *p= o_dati.c_str() + (attesi - 8 - 4 * (uint64_t)b.quanti);
+		for (uint32_t k= 0; k < b.quanti; ++k)
+			if (btoi(p) != i_arc.frammenti[b.primo + k].usize)
+				return dove + ": the size of fragment " + itos(b.primo + k) + " in the list at its end";
+		const uint32_t primo = btoi(p);
+		const uint32_t quanti= btoi(p);
+		if (((primo != 0) && (primo != b.primo)) || (quanti != b.quanti))
+			return dove + ": the list at its end";
+		const char *q= o_dati.c_str();
+		for (uint32_t k= 0; k < b.quanti; ++k)
+		{
+			const rp_frammento &f= i_arc.frammenti[b.primo + k];
+			libzpaq::SHA1		h;
+			h.write(q, f.usize);
+			if (memcmp(h.result(), f.sha1, 20))
+				return dove + ": bad SHA-1 of fragment " + itos(b.primo + k);
+			q+= f.usize;
+		}
+	}
+	catch (std::exception &e)
+	{
+		return dove + ": " + e.what();
+	}
+	return "";
+}
+
+/// a d block to decompress and check, in a thread of its own
+struct rp_lavoro
+{
+	const rp_archivio *arc;
+	uint32_t		   blocco;
+	StringBuffer	   compresso;
+	StringBuffer	   dati;
+	string			   errore;
+	volatile int	   fatto; /// set by its thread at its end: only for the map (the results are read after join)
+	rp_lavoro() : arc(NULL), blocco(0), fatto(0)
+	{
+	}
+};
+static ThreadReturn rp_lavora(void *i_lavoro)
+{
+	rp_lavoro &l= *(rp_lavoro *)i_lavoro;
+	l.errore	= rp_decomprimi(*l.arc, l.blocco, l.compresso, l.dati);
+	l.fatto		= 1;
+	return 0;
+}
+/// up to i_quanti blocks: read one after the other, then decompressed and checked together (a thread each). On the
+/// map (io_cr, or NULL): reading, decompressing, then i_fatto (or an error)
+static string rp_partita(InputArchive &io_in, rp_lavoro *io_lavori, int i_quanti, rp_cruscotto *io_cr, int i_fatto)
+{
+	for (int i= 0; i < i_quanti; ++i)
+	{
+		io_lavori[i].errore= "";
+		io_lavori[i].fatto = 0;
+		if (io_cr != NULL)
+		{
+			io_cr->blocco(io_lavori[i].blocco, RP_LETTURA);
+			io_cr->aggiorna();
+		}
+		const string errore= rp_prendi(io_in, io_lavori[i].arc->blocchi[io_lavori[i].blocco], io_lavori[i].compresso);
+		if (errore != "")
+		{
+			if (io_cr != NULL)
+				io_cr->blocco(io_lavori[i].blocco, RP_ERRORE);
+			return errore;
+		}
+		if (io_cr != NULL)
+			io_cr->blocco(io_lavori[i].blocco, RP_DECOMPRESSIONE);
+	}
+	if (io_cr != NULL)
+		io_cr->aggiorna();
+	if (i_quanti == 1)
+		rp_lavora(&io_lavori[0]);
+	else
+	{
+		vector<ThreadID> tid(i_quanti);
+		for (int i= 0; i < i_quanti; ++i)
+			run(tid[i], rp_lavora, &io_lavori[i]);
+		if (io_cr != NULL) /// the map while they work (and what the compressor writes meanwhile)
+			while (true)
+			{
+				int finiti= 0;
+				for (int i= 0; i < i_quanti; ++i)
+					if (io_lavori[i].fatto)
+					{
+						++finiti;
+						io_cr->blocco(io_lavori[i].blocco, i_fatto);
+					}
+				io_cr->aggiorna();
+				if (finiti == i_quanti)
+					break;
+#ifdef _WIN32
+				Sleep(50);
+#else
+				usleep(50000);
+#endif
+			}
+		for (int i= 0; i < i_quanti; ++i)
+			join(tid[i]);
+	}
+	string errore;
+	for (int i= 0; i < i_quanti; ++i)
+	{
+		if (io_cr != NULL)
+			io_cr->blocco(io_lavori[i].blocco, (io_lavori[i].errore == "") ? i_fatto : RP_ERRORE);
+		if ((errore == "") && (io_lavori[i].errore != ""))
+			errore= io_lavori[i].errore;
+	}
+	if (io_cr != NULL)
+		io_cr->aggiorna(errore != "");
+	return errore;
+}
+/// the blocks to decompress, one per thread (new[]: StringBuffer cannot be copied)
+struct rp_lavori
+{
+	rp_lavoro *p;
+	int		   quanti;
+	rp_lavori(int i_quanti) : p(new rp_lavoro[i_quanti]), quanti(i_quanti)
+	{
+	}
+	~rp_lavori()
+	{
+		delete[] p;
+	}
+};
+
+/// what add measures of a new fragment ("Data type analysis" in Jidac::add): the same numbers give the same method to its block
+static const int RP_ON= 4; /// order 1 tables kept (ON of add)
+static void		 rp_misura(const unsigned char *i_p, int64_t i_sz, const unsigned char *i_o1prev, unsigned &o_hits, int &o_text1, int &o_exe1, unsigned char *o_o1)
+{
+	static const unsigned char dt[256]= {
+		160, 80, 53, 40, 32, 26, 22, 20, 17, 16, 14, 13, 12, 11, 10, 10,
+		9, 8, 8, 8, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5,
+		4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3,
+		3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+	unsigned hits= 0;
+	int		 c1	 = 0;
+	memset(o_o1, 0, 256);
+	for (int64_t i= 0; i < i_sz; ++i)
+	{
+		const unsigned char uc= i_p[i];
+		if (uc == o_o1[c1])
+			++hits;
+		o_o1[c1]= uc;
+		c1		= uc;
+	}
+	int			  text1= 0, exe1= 0;
+	int64_t		  h1		= i_sz;
+	unsigned char o1ct[256]= {0};
+	for (int i= 0; i < 256; ++i)
+	{
+		if (o1ct[o_o1[i]] < 255)
+			h1-= (i_sz * dt[o1ct[o_o1[i]]++]) >> 15;
+		if (o_o1[i] == ' ' && (isalnum(i) || i == '.' || i == ','))
+			++text1;
+		if (o_o1[i] && (i < 9 || i == 11 || i == 12 || (i >= 14 && i <= 31) || i >= 240))
+			--text1;
+		if (i >= 192 && i < 240 && o_o1[i] && (o_o1[i] < 128 || o_o1[i] >= 192))
+			--text1;
+		if (o_o1[i] == 139)
+			++exe1;
+	}
+	text1= (text1 >= 3);
+	exe1 = (exe1 >= 5);
+	if (i_sz > 0)
+		h1= h1 * h1 / i_sz;
+	unsigned h2= h1;
+	if (h2 > hits)
+		hits= h2;
+	h2= o1ct[0] * i_sz / 256;
+	if (h2 > hits)
+		hits= h2;
+	h2= 0;
+	for (int i= 0; i < 256 * RP_ON; ++i)
+		h2+= i_o1prev[i] == o_o1[i & 255];
+	h2= h2 * i_sz / (256 * RP_ON);
+	if (h2 > hits)
+		hits= h2;
+	if (hits > i_sz)
+		hits= (unsigned)i_sz;
+	o_hits = hits;
+	o_text1= text1;
+	o_exe1 = exe1;
+}
+
+/// the d blocks of a version of the new archive: fragments in, blocks out (as add makes them: size, list at the end, method)
+class rp_impacchettatore
+{
+	const rp_archivio &vecchio;
+	vector<uint32_t>  &origine; /// new fragment => old fragment
+	rp_compressore	  &comp;
+	const string	   metodo;
+	const unsigned	   dimblocco;
+	const unsigned	   minframmento;
+	int64_t			   data;
+	StringBuffer	   sb;
+	unsigned		   frags, redundancy, text, exe;
+	unsigned char	   o1prev[RP_ON * 256];
+
+  public:
+	vector<uint32_t> inizi; /// the first fragment of every block of the version
+	rp_impacchettatore(const rp_archivio &i_vecchio, vector<uint32_t> &io_origine, rp_compressore &io_comp, const string &i_metodo, unsigned i_dimblocco, unsigned i_minframmento) : vecchio(i_vecchio), origine(io_origine), comp(io_comp), metodo(i_metodo), dimblocco(i_dimblocco), minframmento(i_minframmento), data(0), frags(0), redundancy(0), text(0), exe(0)
+	{
+		memset(o1prev, 0, sizeof(o1prev));
+	}
+	void versione(int64_t i_data)
+	{
+		data= i_data;
+		inizi.clear();
+	}
+	void chiudi()
+	{
+		if (frags == 0)
+			return;
+		const uint32_t primo= (uint32_t)(origine.size() - frags);
+		const int64_t  crudi= (int64_t)sb.size(); /// its data, before the list
+		for (uint32_t k= primo; k < origine.size(); ++k)
+			puti(sb, vecchio.frammenti[origine[k]].usize, 4);
+		puti(sb, 0, 4); /// no first fragment: the block is movable
+		puti(sb, frags, 4);
+		string m= metodo;
+		if (isdigit((unsigned char)metodo[0]))
+		{
+			const int redz= redundancy / (sb.size() / 256 + 1);
+			m+= "," + itos(redz) + "," + itos((exe > frags) * 2 + (text > frags));
+		}
+		inizi.push_back(primo);
+		comp.blocco(sb, "jDC" + itos(data, 14) + "d" + itos(primo, 10), m, crudi);
+		frags= redundancy= text= exe= 0;
+		memset(o1prev, 0, sizeof(o1prev));
+	}
+	/// old fragment i_vecchio (its bytes at i_p) => the next new fragment
+	void aggiungi(const char *i_p, uint32_t i_vecchio)
+	{
+		const int64_t sz  = vecchio.frammenti[i_vecchio].usize;
+		unsigned	  hits= 0;
+		int			  text1= 0, exe1= 0;
+		unsigned char o1[256];
+		rp_misura((const unsigned char *)i_p, sz, o1prev, hits, text1, exe1, o1);
+		if ((frags > 0) && (sb.size() + sz + 80 + frags * 4 >= dimblocco))
+			chiudi();
+		if (sz > 0)
+			sb.write(i_p, (int)sz);
+		origine.push_back(i_vecchio);
+		++frags;
+		redundancy+= hits;
+		exe+= exe1 * 4;
+		text+= text1 * 2;
+		if (sz >= minframmento)
+		{
+			memmove(o1prev, o1prev + 256, 256 * (RP_ON - 1));
+			memcpy(o1prev + 256 * (RP_ON - 1), o1, 256);
+		}
+	}
+};
+
+/// an i block written when it is full enough, or at the end
+static void rp_indicepieno(OutputArchive &io_out, StringBuffer &io_is, int64_t i_data, int &io_numero, bool i_fine)
+{
+	if ((io_is.size() > 16000) || (i_fine && (io_is.size() > 0)))
+	{
+		libzpaq::compressBlock(&io_is, &io_out, "1", ("jDC" + itos(i_data) + "i" + itos(++io_numero, 10)).c_str(), "jDC\x01");
+		io_is.resize(0);
+	}
+}
+/// the i blocks of version i_versione of the new archive: deletions, files (fragments renumbered), its comment
+static void rp_indice(OutputArchive &io_out, int64_t i_data, int i_versione, const rp_versione &i_vecchia, const vector<const string *> &i_tolti, const vector<const rp_record *> &i_scritti, const vector<uint32_t> &i_nuovo, rp_cruscotto &io_cr)
+{
+	StringBuffer is;
+	int			 numero= 0;
+	const int64_t tutti= (int64_t)(i_tolti.size() + i_scritti.size()); /// 65.16g: the map, while a big index is written
+	io_cr.indice(0, tutti);
+	for (size_t k= 0; k < i_tolti.size(); ++k)
+	{
+		puti(is, 0, 8);
+		is.write(i_tolti[k]->c_str(), (int)i_tolti[k]->size());
+		is.put(0);
+		rp_indicepieno(io_out, is, i_data, numero, false);
+		if ((k & 1023) == 0)
+			io_cr.indice((int64_t)k, tutti);
+	}
+	for (size_t k= 0; k < i_scritti.size(); ++k)
+	{
+		if ((k & 1023) == 0)
+			io_cr.indice((int64_t)(i_tolti.size() + k), tutti);
+		const rp_record &r= *i_scritti[k];
+		puti(is, r.data, 8);
+		is.write(r.nome.c_str(), (int)r.nome.size());
+		is.put(0);
+		puti(is, r.attr.size(), 4);
+		if (r.attr.size() > 0)
+			is.write(r.attr.data(), (int)r.attr.size());
+		puti(is, r.ptr.size(), 4);
+		for (size_t i= 0; i < r.ptr.size(); ++i)
+		{
+			if (i_nuovo[r.ptr[i]] == 0)
+				error("repack: a fragment not written"); /// it cannot be: caught by repack, nothing kept
+			puti(is, i_nuovo[r.ptr[i]], 4);
+		}
+		rp_indicepieno(io_out, is, i_data, numero, false);
+	}
+	if (i_vecchia.commento)
+	{
+		const string nome= "VCOMMENT " + myulltoa(i_versione, 8) + " " + i_vecchia.testo + ":$DATA";
+		puti(is, 0, 8);
+		is.write(nome.c_str(), (int)nome.size());
+		is.put(0);
+	}
+	rp_indicepieno(io_out, is, i_data, numero, true);
+	io_cr.indice(0, 0);
+}
+
+/// the same file: date, attributes, and fragments with the same SHA-1 and size (of two archives, or of the same one)
+static bool rp_uguali(const rp_record &i_a, const rp_archivio &i_arca, const rp_record &i_b, const rp_archivio &i_arcb)
+{
+	if ((i_a.data != i_b.data) || (i_a.attr != i_b.attr) || (i_a.ptr.size() != i_b.ptr.size()))
+		return false;
+	for (size_t k= 0; k < i_a.ptr.size(); ++k)
+	{
+		const rp_frammento &fa= i_arca.frammenti[i_a.ptr[k]];
+		const rp_frammento &fb= i_arcb.frammenti[i_b.ptr[k]];
+		if ((fa.usize != fb.usize) || memcmp(fa.sha1, fb.sha1, 20))
+			return false;
+	}
+	return true;
+}
+/// the records of a version into a state (name => record), the names touched kept
+static void rp_applica(const rp_versione &i_ver, std::map<string, const rp_record *> &io_stato, std::set<string> &io_toccati)
+{
+	for (size_t k= 0; k < i_ver.record.size(); ++k)
+	{
+		const rp_record &r= i_ver.record[k];
+		if (r.data == 0)
+			io_stato.erase(r.nome);
+		else
+			io_stato[r.nome]= &r;
+		io_toccati.insert(r.nome);
+	}
+}
+
+/*
+	The new archive, read again from the disk (rp_leggi): version j as version i_prese[j-1] of the old one
+	(the date of its c block, its comment, the same files with the same date, attributes and fragments,
+	by SHA-1 and size), every fragment of a version used by a file of it, every block decompressed and
+	checked (rp_decomprimi). "" if good. On its map (io_cr: begun here, ended by rp_controlla)
+*/
+/// 65.16g -quick: a d block copied as it is: where it is in the new archive (its first fragment), what was written
+struct rp_copia
+{
+	uint32_t primo;
+	uint32_t quanti;
+	uint32_t bsize;
+	char	 sha1[20];
+	rp_copia() : primo(0), quanti(0), bsize(0)
+	{
+		memset(sha1, 0, sizeof(sha1));
+	}
+};
+/*
+	65.16g -quick: a d block as it is, its name made new: jDC, the date of its version, d, its first fragment in the new
+	archive. The same length, in the header of its segment: not in its data, not in their SHA-1, and the list at its end
+	has no fragment number (zpaq: "omit first frag ID to make block movable"). The tag, the level, the header of ZPAQL
+	skipped as libzpaq reads them. false if it is not the block expected (it goes the normal way: decompressed,
+	checked, compressed again)
+*/
+static bool rp_rinomina(StringBuffer &io_sb, uint32_t i_primo, int64_t i_data, uint32_t i_nuovo)
+{
+	static const unsigned char tag[16]= {0x37, 0x6B, 0x53, 0x74, 0xA0, 0x31, 0x83, 0xD3, 0x8C, 0xB2, 0x28, 0xB0, 0xD3, 'z', 'P', 'Q'};
+	const size_t			   n	  = io_sb.size();
+	unsigned char			  *p	  = io_sb.data();
+	if ((p == NULL) || (n < 20) || memcmp(p, tag, 16) || ((p[16] != 1) && (p[16] != 2)) || (p[17] != 1))
+		return false;
+	const size_t segmento= 20 + p[18] + 256 * (size_t)p[19]; /// after the header of ZPAQL (its size, then it)
+	if ((segmento + 30 > n) || (p[segmento] != 1) || (p[segmento + 29] != 0))
+		return false;
+	unsigned char *nome= p + segmento + 1;
+	if (memcmp(nome, "jDC", 3) || (nome[17] != 'd'))
+		return false;
+	for (int k= 3; k < 28; ++k)
+		if ((k != 17) && (!isdigit(nome[k])))
+			return false;
+	if (string((const char *)nome + 18, 10) != itos(i_primo, 10))
+		return false;
+	const string data  = itos(i_data, 14);
+	const string numero= itos(i_nuovo, 10);
+	if ((data.size() != 14) || (numero.size() != 10))
+		return false;
+	memcpy(nome + 3, data.c_str(), 14);
+	memcpy(nome + 18, numero.c_str(), 10);
+	return true;
+}
+
+static string rp_controllo(const string &i_nome, const string &i_titolo, int64_t i_dimensione, rp_archivio &o_nuovo, const rp_archivio &i_vecchio, const vector<int> &i_prese, const vector<rp_copia> &i_copiati, rp_lavori &io_lavori, rp_cruscotto &io_cr)
+{
+	rp_archivio &nuovo= o_nuovo;
+	io_cr.inizia(i_titolo, &nuovo, i_dimensione, true);
+	string errore= rp_leggi(i_nome, nuovo, &io_cr);
+	if (errore != "")
+		return errore;
+	if (nuovo.incompleta)
+		return "an incomplete transaction in it";
+	const int n= (int)i_prese.size();
+	if ((int)nuovo.versioni.size() != n + 1)
+		return itos(nuovo.versioni.size() - 1) + " versions, " + itos(n) + " expected";
+	vector<bool>						 usato(nuovo.frammenti.size(), false);
+	std::map<string, const rp_record *> vecchiostato, nuovostato;
+	std::set<string>					 toccati;
+	int									 v= 1;
+	for (int j= 1; j <= n; ++j)
+	{
+		io_cr.righe("Comparing version " + itos(j) + " of " + itos(n) + " with version " + itos(i_prese[j - 1]) + " of the old archive", "");
+		io_cr.aggiorna();
+		const rp_versione &vn = nuovo.versioni[j];
+		const rp_versione &vv = i_vecchio.versioni[i_prese[j - 1]];
+		const string	   chi= "version " + itos(j) + " (" + itos(i_prese[j - 1]) + " of the old archive): ";
+		if (vn.data != vv.data)
+			return chi + "the date of its c block";
+		if ((vn.commento != vv.commento) || (vn.testo != vv.testo))
+			return chi + "its comment";
+		if (vn.scartati != 0)
+			return chi + "VFILE-info or -fast records in it";
+		for (; v <= i_prese[j - 1]; ++v)
+			rp_applica(i_vecchio.versioni[v], vecchiostato, toccati);
+		rp_applica(vn, nuovostato, toccati);
+		/// every fragment of this version used by a file of it (read_archive -until j: 72414 if not)
+		for (size_t k= 0; k < vn.record.size(); ++k)
+			for (size_t i= 0; i < vn.record[k].ptr.size(); ++i)
+				usato[vn.record[k].ptr[i]]= true;
+		const uint32_t dopo= (j < n) ? nuovo.versioni[j + 1].primo : (uint32_t)nuovo.frammenti.size();
+		for (uint32_t f= vn.primo; f < dopo; ++f)
+			if (!usato[f])
+				return chi + "fragment " + itos(f) + " is used by no file of it";
+		if (vecchiostato.size() != nuovostato.size())
+			return chi + itos(nuovostato.size()) + " files, " + itos(vecchiostato.size()) + " expected";
+		for (std::set<string>::const_iterator t= toccati.begin(); t != toccati.end(); ++t)
+		{
+			std::map<string, const rp_record *>::const_iterator a= vecchiostato.find(*t);
+			std::map<string, const rp_record *>::const_iterator b= nuovostato.find(*t);
+			if ((a == vecchiostato.end()) != (b == nuovostato.end()))
+				return chi + "<<" + *t + ">> " + ((a == vecchiostato.end()) ? "is in it, it should not" : "is not in it");
+			if ((a != vecchiostato.end()) && (!rp_uguali(*a->second, i_vecchio, *b->second, nuovo)))
+				return chi + "<<" + *t + ">> is not the same";
+		}
+		toccati.clear();
+	}
+	/// 65.16g -quick: the blocks copied as they are: their bytes read again, as they were written (not decompressed)
+	std::map<uint32_t, size_t> copiati;
+	for (size_t i= 0; i < i_copiati.size(); ++i)
+		copiati[i_copiati[i].primo]= i;
+	vector<uint32_t> dadecomprimere;
+	int64_t			 totale= 0;
+	for (size_t b= 0; b < nuovo.blocchi.size(); ++b)
+		if (copiati.find(nuovo.blocchi[b].primo) == copiati.end())
+		{
+			dadecomprimere.push_back((uint32_t)b);
+			const rp_blocco &bb= nuovo.blocchi[b];
+			for (uint32_t f= bb.primo; f < bb.primo + bb.quanti; ++f)
+				totale+= nuovo.frammenti[f].usize;
+		}
+	if (copiati.size() + dadecomprimere.size() != nuovo.blocchi.size())
+		return itos(i_copiati.size()) + " blocks copied, " + itos(nuovo.blocchi.size() - dadecomprimere.size()) + " found";
+	io_cr.lavoro(totale, 0);
+	int64_t bytescopiati= 0; /// 65.16g -quick: in the map the copies compared count too, by their bytes
+	int64_t bytesaltri	= 0;
+	for (size_t b= 0; b < nuovo.blocchi.size(); ++b)
+		if (copiati.find(nuovo.blocchi[b].primo) != copiati.end())
+			bytescopiati+= nuovo.blocchi[b].bsize;
+		else
+			bytesaltri+= nuovo.blocchi[b].bsize;
+	io_cr.copie(bytescopiati);
+	io_cr.altri(bytesaltri);
+	io_cr.fase("Check");
+	InputArchive in(i_nome.c_str());
+	StringBuffer grezzo;
+	for (size_t b= 0; b < nuovo.blocchi.size(); ++b)
+	{
+		const std::map<uint32_t, size_t>::const_iterator c= copiati.find(nuovo.blocchi[b].primo);
+		if (c == copiati.end())
+			continue;
+		const rp_copia	&k = i_copiati[c->second];
+		const rp_blocco &bb= nuovo.blocchi[b];
+		io_cr.blocco((uint32_t)b, RP_LETTURA);
+		io_cr.aggiorna();
+		errore= rp_prendi(in, bb, grezzo);
+		if (errore != "")
+			return errore;
+		libzpaq::SHA1 sha1;
+		sha1.write((const char *)grezzo.data(), (int64_t)grezzo.size());
+		if ((bb.bsize != k.bsize) || (bb.quanti != k.quanti) || (grezzo.size() != k.bsize) || memcmp(sha1.result(), k.sha1, 20))
+		{
+			io_cr.blocco((uint32_t)b, RP_ERRORE);
+			return "the d block of fragment " + itos(bb.primo) + " (copied as it was, -quick): not the bytes written";
+		}
+		io_cr.blocco((uint32_t)b, RP_CONTROLLATO);
+		io_cr.copiato(bb.bsize);
+	}
+	for (size_t b= 0; b < dadecomprimere.size(); b+= io_lavori.quanti)
+	{
+		const int quanti= (int)std::min((size_t)io_lavori.quanti, dadecomprimere.size() - b);
+		for (int i= 0; i < quanti; ++i)
+		{
+			io_lavori.p[i].arc	 = &nuovo;
+			io_lavori.p[i].blocco= dadecomprimere[b + i];
+		}
+		errore= rp_partita(in, io_lavori.p, quanti, &io_cr, RP_CONTROLLATO);
+		if (errore != "")
+			return errore;
+	}
+	return "";
+}
+/// the check, its map ended before the archive it shows goes away
+static string rp_controlla(const string &i_nome, const string &i_titolo, int64_t i_dimensione, const rp_archivio &i_vecchio, const vector<int> &i_prese, const vector<rp_copia> &i_copiati, rp_lavori &io_lavori)
+{
+	rp_archivio	 nuovo;
+	rp_cruscotto cruscotto;
+	const string errore= rp_controllo(i_nome, i_titolo, i_dimensione, nuovo, i_vecchio, i_prese, i_copiati, io_lavori, cruscotto);
+	cruscotto.finale();
+	return errore;
+}
+
+/// what a version of the new archive took (-verbose, at the end)
+struct rp_conto
+{
+	int		vecchia;
+	size_t	scritti;
+	size_t	tolti;
+	size_t	blocchi;
+	int64_t bytes;
+};
+/*
+	The new archive, version by version: its c block (-1 until its end), the d blocks (the old blocks it
+	takes, decompressed and checked, their fragments still used compressed again), the h blocks, the i
+	blocks, then its c block again with the size of its d blocks. "" if good (o_dimensione: its size).
+	65.16c: out is made (with its encryption) and closed by repack, before and after the map
+*/
+static string rp_scrivi(OutputArchive *out, const rp_archivio &i_vecchio, const string &i_sorgente, const vector<int> &i_prese, const vector<vector<uint32_t> > &i_blocchi, const vector<vector<uint32_t> > &i_copie, const vector<uint32_t> &i_primouso, const vector<vector<const string *> > &i_tolti, const vector<vector<const rp_record *> > &i_scritti, const string &i_metodo, unsigned i_dimblocco, unsigned i_minframmento, int i_threads, rp_lavori &io_lavori, rp_cruscotto &io_cr, vector<rp_conto> &o_conti, vector<rp_copia> &o_copiati, int64_t &o_dimensione)
+{
+	o_dimensione= 0;
+	o_copiati.clear();
+	rp_compressore *comp= NULL;
+	string			errore;
+	try
+	{
+		comp= new rp_compressore(*out, i_threads);
+		io_cr.compressore(comp);
+		comp->attendi(rp_attendi, &io_cr);
+		InputArchive	   in(i_sorgente.c_str());
+		vector<uint32_t>   nuovo(i_vecchio.frammenti.size(), 0); /// old fragment => new (0: not written)
+		vector<uint32_t>   origine(1, 0);						 /// new fragment => old
+		rp_impacchettatore pacco(i_vecchio, origine, *comp, i_metodo, i_dimblocco, i_minframmento);
+		int				   prima= 0; /// blocks of the new archive in the versions before
+		for (size_t j= 1; j < i_blocchi.size(); ++j)
+		{
+			const rp_versione &vv	= i_vecchio.versioni[i_prese[j - 1]];
+			const uint32_t	   primo= (uint32_t)origine.size();
+			const int64_t	   cpos = out->tell();
+			io_cr.fase("v" + itos(j) + "/" + itos(i_blocchi.size() - 1) + " (old " + itos(i_prese[j - 1]) + ")");
+			writeJidacHeader(out, vv.data, -1, primo);
+			const int64_t dinizio= out->tell();
+			/// 65.16g -quick: first the blocks taken as they are (read, their name made new, written: the first
+			/// fragments of the version), then the others. Their h blocks in the same order
+			vector<uint32_t> blocchi= i_blocchi[j];
+			vector<rp_copia> copiequi;
+			for (size_t k= 0; k < i_copie[j].size(); ++k)
+			{
+				const uint32_t	 b = i_copie[j][k];
+				const rp_blocco &bb= i_vecchio.blocchi[b];
+				io_cr.blocco(b, RP_LETTURA);
+				io_cr.aggiorna();
+				StringBuffer grezzo;
+				errore= rp_prendi(in, bb, grezzo);
+				if (errore != "")
+					error(errore.c_str());
+				if (!rp_rinomina(grezzo, bb.primo, vv.data, (uint32_t)origine.size()))
+				{
+					blocchi.push_back(b); /// not the block expected: decompressed, checked, compressed again
+					io_cr.blocco(b, RP_DAFARE);
+					continue;
+				}
+				rp_copia c;
+				c.primo = (uint32_t)origine.size();
+				c.quanti= bb.quanti;
+				c.bsize = (uint32_t)grezzo.size();
+				libzpaq::SHA1 sha1;
+				sha1.write((const char *)grezzo.data(), (int64_t)grezzo.size());
+				memcpy(c.sha1, sha1.result(), 20);
+				const char	 *p= (const char *)grezzo.data();
+				int64_t		  n= (int64_t)grezzo.size();
+				const int64_t N= 1 << 30;
+				for (; n > N; p+= N, n-= N)
+					out->write(p, (int)N);
+				if (n > 0)
+					out->write(p, (int)n);
+				for (uint32_t f= bb.primo; f < bb.primo + bb.quanti; ++f)
+				{
+					nuovo[f]= (uint32_t)origine.size();
+					origine.push_back(f);
+				}
+				copiequi.push_back(c);
+				io_cr.blocco(b, RP_SCRITTO);
+				io_cr.copiato(c.bsize);
+			}
+			comp->inizia();
+			pacco.versione(vv.data);
+			for (size_t k= 0; k < blocchi.size(); k+= io_lavori.quanti)
+			{
+				const int quanti= (int)std::min((size_t)io_lavori.quanti, blocchi.size() - k);
+				for (int i= 0; i < quanti; ++i)
+				{
+					io_lavori.p[i].arc	 = &i_vecchio;
+					io_lavori.p[i].blocco= blocchi[k + i];
+				}
+				errore= rp_partita(in, io_lavori.p, quanti, &io_cr, RP_COMPRESSIONE);
+				if (errore != "")
+					error(errore.c_str());
+				for (int i= 0; i < quanti; ++i)
+				{
+					const rp_blocco &b		= i_vecchio.blocchi[io_lavori.p[i].blocco];
+					const char		*p		= io_lavori.p[i].dati.c_str();
+					int				 ultimo= -1; /// the block of the new archive with its last fragment
+					for (uint32_t f= b.primo; f < b.primo + b.quanti; ++f)
+					{
+						if (i_primouso[f] == (uint32_t)j) /// the fragments its files are the first to use (the others: another version)
+						{
+							nuovo[f]= (uint32_t)origine.size();
+							pacco.aggiungi(p, f);
+							ultimo= prima + (int)pacco.inizi.size();
+						}
+						p+= i_vecchio.frammenti[f].usize;
+					}
+					io_cr.inscrittura(io_lavori.p[i].blocco, ultimo);
+				}
+				io_cr.aggiorna();
+			}
+			pacco.chiudi();
+			comp->finisci();
+			io_cr.aggiorna(true);
+			const int64_t dfine= out->tell();
+			if (comp->csize.size() != pacco.inizi.size())
+				error("repack: the compressed blocks are not the ones given");
+			prima+= (int)comp->csize.size();
+			pacco.inizi.push_back((uint32_t)origine.size());
+			for (size_t c= 0; c < copiequi.size(); ++c) /// 65.16g -quick: the h blocks of the blocks copied, first (as their d blocks)
+			{
+				StringBuffer is;
+				puti(is, copiequi[c].bsize, 4);
+				for (uint32_t f= copiequi[c].primo; f < copiequi[c].primo + copiequi[c].quanti; ++f)
+				{
+					is.write(i_vecchio.frammenti[origine[f]].sha1, 20);
+					puti(is, i_vecchio.frammenti[origine[f]].usize, 4);
+				}
+				libzpaq::compressBlock(&is, out, "0", ("jDC" + itos(vv.data, 14) + "h" + itos(copiequi[c].primo, 10)).c_str(), "jDC\x01");
+				o_copiati.push_back(copiequi[c]);
+			}
+			for (size_t b= 0; b < comp->csize.size(); ++b)
+			{
+				StringBuffer is;
+				puti(is, comp->csize[b], 4);
+				for (uint32_t f= pacco.inizi[b]; f < pacco.inizi[b + 1]; ++f)
+				{
+					is.write(i_vecchio.frammenti[origine[f]].sha1, 20);
+					puti(is, i_vecchio.frammenti[origine[f]].usize, 4);
+				}
+				libzpaq::compressBlock(&is, out, "0", ("jDC" + itos(vv.data, 14) + "h" + itos(pacco.inizi[b], 10)).c_str(), "jDC\x01");
+			}
+			rp_indice(*out, vv.data, (int)j, vv, i_tolti[j], i_scritti[j], nuovo, io_cr);
+			out->seek(cpos, SEEK_SET);
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			g_franzen_jidacheader= cpos; /// 65.16c: as add: the header goes to its place in the franzen file (writeat)
+#endif /// NOSFTPEND
+#endif
+			writeJidacHeader(out, vv.data, dfine - dinizio, primo);
+			out->flush();
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			g_franzen_jidacheader= -1;
+#endif /// NOSFTPEND
+#endif
+			out->seek(0, SEEK_END);
+			rp_conto conto;
+			conto.vecchia= i_prese[j - 1];
+			conto.scritti= i_scritti[j].size();
+			conto.tolti	 = i_tolti[j].size();
+			conto.blocchi= comp->csize.size() + copiequi.size();
+			conto.bytes	 = dfine - dinizio;
+			o_conti.push_back(conto);
+		}
+		o_dimensione= out->tell();
+	}
+	catch (std::exception &e)
+	{
+		errore= e.what();
+		if (errore == "")
+			errore= "error";
+	}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	g_franzen_jidacheader= -1; /// (an error while the header was written: what comes after is not the header)
+#endif /// NOSFTPEND
+#endif
+	if (comp != NULL)
+	{
+		comp->finisci();
+		io_cr.aggiorna(true);
+		io_cr.compressore(NULL);
+		delete comp;
+	}
+	return errore;
+}
+
+/// 65.16c: the encryption of an archive: AES (its key, hashed) and Franzen (its password)
+struct rp_cifratura
+{
+	bool   aes;
+	char   chiave[32];
+	string franzen;
+	rp_cifratura() : aes(false)
+	{
+		memset(chiave, 0, sizeof(chiave));
+	}
+	/// into the globals InputArchive and OutputArchive take
+	void usa() const
+	{
+		if (aes)
+		{
+			memcpy(g_password_string, chiave, 32);
+			g_password= g_password_string;
+		}
+		else
+			g_password= NULL;
+		g_franzen= franzen;
+	}
+	string nome() const
+	{
+		if (aes && (franzen != ""))
+			return "AES+Franzen";
+		if (aes)
+			return "AES";
+		if (franzen != "")
+			return "Franzen";
+		return "plain";
+	}
+};
+/// the output not good: closed and deleted (its .franzen too)
+static void rp_butta(OutputArchive *&io_out, const string &i_temporaneo)
+{
+	if (io_out != NULL)
+	{
+		g_rp_fp= FPNULL; /// 65.16g: closed here
+		try
+		{
+			io_out->close();
+		}
+		catch (std::exception &)
+		{
+		}
+		delete io_out;
+		io_out= NULL;
+	}
+	if (i_temporaneo == "") /// 65.16g: -test, nothing was written (and ".franzen" is not ours)
+		return;
+	if (exists(i_temporaneo))
+		delete_file(i_temporaneo.c_str());
+	if (exists(franzenname(i_temporaneo)))
+		delete_file(franzenname(i_temporaneo).c_str());
+}
+
+/// 65.16g: with rules by date (7d4w12my) the last versions always kept too, without -n
+static const int RP_RISERVA= 10;
+/// 65.16g: -test: every version of the archive, kept and why (1d: the newest day, 2d the one before...; list; reserve),
+/// or not (the ones in a row on one line)
+static void rp_anteprima(const rp_archivio &i_arc, const vector<int> &i_prese, const vector<string> &i_perche, const string &i_conti)
+{
+	const int	 ultima= (int)i_arc.versioni.size() - 1;
+	vector<bool> presa(ultima + 1, false);
+	for (size_t i= 0; i < i_prese.size(); ++i)
+		presa[i_prese[i]]= true;
+	int via= 0; /// the first of a run not kept
+	for (int v= 1; v <= ultima + 1; ++v)
+	{
+		if ((v <= ultima) && (!presa[v]))
+		{
+			if (via == 0)
+				via= v;
+			continue;
+		}
+		if ((via != 0) && (via == v - 1))
+			myprintf("03798: V%08d %s  -\n", via, dateToString(flagutc, i_arc.versioni[via].data).c_str());
+		else if (via != 0)
+		{
+			const string primo= dateToString(flagutc, i_arc.versioni[via].data);
+			myprintf("03799: V%08d..V%08d %s .. %s  - %s versions\n", via, v - 1, primo.c_str(), dateToString(flagutc, i_arc.versioni[v - 1].data).c_str(), migliaia(v - via));
+		}
+		via= 0;
+		if (v <= ultima)
+			myprintf("03800: V%08d %s  keep%s\n", v, dateToString(flagutc, i_arc.versioni[v].data).c_str(), i_perche[v].c_str());
+	}
+	myprintf("03801: -test: %s versions of %s would be kept%s%s%s: nothing written\n", migliaia(i_prese.size()), migliaia2(ultima), (i_conti != "") ? " (" : "", i_conti.c_str(), (i_conti != "") ? ")" : "");
+}
+
+int Jidac::repackversions()
+{
+	const int64_t inizio= mtime();
+	/// 65.16d: -all = every version (the archive compressed again with -m, or encrypted in another way). Alone:
+	/// -all N would take a list written after it as its number (and -range sets it too)
+	const bool tutte= (all != 0);
+	if (tutte && (all != 4))
+	{
+		myprintf("03790! repack: -all alone (no number after it, no -range): a list of versions goes after the archive\n");
+		return 2;
+	}
+	if (tutte && (files.size() == 2))
+	{
+		myprintf("03789! repack: -all or a list of versions (%s), not both\n", files[1].c_str());
+		return 2;
+	}
+	if (files.size() != (tutte ? 1u : 2u))
+	{
+		myprintf("03760! repack archive versions -to new.zpaq (versions: 1,5,10-20,30-last,47last,7d4w12my, or -all; a multipart in \"double quotes\" on *nix)\n");
+		return 2;
+	}
+	const string elenco= tutte ? string("all") : files[1];
+	/// 65.16g: -test: what would be kept (and why), then nothing is written (-to not needed)
+	const bool anteprima= flagtest;
+	if ((tofiles.size() != 1) && (!(anteprima && tofiles.empty())))
+	{
+		myprintf("03761! repack: -to new.zpaq (one archive; with -test none is needed)\n");
+		return 2;
+	}
+	/// the names as a, x, l take them: no extension => .zpaq
+	string	sorgente	= files[0];
+	string	destinazione= tofiles.empty() ? string("") : tofiles[0];
+	string *nomi[2]		= {&sorgente, &destinazione};
+	for (int i= 0; i < 2; ++i)
+	{
+		const size_t barra= nomi[i]->find_last_of("/\\");
+		if ((*nomi[i] != "") && (nomi[i]->find('.', (barra == string::npos) ? 0 : barra) == string::npos))
+			*nomi[i]+= ".zpaq";
+	}
+	sorgente= getbackupnameifany(sorgente);
+	if (anteprima)
+		destinazione= ""; /// (nothing is written)
+	if (destinazione.find_first_of("?*") != string::npos)
+	{
+		myprintf("03763! repack: -to is one file (multipart output: not yet)\n");
+		return 2;
+	}
+	if ((!anteprima) && stessoarchivio(sorgente, destinazione))
+	{
+		myprintf("03764! repack: the output <<%Z>> is the archive itself: refused\n", destinazione.c_str());
+		return 2;
+	}
+	/// 65.16c: the output may be its .franzen: both names
+	if ((!anteprima) && (exists(destinazione) || exists(franzenname(destinazione))) && (!flagforce))
+	{
+		myprintf("03765! repack: <<%Z>> exists (-force: replaced at the end, if all is good)\n", exists(destinazione) ? destinazione.c_str() : franzenname(destinazione).c_str());
+		return 2;
+	}
+	const string temporaneo		  = anteprima ? string("") : destinazione + ".tmp";
+	const string temporaneofranzen= anteprima ? string("") : franzenname(temporaneo);
+	if ((!anteprima) && (exists(temporaneo) || exists(temporaneofranzen)))
+	{
+		if (!flagforce)
+		{
+			myprintf("03766! repack: <<%Z>> exists (a repack stopped before? -force deletes it)\n", exists(temporaneo) ? temporaneo.c_str() : temporaneofranzen.c_str());
+			return 2;
+		}
+		if ((exists(temporaneo) && (!delete_file(temporaneo.c_str()))) || (exists(temporaneofranzen) && (!delete_file(temporaneofranzen.c_str()))))
+		{
+			myprintf("03783! repack: cannot delete <<%Z>>\n", temporaneo.c_str());
+			return 2;
+		}
+	}
+
+	/// the method, as add makes it (the size of its blocks after the level)
+	string metodo= method;
+	if (metodo == "")
+#if defined(ZPAQZSTD) && !defined(ANCIENT)
+		metodo= "8";
+#else
+		metodo= "1";
+#endif
+#ifdef ZPAQZSTD
+	if ((metodo[0] == '8') && ((metodo.size() == 1) || (!isdigit((unsigned char)metodo[1]))))
+		metodo.insert(1, "4");
+#else
+	if ((metodo[0] == '7') || (metodo[0] == '8') || (metodo[0] == '9'))
+	{
+		myprintf("03767$ repack: -m%s is zstd, not in this build: -m1\n", metodo.c_str());
+		metodo= "1";
+	}
+#endif
+	if (metodo.size() == 1)
+		metodo+= ((metodo[0] >= '2') && (metodo[0] <= '9')) ? "6" : "4";
+	const int logblocco= 20 + atoi(metodo.c_str() + 1);
+	if ((strchr("0123456789x", metodo[0]) == NULL) || (logblocco < 20) || (logblocco > 31))
+	{
+		myprintf("03768! repack: -m%s, a method of 0..9 or x, blocks 0..11\n", metodo.c_str());
+		return 2;
+	}
+	const unsigned dimblocco   = (1u << logblocco) - 4096;
+	const int	   frammento   = (fragment < 0) ? 0 : fragment;
+	const unsigned maxframmento= ((frammento > 19) || ((8128u << frammento) > dimblocco - 12)) ? dimblocco - 12 : (8128u << frammento);
+	const unsigned minframmento= ((frammento > 25) || ((64u << frammento) > maxframmento)) ? maxframmento : (64u << frammento);
+	const int	   threads	   = (howmanythreads < 1) ? 1 : howmanythreads;
+
+	if (anteprima)
+		myprintf("03802: repack <<%Z>> versions %s -test: what would be kept, nothing is written\n", sorgente.c_str(), elenco.c_str());
+	else
+		myprintf("03769: repack <<%Z>> versions %s -> <<%Z>> -m%s -t%d\n", sorgente.c_str(), elenco.c_str(), destinazione.c_str(), metodo.c_str(), threads);
+	/// opened once before the map: a password asked (no -key, no -franzen) is not asked over it. And what it is
+	int64_t		dimensionesorgente= 0;
+	ArchiveType tipo			  = ARCHIVE_ZPAQ_PLAIN;
+	try
+	{
+		InputArchive prova(sorgente.c_str());
+		dimensionesorgente= prova.totalsize();
+		tipo			  = prova.get_archivetype();
+	}
+	catch (std::exception &e)
+	{
+		myprintf("03770! <<%Z>>: %s\n", sorgente.c_str(), e.what());
+		return 2;
+	}
+	/*
+		65.16c: the encryption of the source (-key, -franzen, or what was asked just now) and of the output, as the
+		source unless said: -key2 X (another AES key, . none), -franzen2 X (another Franzen password, . none). As
+		password: -franzen on a source without Franzen gives an output with it
+	*/
+	const bool	 sorgenteaes	= (tipo == ARCHIVE_ZPAQ_AES) || (tipo == ARCHIVE_ZPAQ_AES_FRANZEN);
+	const bool	 sorgentefranzen= (tipo == ARCHIVE_ZPAQ_FRANZEN) || (tipo == ARCHIVE_ZPAQ_AES_FRANZEN);
+	rp_cifratura dentro;
+	if (sorgenteaes && (g_password != NULL))
+	{
+		dentro.aes= true;
+		memcpy(dentro.chiave, g_password, 32);
+	}
+	if (sorgentefranzen)
+		dentro.franzen= g_franzen;
+	rp_cifratura fuori= dentro;
+	if (new_password != NULL) /// -key2 (. is no AES: the hash of a .)
+	{
+		libzpaq::SHA256 sha256;
+		sha256.put('.');
+		fuori.aes= (memcmp(new_password, sha256.result(), 32) != 0);
+		if (fuori.aes)
+			memcpy(fuori.chiave, new_password, 32);
+	}
+	else if ((g_password != NULL) && (!sorgenteaes))
+		myprintf("03785$ repack: -key, but <<%Z>> has no AES: the output neither (-key2 X for one)\n", sorgente.c_str());
+	if (g_franzen2 != "")
+		fuori.franzen= (g_franzen2 == ".") ? "" : g_franzen2;
+	else if ((!sorgentefranzen) && (g_franzen != ""))
+		fuori.franzen= g_franzen;
+	bool franzenqui= false; /// a build with Franzen
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	franzenqui= true;
+#endif /// NOSFTPEND
+#endif
+	const bool franzenfuori= (fuori.franzen != "");
+	if (franzenfuori && (!franzenqui))
+	{
+		myprintf("03786! repack: Franzen is not in this build\n");
+		return 2;
+	}
+	if (isfranzen(destinazione) && (!franzenfuori))
+	{
+		myprintf("03788! repack: <<%Z>> is the name of a Franzen file, the output has no Franzen\n", destinazione.c_str());
+		return 2;
+	}
+	const string finale		 = franzenfuori ? franzenname(destinazione) : destinazione; /// the file at the end
+	const string filetemporaneo= franzenfuori ? temporaneofranzen : temporaneo;
+	string		 cambi;
+	if (fuori.aes && dentro.aes)
+		cambi+= memcmp(fuori.chiave, dentro.chiave, 32) ? ", AES: another key" : ", AES: the same key";
+	if (franzenfuori && (dentro.franzen != ""))
+		cambi+= (fuori.franzen != dentro.franzen) ? ", Franzen: another password" : ", Franzen: the same password";
+	myprintf("03787: Encryption %s -> %s%s\n", dentro.nome().c_str(), fuori.nome().c_str(), cambi.c_str());
+
+	/// the output made before the map (Franzen says what it creates) with its encryption. Then the keys of the source
+	/// again, for the whole reading (InputArchive opens the franzen file of a part when it reads it: with g_franzen)
+	OutputArchive *out= NULL;
+	rp_guardia	   guardia(temporaneo); /// 65.16g: from here a control-C deletes it
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	const int64_t rottiprima= g_franzen_scrittirotti;
+#endif /// NOSFTPEND
+#endif
+	if (!anteprima) /// 65.16g: -test writes nothing
+		try
+		{
+			fuori.usa();
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			g_franzen_zpaq_nowrite= franzenfuori; /// its .franzen only: never a .zpaq beside it
+#endif /// NOSFTPEND
+#endif
+			char sale[32]= {0};
+			if (fuori.aes)
+				salezpaq(sale); /// zeros with -debug4
+			out	   = new OutputArchive(temporaneo, temporaneo.c_str(), fuori.aes ? fuori.chiave : NULL, sale, 0);
+			g_rp_fp= out->getthefp();
+		}
+		catch (std::exception &e)
+		{
+			myprintf("03776! repack: %s: nothing written\n", e.what());
+			dentro.usa();
+			rp_butta(out, temporaneo);
+			return 2;
+		}
+	dentro.usa();
+
+	rp_archivio	 vecchio;
+	rp_cruscotto cruscotto;
+	cruscotto.inizia("repack " + sorgente + " (" + tohuman(dimensionesorgente) + ") -> " + (anteprima ? string("-test") : finale) + "  -m" + metodo + " -t" + itos(threads) + "  " + dentro.nome() + " -> " + fuori.nome() + "  versions " + elenco, &vecchio, dimensionesorgente, false);
+	string errore= rp_leggi(sorgente, vecchio, &cruscotto);
+	if (errore != "")
+	{
+		cruscotto.finale();
+		myprintf("03770! <<%Z>>: %s\n", sorgente.c_str(), errore.c_str());
+		rp_butta(out, temporaneo);
+		return 2;
+	}
+	const int	ultima= (int)vecchio.versioni.size() - 1;
+	vector<int> prese;
+	/// 65.16g: the rules by date (7d4w12my) want the dates; with them the last -n X are always kept too
+	vector<int64_t> datever(ultima + 1, 0);
+	for (int v= 1; v <= ultima; ++v)
+		datever[v]= vecchio.versioni[v].data;
+	vector<string> perche;
+	string		   contiregole;
+	const int	   riserva= (menoenne > 0) ? (int)menoenne : RP_RISERVA;
+	errore				  = rp_elenco(tutte ? string("1-last") : elenco, datever, riserva, prese, perche, contiregole);
+	if (errore != "")
+	{
+		cruscotto.finale();
+		myprintf("03772! versions %s: %s (the archive has %d)\n", elenco.c_str(), errore.c_str(), ultima);
+		rp_butta(out, temporaneo);
+		return 2;
+	}
+	const int n= (int)prese.size();
+
+	/// what every version taken writes: the files changed since the version taken before it, the deletions.
+	/// A fragment goes into the first version taken whose files use it (0: no file uses it, thrown away)
+	vector<vector<const rp_record *> > scritti(n + 1);
+	vector<vector<const string *> >	   tolti(n + 1);
+	vector<uint32_t>				   primouso(vecchio.frammenti.size(), 0);
+	int64_t							   nscritti= 0;
+	int64_t							   ntolti  = 0;
+	{
+		std::map<string, const rp_record *> stato, scritto;
+		std::set<string>					 toccati;
+		int									 j= 1;
+		for (int v= 1; (v <= ultima) && (j <= n); ++v)
+		{
+			cruscotto.righe("Choosing what to keep: version " + itos(v) + " of " + itos(ultima), "");
+			cruscotto.aggiorna();
+			rp_applica(vecchio.versioni[v], stato, toccati);
+			if (v != prese[j - 1])
+				continue;
+			for (std::set<string>::const_iterator t= toccati.begin(); t != toccati.end(); ++t)
+			{
+				std::map<string, const rp_record *>::iterator a= stato.find(*t);
+				std::map<string, const rp_record *>::iterator b= scritto.find(*t);
+				if (a == stato.end())
+				{
+					if (b != scritto.end())
+					{
+						tolti[j].push_back(&b->second->nome);
+						scritto.erase(b);
+					}
+				}
+				else if ((b == scritto.end()) || (!rp_uguali(*a->second, vecchio, *b->second, vecchio)))
+				{
+					scritti[j].push_back(a->second);
+					scritto[*t]= a->second;
+					for (size_t i= 0; i < a->second->ptr.size(); ++i)
+						if (primouso[a->second->ptr[i]] == 0)
+							primouso[a->second->ptr[i]]= (uint32_t)j;
+				}
+			}
+			nscritti+= scritti[j].size();
+			ntolti+= tolti[j].size();
+			toccati.clear();
+			++j;
+		}
+	}
+	/*
+		A d block is read in every version taken that is the first to use one of its fragments (no version: never
+		read). Almost always one: more than one only for data that comes back after versions taken without it (a
+		file deleted, then the same again). Not the first version only: its fragments the later ones need would
+		be in it with no file of it using them (read_archive -until: 72414, a WARNING)
+	*/
+	int64_t frammentivivi= 0;
+	int64_t bytesvivi	 = 0;
+	for (size_t f= 1; f < vecchio.frammenti.size(); ++f)
+		if (primouso[f] != 0)
+		{
+			++frammentivivi;
+			bytesvivi+= vecchio.frammenti[f].usize;
+		}
+	vector<vector<uint32_t> > blocchi(n + 1);
+	vector<vector<uint32_t> > copie(n + 1); /// 65.16g -quick: the blocks taken as they are, by version
+	int64_t					  bloccicopiati= 0;
+	int64_t					  bytescopiati = 0;
+	int64_t					  daticopiati  = 0;
+	int64_t					  bloccidaleggere= 0;
+	int64_t					  letture		 = 0;
+	int64_t					  compressi		 = 0;
+	int64_t					  dadecomprimere = 0;
+	int64_t					  compressitutti = 0;
+	for (size_t b= 0; b < vecchio.blocchi.size(); ++b)
+	{
+		const rp_blocco &bb= vecchio.blocchi[b];
+		compressitutti+= bb.bsize;
+		vector<uint32_t> chi;
+		int64_t			 dati= 0;
+		for (uint32_t f= bb.primo; f < bb.primo + bb.quanti; ++f)
+		{
+			dati+= vecchio.frammenti[f].usize;
+			if (primouso[f] != 0)
+				chi.push_back(primouso[f]);
+		}
+		if (chi.empty())
+		{
+			cruscotto.blocco((uint32_t)b, RP_SALTATO);
+			continue;
+		}
+		std::sort(chi.begin(), chi.end());
+		chi.erase(std::unique(chi.begin(), chi.end()), chi.end());
+		/*
+			65.16g -quick: every fragment of it kept, all of them first in the same version: the block as it is, not
+			decompressed (its bytes, its method), its name made new (rp_rinomina). A block used in part is not: its
+			fragments that no file uses would be in the new archive (72414, a WARNING): decompressed, compressed again
+		*/
+		if (flagquick && (chi.size() == 1))
+		{
+			bool tutti= true;
+			for (uint32_t f= bb.primo; tutti && (f < bb.primo + bb.quanti); ++f)
+				tutti= (primouso[f] != 0);
+			if (tutti)
+			{
+				copie[chi[0]].push_back((uint32_t)b);
+				cruscotto.blocco((uint32_t)b, RP_DAFARE);
+				++bloccidaleggere;
+				++letture;
+				compressi+= bb.bsize;
+				++bloccicopiati;
+				bytescopiati+= bb.bsize;
+				daticopiati+= dati;
+				continue;
+			}
+		}
+		for (size_t k= 0; k < chi.size(); ++k)
+			blocchi[chi[k]].push_back((uint32_t)b);
+		cruscotto.blocco((uint32_t)b, RP_DAFARE);
+		cruscotto.rimaste((uint32_t)b, (int)chi.size());
+		++bloccidaleggere;
+		letture+= chi.size();
+		compressi+= bb.bsize;
+		dadecomprimere+= dati * (int64_t)chi.size();
+	}
+	/// what is said before the work: at once with the line, after the map with the map. 65.16g: -test, now, then
+	/// every version: kept and why, or not
+	if (anteprima)
+		cruscotto.finale();
+	const bool sopra= anteprima || (!cruscotto.mappa());
+	cruscotto.pulisci();
+	if (sopra)
+	{
+		if (vecchio.incompleta)
+			myprintf("03771$ <<%Z>> ends with a transaction not finished: ignored, as every command does (trim takes it away)\n", sorgente.c_str());
+		myprintf("03773: Versions taken %s of %s: %s files written, %s deletions\n", migliaia(n), migliaia2(ultima), migliaia3(nscritti), migliaia4(ntolti));
+		myprintf("03774: Data kept %s (%s fragments) from %s of %s blocks (%s of %s compressed): the others are not read\n", tohuman(bytesvivi), migliaia(frammentivivi), migliaia2(bloccidaleggere), migliaia3(vecchio.blocchi.size()), tohuman2(compressi), tohuman3(compressitutti));
+		if (letture > bloccidaleggere)
+			myprintf("03784: %s block(s) read more than once (data used again after versions without it)\n", migliaia(letture - bloccidaleggere));
+		if (flagquick) /// 65.16g
+			myprintf("03803: -quick: %s block(s) (%s) taken as they are (every fragment kept: not decompressed), %s compressed again\n", migliaia(bloccicopiati), tohuman(bytescopiati), migliaia2(bloccidaleggere - bloccicopiati));
+	}
+	if (anteprima)
+	{
+		rp_anteprima(vecchio, prese, perche, contiregole);
+		return 0;
+	}
+	cruscotto.lavoro(dadecomprimere, bytesvivi - daticopiati); /// 65.16g -quick: the copies apart
+	cruscotto.copie(bytescopiati);
+	cruscotto.altri(compressi - bytescopiati);
+
+	rp_lavori		 lavori(threads);
+	vector<rp_conto> conti;
+	vector<rp_copia> copiati;
+	int64_t			 dimensione= 0;
+	errore						= rp_scrivi(out, vecchio, sorgente, prese, blocchi, copie, primouso, tolti, scritti, metodo, dimblocco, minframmento, threads, lavori, cruscotto, conti, copiati, dimensione);
+	cruscotto.finale();
+	if (errore == "") /// closed after the map; with Franzen its last bytes go to the disk here
+	{
+		g_rp_fp= FPNULL;
+		try
+		{
+			out->close();
+		}
+		catch (std::exception &e)
+		{
+			errore= e.what();
+		}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if ((errore == "") && (g_franzen_scrittirotti != rottiprima))
+			errore= "cannot write the franzen file";
+#endif /// NOSFTPEND
+#endif
+		delete out;
+		out= NULL;
+	}
+	if (!sopra)
+	{
+		if (vecchio.incompleta)
+			myprintf("03771$ <<%Z>> ends with a transaction not finished: ignored, as every command does (trim takes it away)\n", sorgente.c_str());
+		myprintf("03773: Versions taken %s of %s: %s files written, %s deletions\n", migliaia(n), migliaia2(ultima), migliaia3(nscritti), migliaia4(ntolti));
+		myprintf("03774: Data kept %s (%s fragments) from %s of %s blocks (%s of %s compressed): the others are not read\n", tohuman(bytesvivi), migliaia(frammentivivi), migliaia2(bloccidaleggere), migliaia3(vecchio.blocchi.size()), tohuman2(compressi), tohuman3(compressitutti));
+		if (letture > bloccidaleggere)
+			myprintf("03784: %s block(s) read more than once (data used again after versions without it)\n", migliaia(letture - bloccidaleggere));
+		if (flagquick) /// 65.16g
+			myprintf("03803: -quick: %s block(s) (%s) taken as they are (every fragment kept: not decompressed), %s compressed again\n", migliaia(bloccicopiati), tohuman(bytescopiati), migliaia2(bloccidaleggere - bloccicopiati));
+	}
+	if (flagverbose)
+		for (size_t k= 0; k < conti.size(); ++k)
+			myprintf("03775: Version %08d (old %08d) %s files, %s deletions, %s blocks %s\n", (int)k + 1, conti[k].vecchia, migliaia(conti[k].scritti), migliaia2(conti[k].tolti), migliaia3(conti[k].blocchi), migliaia4(conti[k].bytes));
+	/// from here the new archive is read: with its keys (opened once before the map of the check: Franzen speaks)
+	fuori.usa();
+	if (errore == "")
+	{
+		try
+		{
+			InputArchive prova(temporaneo.c_str());
+			if (prova.totalsize() != dimensione)
+				errore= itos(prova.totalsize()) + " bytes in <<" + filetemporaneo + ">>, " + itos(dimensione) + " written";
+		}
+		catch (std::exception &e)
+		{
+			errore= string("cannot open it again: ") + e.what();
+		}
+	}
+	if (errore != "")
+	{
+		myprintf("03776! repack: %s: nothing written\n", errore.c_str());
+		rp_butta(out, temporaneo);
+		return 2;
+	}
+	myprintf("03777: Written %s (%s): now read again and checked\n", migliaia(dimensione), tohuman(dimensione));
+	errore= rp_controlla(temporaneo, "check " + finale + " (" + fuori.nome() + ", written as .tmp: read again from the disk)", dimensione, vecchio, prese, copiati, lavori);
+	if (errore != "")
+	{
+		myprintf("03778! repack: the new archive does not check: %s: deleted\n", errore.c_str());
+		rp_butta(out, temporaneo);
+		return 2;
+	}
+	if (exists(destinazione) || exists(franzenname(destinazione))) /// -force: both names (this one or the other)
+	{
+		const string vecchi[2]= {destinazione, franzenname(destinazione)};
+		for (int i= 0; i < 2; ++i)
+			if (exists(vecchi[i]) && (!delete_file(vecchi[i].c_str())))
+			{
+				myprintf("03779! repack: cannot delete <<%Z>> (the new archive is <<%Z>>)\n", vecchi[i].c_str(), filetemporaneo.c_str());
+				return 2;
+			}
+		myprintf("03782: -force: <<%Z>> replaced\n", destinazione.c_str());
+	}
+	if (myrename(filetemporaneo, finale) != 0)
+	{
+		myprintf("03780! repack: cannot rename <<%Z>> to <<%Z>>\n", filetemporaneo.c_str(), finale.c_str());
+		return 2;
+	}
+	const int64_t primadim= vecchio.dimensione;
+	myprintf("03781: <<%Z>> %s versions, %s -> %s (%s%%) in %.3f s: all OK\n", finale.c_str(), migliaia(n), migliaia2(primadim), migliaia3(dimensione), (primadim > 0) ? myto_string(dimensione * 100 / primadim).c_str() : "0", (mtime() - inizio) / 1000.0);
+	if (!copiati.empty()) /// 65.16g: what "all OK" does not say
+		myprintf("03804: -quick: %s block(s) copied as they were: their bytes checked, not decompressed (t, p: all of them)\n", migliaia(copiati.size()));
+	return 0;
 }
 
 /// 65.11g: f X: -nuke NN -force, the fast NTFS sanitize (see franznuke)
@@ -249618,6 +252767,15 @@ int Jidac::testparametriadd()
 		(x_001.zpaq.franzen), and the index of a backup too. Not yet: -index (the parts
 		elsewhere; -chunk yes, since 65.13e). All franzen or all plain: decided by the first part
 	*/
+#if defined(unix) && (defined(ESX) || defined(OPEN))
+	/// 65.16h: -tar where the metadata are never saved (ESXi, OPEN: see TAR_SECONDS): one line now, before anything
+	/// is written, instead of a "79531!" for every file and an archive without them
+	if (flagtar)
+	{
+		myprintf("79532! -tar is not in this build: the Posix metadata would not be saved\n");
+		return 2;
+	}
+#endif
 	/// 65.13e: -chunk too (every part a franzen file only, none bigger than -chunk on the disk): 43806 is no more
 	if (g_franzen != "")
 	{

@@ -58,6 +58,20 @@ Without Franzen encryption, every archive can still be extracted by the original
 15+ years of active development • 100% FOSS • Forever free
 
 ---
+## Third-party software
+
+Projects made by others around zpaqfranz and the zpaq format.  
+_They are independent and I have not developed or tested them, so give them a try with a bit of care:
+*Доверяй, но проверяй* (doveryai, no proveryai: trust, but check)_
+
+| Project | Type | Description |
+|---|---|---|
+| [rizpaq](https://github.com/AmbaRu/rizpaq) | Windows | ZPAQ power without the console. Desktop archiver for Windows: versioned ZPAQ backups, PAR2 protection, ZIP/7z/RAR support. GUI for zpaqfranz. |
+| [ZpaqTreeView](https://github.com/EpicGazel/ZpaqTreeView) | Python | Allows browsing and extraction of a zpaqfranz archive in a tree/hierarchical file structure view. |
+
+_Made something for zpaqfranz? Open an issue or a pull request to be listed here_
+---
+
 
 ## What's new
 

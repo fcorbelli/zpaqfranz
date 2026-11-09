@@ -57,6 +57,14 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define _WIN32_WINNT 0x0600
 #endif
 
+/// 65.19p: the XP build (zpaqfranzxp.exe) is the only 32 bit one built with -D__USE_MINGW_ANSI_STDIO=1
+/// (rella.bat, rellaxp.bat, xp.bat). HERE, before any #include, that macro exists only if it is on the
+/// command line: mingw-w64 sets it later, in _mingw.h, the compiler never does. It has no update
+/// (it would put zpaqfranz32.exe in its place): see update_nonqui()
+#if defined(_WIN32) && !defined(_WIN64) && defined(__USE_MINGW_ANSI_STDIO)
+#define ZPAQXPBUILD
+#endif
+
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
@@ -78,7 +86,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #undef ZPAQLIBSODIUM
 #endif
 
-#define ZPAQ_VERSION "65.19o"
+#define ZPAQ_VERSION "65.19p"
 #define ZPAQ_DATE "(2026-11-09)"
 
 
@@ -118667,6 +118675,16 @@ void kickstart_elenco(std::vector<risorse> &elenco_risorse)
 	elenco_risorse.push_back(risorse(12, "WINFSP", "winfsp-2.1.25156.msi", 2191360, "073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A"));
 }
 
+/// 65.19p: a zpaqfranz-full has the resources linked in, one is enough to know (as kickstart does).
+/// update leaves it alone: it would put zpaqfranz.exe, without them, in its place
+bool zpaqfranz_full()
+{
+	std::vector<risorse> elenco;
+	kickstart_elenco(elenco);
+	HMODULE hExe= GetModuleHandle(NULL);
+	return (hExe != NULL) && (!elenco.empty()) && (FindResource(hExe, MAKEINTRESOURCE(elenco[0].number), RT_RCDATA) != NULL);
+}
+
 int kickstart_resources(std::string i_package)
 {
 	if (flagdebug)
@@ -159625,6 +159643,10 @@ losetup -d /dev/loop0
 	HU(1951, "update", "-force -kill", "Also with a signature NOT verified (my certificate|expired or renewed): a captcha, the URL of the exe typed|EXACTLY, then it is installed AS IT IS, from that URL only|(always asked, also with -nocaptcha). At your own risk"),
 	HIT(1951, 0xD48E83A2, "Anche con una firma NON verificata (il mio certificato|scaduto o rinnovato): un captcha, l'URL dell'exe scritto|ESATTAMENTE, poi viene installato COSI' COM'E', solo da|quell'URL (chiesto sempre, anche con -nocaptcha).|A tuo rischio"),
 	HRU(1951, 0xD48E83A2, "Даже с НЕпроверенной подписью (мой сертификат|истёк или обновлён): капча — URL exe, набранный|ТОЧНО, затем он устанавливается КАК ЕСТЬ, только|с этого URL (спрашивается всегда, даже с -nocaptcha).|На ваш риск"),
+	/// 65.19p: update_nonqui
+	HU(1952, "update", " ", "Only zpaqfranz.exe, zpaqfranzhw.exe, zpaqfranz32.exe update|themselves: not zpaqfranz-full, not the XP build (by hand)"),
+	HIT(1952, 0x1E0C0D54, "Si aggiornano solo zpaqfranz.exe, zpaqfranzhw.exe,|zpaqfranz32.exe: non zpaqfranz-full, non la build|per XP (a mano)"),
+	HRU(1952, 0x1E0C0D54, "Сами обновляются только zpaqfranz.exe, zpaqfranzhw.exe,|zpaqfranz32.exe: не zpaqfranz-full, не сборка|для XP (вручную)"),
 #endif
 	HESEMPI("update", 'b'),
 	HE(647, "update", "Check for updates", "update"),
@@ -214714,6 +214736,36 @@ static bool update_senzafirma(const string &i_url)
 	}
 	return true;
 }
+
+/*
+	65.19p: I decided, update is ONLY for zpaqfranz.exe (64 bit), zpaqfranzhw.exe (64 bit) and
+	zpaqfranz32.exe (32 bit). zpaqfranz-full would become zpaqfranz.exe (the 64 bit one, without the
+	resources inside), the XP build zpaqfranz32.exe: no update at all, with no switch (not even -force,
+	not even with the two URLs). True = not here (said why)
+*/
+static bool update_nonqui()
+{
+	string chi;
+	string alposto;
+#ifdef ZPAQXPBUILD
+	chi	   = "the XP build (zpaqfranzxp.exe)";
+	alposto= "zpaqfranz32.exe";
+#endif
+#ifdef _WIN64
+	if (zpaqfranz_full())
+	{
+		chi	   = "zpaqfranz-full.exe";
+		alposto= "zpaqfranz.exe (64 bit, without the DLLs, mysql and WinFsp inside)";
+	}
+#endif
+	if (chi == "")
+		return false;
+	color_red();
+	myprintf("03868! update is not for %s: it would put %s in its place\n", chi.c_str(), alposto.c_str());
+	color_restore();
+	myprintf("03869: Only zpaqfranz.exe, zpaqfranzhw.exe and zpaqfranz32.exe update themselves: this one by hand\n");
+	return true;
+}
 #endif // _WIN32
 
 int Jidac::update()
@@ -214722,6 +214774,10 @@ int Jidac::update()
 	myprintf("03190: Cannot update SOLARIS or HAIKU\n");
 	return 0;
 #else
+#ifdef _WIN32
+	if (update_nonqui())
+		return 2;
+#endif
 	if (flagverbose)
 		myprintf("03192: Checking internet update (-verbose)\n");
 	else

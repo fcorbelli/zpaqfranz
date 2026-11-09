@@ -78,8 +78,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #undef ZPAQLIBSODIUM
 #endif
 
-#define ZPAQ_VERSION "65.18r"
-#define ZPAQ_DATE "(2026-11-07)"
+#define ZPAQ_VERSION "65.19o"
+#define ZPAQ_DATE "(2026-11-09)"
 
 
 /*
@@ -230,6 +230,8 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security-open-software
 	#undef  ZPAQLIBSODIUM /// 65.18e: Franzen with franzsodium only
 #endif // corresponds to #ifdef (#ifdef ESX)
 
+
+/// ARM-based NAS: how to build https://github.com/fcorbelli/zpaqfranz/blob/main/NONWINDOWS/NAS.md
 #ifdef NAS
 	#define ANCIENT
 	#undef HWSHA1
@@ -1296,8 +1298,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 29 [MIT License]               postami 0.3.0 (SMTP client with TLS) and zippami (one file into a .zip) by ... me
  /// LICENSE_START.29
  /// LICENSE_END.29
-    The e-mail client of "work email" and the .zip of "work zip": written for zpaqfranz,
-    same author and same license (the MIT License at the top of this file).
+    The e-mail client of "work email" and the .zip of "work zip": written by me for zpaqfranz,
+    same license (the MIT License at the top of this file).
     Its block (from POSTAMI BEGIN to POSTAMI END) holds a subset of Mbed TLS: see 30.
     Left out of the build by -DNOEMAIL (-DOPEN sets it).
 
@@ -1966,7 +1968,7 @@ SFTP AND LIBCURL
 If you define -DSFTP during compilation, the program will dynamically use the 
 libcurl library, if it is available. 
 On Windows systems, this refers to the libcurl-x64.dll/libcurl.dll. 
-This DLL can be downloaded from the author's website simply by running zpaqfranz sftp. 
+This DLL can be downloaded from my website simply by running zpaqfranz sftp.
 For *nix systems, it is typically named libcurl.so (or something similar) and must be 
 installed manually, for example, using pkg add libcurl (on FreeBSD) or equivalent commands. 
 If it cannot be made to work, zpaqfranz will return an error.
@@ -2230,9 +2232,9 @@ g++ -O3 -DBIG -DALIGNMALLOC zpaqfranz.cpp -o zpaqfranz -pthread
 PowerPC (Debian gcc 4.9.1)
 g++ -O3 -DBIG -DANCIENT zpaqfranz.cpp -o zpaqfranz -pthread -static -s
 
-Alpine Linux
-Sorry, cannot make pthread work
-Just run with -t1 (aka: multithread is disabled)
+Alpine Linux (gcc version 15.2.0 (Alpine 15.2.0))
+On newer one (3.24.4) it is possible to compile with a straight
+g++ -O3 zpaqfranz.cpp -o zpaqfranz
 
 Windows XP 
 Newer zpaqfranz32.exe (>=60.10) more or less works on XP
@@ -87929,6 +87931,7 @@ DWORD g_rp_filo= 0; /// the thread of repack
 #endif
 int	 g_incomplete_version= 0;
 int64_t g_frammentiorfani= 0; /// read_archive: fragments that no file uses (a lost i block, 72414): a warning
+int64_t g_crcdiversi= 0;	  /// 65.19n: add -verify/-collision, files whose fragments do not give the CRC-32 read (02108): an ERROR
 
 int64_t g_starting_zpaqdate = 0;
 int64_t g_starting_zpaqsize = 0;
@@ -88289,6 +88292,8 @@ bool flagpakka;
 bool flagcatpaqmode;
 bool flagdistinct;
 bool flagparanoid;
+bool flagnohttps;	/// 65.19c: Windows, the files of www.francocorbelli.it via http only (default: https, then http by itself)
+bool flaghttpsfake;	/// 65.19c (hidden, for the tests): the https attempt of downloadfile_sito() goes to a closed port
 int64_t g_nomicollisi	  = 0; /// 65.16i: files renamed: for Windows their name was the one of another file (a WARNING)
 int64_t g_closefalliti	  = 0; /// 65.16i: the date or the attributes of a file not set by close(), 00163 00165 (a WARNING)
 int64_t g_closedispositivi= 0; /// 65.16i: "files" that were devices, their data gone: 03808 (an ERROR)
@@ -88328,6 +88333,7 @@ bool flagstdout;
 bool flagstore;
 bool flagtar;
 bool flagnumeric; /// x -tar: owners by number only (as tar --numeric-owner)
+bool flagsameperms; /// 65.19h: x on *nix, not root: the modes of the archive exactly (as tar -p)
 struct franz_posix; /// -tar: see "-tar (*nix)"
 struct franz_tar;
 bool flagtest;
@@ -88354,18 +88360,19 @@ volatile bool g_usbtest_stop  = false;
 int			  g_fermatafatale= 0; /// not 0: my_handler called by an error (a -image whose reader cannot go on), not by Ctrl+C: its exit code
 int	 g_turbothreads= 0; /// -turbo N: threads of the parallel fragmenter of add2(); 0 = as many as -t (up to 32)
 uint64_t g_turbochunk= 0; /// 65.18l: -turbochunk X, not in the help (for the tests): the batch of -turbo; 0 = automatic
+uint64_t g_updatefake= 0; /// 65.19j: -updatefake YYYYMMDD, not in the help (for the tests): update as on that day (the expiry of the keys of the signature); 0 = today
 bool g_turbodetto= false; /// 65.18o: -turbo written (on the command line or in a -ini): -lean does not turn it off
 /// 65.18o: the levels by name, from the lightest to the strongest. One only, and not with -m (03995, rc 2).
 /// -lean is -m80 -t2 -noturbo, but a -t or a -turbo written wins (the command line always wins)
 /// 65.18q: a build without zstd (ESX, ANCIENT but NAS) has no -m7 -m8 -m9: there -m80 -m8 -m9 -m7 were "method >5"
-/// = -m5 (-lean was -m5 -t2, -normal -m5). There the zpaq models, in the same order (decided by the author)
+/// = -m5 (-lean was -m5 -t2, -normal -m5). There the zpaq models, in the same order (I decided)
 struct livellonome
 {
 	const char *nome;
 	const char *metodo;
 	const char *senzazstd; /// 65.18q: the method in a build without ZPAQZSTD
-	const char *aiuto; /// as in h a (HU 1923...) and in the flags (@flag 1930...): the same words. The words of the
-					   /// author (65.18o): hints for who does not know what -m80 or -m7 are, not a contract
+	const char *aiuto; /// as in h a (HU 1923...) and in the flags (@flag 1930...): the same words. My words
+					   /// (65.18o): hints for who does not know what -m80 or -m7 are, not a contract
 };
 static const livellonome g_livelli[]= {
 	{"-lean", "80", "1", "Minimal resources, slower (e.g. NAS)"},		/// -m80 -t2 -noturbo (the -t2 -noturbo in loadparameters)
@@ -88451,6 +88458,7 @@ int			g_rescuemb		   = 16;	/// -rescue N: the longest jump, MB
 int			g_rescuetime	   = 2;		/// -rescuetime S: a read slower than this (seconds) is a sick zone. 0: errors only
 std::string g_rescuefake;				/// -rescuefake (hidden, for the tests): "start:bytes[:slow],..." of the source that fail (or are slow)
 std::string g_cpfake;					/// 65.13d: -cpfake (hidden, for the tests): "piece[:times],...": cp -verify, a byte of the destination changed after the write of that piece (from 0, in this run)
+std::string g_p7mfake;					/// 65.19l: -signfake (hidden, for the tests): "byte[:xor],...": update, the .p7m just downloaded changed on the disk (xor in hex, 01 if not given)
 int64_t		g_rescue_buco	   = -1;	/// the hole: [g_rescue_buco, g_rescue_finebuco) of the source is not to be read
 int64_t		g_rescue_finebuco  = -1;
 int64_t		g_rescue_salti	   = 0;		/// jumps
@@ -112619,8 +112627,8 @@ bool getcaptcha(const string &i_captcha, const string &i_reason)
 	color_green();
 	printf("%s\n", i_captcha.c_str());
 	color_restore();
-	char myline[81]= {0};
-	int	 dummy		= scanf("%80s", myline);
+	char myline[1025]= {0}; /// 65.19o: an URL can be the captcha (update -force -kill), and longer than 80
+	int	 dummy		  = scanf("%1024s", myline);
 	if (dummy != 1) /// nothing read (stdin closed): never the captcha
 		myline[0]= 0;
 	if (myline != i_captcha)
@@ -116101,6 +116109,26 @@ class downcallback : public IBindStatusCallback
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 
 #ifdef _WIN32
+/// 65.19c: the WinINet errors one meets, in words (the number alone said little). The https
+/// ones are what an old Windows says to www.francocorbelli.it (TLS 1.2 and 1.3, ECDSA only)
+static const char *wininet_errore(DWORD i_codice)
+{
+	switch (i_codice)
+	{
+		case 12002: return "timeout";											/// ERROR_INTERNET_TIMEOUT
+		case 12007: return "name not resolved";									/// ERROR_INTERNET_NAME_NOT_RESOLVED
+		case 12029: return "cannot connect";									/// ERROR_INTERNET_CANNOT_CONNECT
+		case 12030: return "connection aborted";								/// ERROR_INTERNET_CONNECTION_ABORTED
+		case 12031: return "connection reset";									/// ERROR_INTERNET_CONNECTION_RESET
+		case 12037: return "certificate date not valid: is the clock right?";	/// ERROR_INTERNET_SEC_CERT_DATE_INVALID
+		case 12038: return "certificate name not valid";						/// ERROR_INTERNET_SEC_CERT_CN_INVALID
+		case 12045: return "certificate authority not trusted (old root certificates?)"; /// ERROR_INTERNET_INVALID_CA
+		case 12057: return "certificate revocation check failed";				/// ERROR_INTERNET_SEC_CERT_REV_FAILED
+		case 12157: return "secure channel error (no TLS 1.2?)";				/// ERROR_INTERNET_SECURITY_CHANNEL_ERROR
+		case 12169: return "certificate not valid";								/// ERROR_INTERNET_SEC_INVALID_CERT
+	}
+	return "";
+}
 /// Fallback used when URLDownloadToFileW() fails: urlmon gives up on a
 /// dual-stack host whose IPv6 address does not answer (INET_E_DOWNLOAD_FAILURE
 /// 0x800C0008), WinINet instead falls back to IPv4.
@@ -116118,7 +116146,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 	if (hwininet == NULL)
 	{
 		if (flagdebug)
-			myprintf("03190: cannot load wininet.dll\n");
+			myprintf("03810: cannot load wininet.dll\n");
 		return false;
 	}
 	t_open	  p_open   = (t_open)	(void*)GetProcAddress(hwininet, "InternetOpenW");
@@ -116129,7 +116157,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 	if (p_open == NULL || p_openurl == NULL || p_read == NULL || p_query == NULL || p_close == NULL)
 	{
 		if (flagdebug)
-			myprintf("03191: wininet.dll without the expected functions\n");
+			myprintf("03811: wininet.dll without the expected functions\n");
 		FreeLibrary(hwininet);
 		return false;
 	}
@@ -116140,7 +116168,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 	FILE*	  outfile	= NULL;
 	if (hsession == NULL)
 	{
-		myprintf("03192! WinINet: cannot start a session\n");
+		myprintf("03812! WinINet: cannot start a session\n");
 		goto uscita;
 	}
 	/// NOTE: utow() by default turns every / into \: for an URL the slashes
@@ -116149,7 +116177,9 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 					INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION, 0);
 	if (hurl == NULL)
 	{
-		myprintf("03193! WinINet: cannot open %s (error %u)\n", i_verurl.c_str(), (unsigned)GetLastError());
+		const DWORD	errore= GetLastError();
+		const char *testo = wininet_errore(errore);
+		myprintf("03813! WinINet: cannot open %s (error %u%s%s)\n", i_verurl.c_str(), (unsigned)errore, (*testo != 0) ? ": " : "", testo);
 		goto uscita;
 	}
 	{
@@ -116159,7 +116189,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 		if (p_query(hurl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statuscode, &lunghezza, &indice))
 			if (statuscode < 200 || statuscode > 299)
 			{
-				myprintf("03194! WinINet: HTTP status %u for %s\n", (unsigned)statuscode, i_verurl.c_str());
+				myprintf("03814! WinINet: HTTP status %u for %s\n", (unsigned)statuscode, i_verurl.c_str());
 				goto uscita;
 			}
 		int64_t attesi= 0;
@@ -116172,7 +116202,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 		outfile= _wfopen(utow(i_verfile.c_str()).c_str(), L"wb");
 		if (outfile == NULL)
 		{
-			myprintf("03195! WinINet: cannot write %s\n", i_verfile.c_str());
+			myprintf("03815! WinINet: cannot write %s\n", i_verfile.c_str());
 			goto uscita;
 		}
 		const DWORD	   dimbuffer= 65536;
@@ -116185,7 +116215,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 			DWORD letti= 0;
 			if (!p_read(hurl, &buffer[0], dimbuffer, &letti))
 			{
-				myprintf("03196! WinINet: read error (%u)\n", (unsigned)GetLastError());
+				myprintf("03816! WinINet: read error (%u)\n", (unsigned)GetLastError());
 				errore= true;
 				break;
 			}
@@ -116193,7 +116223,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 				break;
 			if (fwrite(&buffer[0], 1, letti, outfile) != letti)
 			{
-				myprintf("03197! WinINet: write error on %s\n", i_verfile.c_str());
+				myprintf("03817! WinINet: write error on %s\n", i_verfile.c_str());
 				errore= true;
 				break;
 			}
@@ -116202,9 +116232,9 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 			{
 				ultimo= mtime();
 				if (attesi > 0)
-					myprintf("03198: Downloaded %s of %s bytes\r", migliaia(scaricati), migliaia2(attesi));
+					myprintf("03818: Downloaded %s of %s bytes\r", migliaia(scaricati), migliaia2(attesi));
 				else
-					myprintf("03198: Downloaded %s bytes\r", migliaia(scaricati));
+					myprintf("03818: Downloaded %s bytes\r", migliaia(scaricati));
 			}
 		}
 		if (i_showupdate)
@@ -116214,7 +116244,7 @@ bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool 
 		if (!errore && (attesi <= 0 || scaricati == attesi))
 			risultato= true;
 		else if (!errore)
-			myprintf("03199! WinINet: got %s bytes instead of %s\n", migliaia(scaricati), migliaia2(attesi));
+			myprintf("03819! WinINet: got %s bytes instead of %s\n", migliaia(scaricati), migliaia2(attesi));
 		if (!risultato)
 			delete_file(i_verfile.c_str());
 	}
@@ -116272,7 +116302,7 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 		/// urlmon failed: retry with WinINet before giving up (typically an
 		/// unreachable IPv6 address on a dual-stack host)
 		if (flagverbose)
-			myprintf("03178: urlmon download failed, retrying with WinINet\n");
+			myprintf("03820: urlmon download failed, retrying with WinINet\n");
 		if (!downloadfile_wininet(i_verurl, i_verfile, i_showupdate))
 		{
 			myprintf("03175: Download failed C5 (no internet?)  %s\n", i_verurl.c_str());
@@ -116281,7 +116311,14 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	}
 #else
 #define INTERNET_BUFFER_SIZE 1024
-
+	/*
+		65.19c: *nix speaks http only (no TLS here, on purpose: the files are signed or hashed).
+		- HTTP/1.0: an HTTP/1.1 answer can be "chunked", and the sizes of the chunks ended in the file
+		- the status line is read: a 404 page, or a redirect, was written as if it were the file (true)
+		- Content-Length checked (a download cut in the middle was good)
+		- 30 s timeouts on the socket: a server that accepts and does not answer hung forever
+		- host:port, User-Agent, the socket closed and the file deleted on every error
+	*/
 	if (i_showupdate)
 		if (i_verurl == "be quiet")
 			myprintf("be quiet\n");
@@ -116320,6 +116357,25 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	if (flagdebug3)
 		myprintf("03181: path |%s|\n", path);
 
+	int	  porta	  = 80;
+	char *duepunti= strchr(hostname, ':');
+	if (duepunti != NULL)
+	{
+		*duepunti= '\0';
+		porta	 = atoi(duepunti + 1);
+		if ((porta <= 0) || (porta > 65535))
+		{
+			myprintf("03832! bad port in %s\n", i_verurl.c_str());
+			free(hostname);
+			return false;
+		}
+	}
+	char portatesto[16];
+	snprintf(portatesto, sizeof(portatesto), "%d", porta);
+	struct timeval tempolimite;
+	tempolimite.tv_sec = 30;
+	tempolimite.tv_usec= 0;
+
 #ifndef IPV6
 	int sockfd= socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0)
@@ -116333,6 +116389,7 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	if (server == NULL)
 	{
 		myprintf("03183$ cannot resolve %s\n", hostname);
+		close(sockfd);
 		free(hostname);
 		return false;
 	}
@@ -116341,11 +116398,14 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	memset((char *)&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family= AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-	serv_addr.sin_port= htons(80);
+	serv_addr.sin_port= htons(porta);
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tempolimite, sizeof(tempolimite));
+	setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tempolimite, sizeof(tempolimite));
 
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
 	{
-		myprintf("03184$ C5 on connect\n");
+		myprintf("03184$ C5 on connect to %s port %d\n", hostname, porta);
+		close(sockfd);
 		free(hostname);
 		return false;
 	}
@@ -116362,7 +116422,7 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	hints.ai_next	  = NULL;
 
 	struct addrinfo *addresses= NULL;
-	int				 ret	  = getaddrinfo(hostname, "80", &hints, &addresses);
+	int				 ret	  = getaddrinfo(hostname, portatesto, &hints, &addresses);
 	if (ret)
 	{
 		myprintf("03183$ IPV6 cannot resolve %s: %s\n", hostname, gai_strerror(ret));
@@ -116370,13 +116430,15 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 		return false;
 	}
 
-	int				 sockfd;
+	int				 sockfd= -1;
 	struct addrinfo *address;
 	for (address= addresses; address; address= address->ai_next)
 	{
 		sockfd= socket(address->ai_family, address->ai_socktype, address->ai_protocol);
 		if (sockfd == -1)
 			continue;
+		setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tempolimite, sizeof(tempolimite));
+		setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tempolimite, sizeof(tempolimite));
 		if (!connect(sockfd, address->ai_addr, address->ai_addrlen))
 			break;
 		close(sockfd);
@@ -116384,13 +116446,16 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	freeaddrinfo(addresses);
 	if (address == NULL)
 	{
-		myprintf("39345$ IPV6 C5 on connect\n");
+		myprintf("39345$ IPV6 C5 on connect to %s port %d\n", hostname, porta);
 		free(hostname); // Added free here
 		return false;
 	}
 #endif
 
-	snprintf(buffer, INTERNET_BUFFER_SIZE, "GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path, hostname);
+	if (porta == 80)
+		snprintf(buffer, INTERNET_BUFFER_SIZE, "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: zpaqfranz\r\nConnection: close\r\n\r\n", path, hostname);
+	else
+		snprintf(buffer, INTERNET_BUFFER_SIZE, "GET /%s HTTP/1.0\r\nHost: %s:%d\r\nUser-Agent: zpaqfranz\r\nConnection: close\r\n\r\n", path, hostname, porta);
 
 	free(hostname);
 	if (write(sockfd, buffer, strlen(buffer)) < 0)
@@ -116410,48 +116475,147 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	ssize_t n;
 	// Strip HTTP response headers: accumulate until \r\n\r\n, then write only the body.
 	std::vector<char> hdrBuf;
-	bool headerDone= false;
+	bool			  headerDone= false;
+	bool			  errore	= false;
+	int64_t			  attesi	= -1; /// Content-Length (-1: not given)
+	int64_t			  scritti	= 0;
 	while ((n= read(sockfd, buffer, INTERNET_BUFFER_SIZE)) > 0)
 	{
 		if (flagdebug3)
 			myprintf("03187: read %s from socket\n", migliaia(n));
+		const char *dati= buffer;
+		size_t		lung= (size_t)n;
 		if (!headerDone)
 		{
 			hdrBuf.insert(hdrBuf.end(), buffer, buffer + n);
 			// Search for end-of-headers marker \r\n\r\n
-			const char *body= NULL;
-			for (size_t k= 0; k + 3 < hdrBuf.size(); k++)
-			{
-				if (hdrBuf[k]=='\r' && hdrBuf[k+1]=='\n' && hdrBuf[k+2]=='\r' && hdrBuf[k+3]=='\n')
+			size_t k	  = 0;
+			bool   trovato= false;
+			for (k= 0; k + 3 < hdrBuf.size(); k++)
+				if (hdrBuf[k] == '\r' && hdrBuf[k + 1] == '\n' && hdrBuf[k + 2] == '\r' && hdrBuf[k + 3] == '\n')
 				{
-					body= &hdrBuf[0] + k + 4;
+					trovato= true;
 					break;
 				}
-			}
-			if (body)
+			if (!trovato)
 			{
-				headerDone= true;
-				size_t bodyLen= (&hdrBuf[0] + hdrBuf.size()) - body;
-				if (bodyLen > 0)
-					fwrite(body, 1, bodyLen, file);
+				if (hdrBuf.size() > 65536)
+				{
+					myprintf("03829! HTTP headers too long from %s\n", i_verurl.c_str());
+					errore= true;
+					break;
+				}
+				continue;
 			}
+			headerDone= true;
+			const string testata(&hdrBuf[0], k);
+			const string minuscola= stringtolower(testata);
+			if (flagdebug3)
+				myprintf("03833: HTTP headers |%s|\n", testata.c_str());
+			const string stato	= testata.substr(0, testata.find("\r\n"));
+			int			 codice = 0;
+			size_t		 spazio = stato.find(' ');
+			if (spazio != string::npos)
+				codice= atoi(stato.c_str() + spazio + 1);
+			if ((codice < 200) || (codice > 299))
+			{
+				myprintf("03827! HTTP answer |%s| for %s\n", stato.c_str(), i_verurl.c_str());
+				size_t dove= minuscola.find("\r\nlocation:");
+				if (dove != string::npos)
+				{
+					size_t inizio= dove + 11;
+					while ((inizio < testata.size()) && (testata[inizio] == ' '))
+						inizio++;
+					size_t		 fine = testata.find("\r\n", inizio);
+					const string verso= testata.substr(inizio, (fine == string::npos) ? string::npos : fine - inizio);
+					myprintf("03828: redirected to %s (here the download is http only)\n", verso.c_str());
+				}
+				errore= true;
+				break;
+			}
+			size_t dove= minuscola.find("\r\ncontent-length:");
+			if (dove != string::npos)
+				attesi= atoll(testata.c_str() + dove + 17);
+			dati= &hdrBuf[0] + k + 4;
+			lung= hdrBuf.size() - (k + 4);
 		}
-		else
-			fwrite(buffer, 1, n, file);
+		if (lung > 0)
+		{
+			if (fwrite(dati, 1, lung, file) != lung)
+			{
+				myprintf("03831! write error on %s\n", i_verfile.c_str());
+				errore= true;
+				break;
+			}
+			scritti+= (int64_t)lung;
+		}
 	}
-	if (n < 0)
+	if ((n < 0) && (!errore))
 	{
-		myprintf("03188: socket negative!\n");
-		fclose(file);
-		close(sockfd);
-		return false;
+		myprintf("03188! socket read error (or no answer in %d s) from %s\n", (int)tempolimite.tv_sec, i_verurl.c_str());
+		errore= true;
+	}
+	if ((!errore) && (!headerDone))
+	{
+		myprintf("03834! no complete HTTP answer from %s\n", i_verurl.c_str());
+		errore= true;
+	}
+	if ((!errore) && (attesi >= 0) && (scritti != attesi))
+	{
+		myprintf("03830! got %s bytes instead of %s from %s\n", migliaia(scritti), migliaia2(attesi), i_verurl.c_str());
+		errore= true;
 	}
 	fclose(file);
 	close(sockfd);
+	if (errore)
+	{
+		delete_file(i_verfile.c_str());
+		return false;
+	}
 	return (prendidimensionefile(i_verfile.c_str()) > 0);
 #endif
 #endif
 	return true;
+}
+
+/// 65.19c: the address of a file of www.francocorbelli.it/zpaqfranz/ (i_path: "win64/zpaqfranz.exe").
+/// Windows https (-nohttps: http); *nix always http (its client, in downloadfile(), speaks http only)
+string franzsito(const string &i_path)
+{
+#ifdef _WIN32
+	if (!flagnohttps)
+		return "https://www.francocorbelli.it/zpaqfranz/" + i_path;
+#endif
+	return "http://www.francocorbelli.it/zpaqfranz/" + i_path;
+}
+
+/// 65.19c: the download of a file of the site (franzsito). Who calls this ALWAYS checks the file
+/// afterwards: the SHA-256 signed (update), or hard-coded (DLL, WinFsp, kickstart). On Windows the
+/// https that fails (XP, 2008 without updates, old root certificates, a wrong clock) goes on with
+/// http by itself: it is that check, not the channel, that makes the file good
+bool downloadfile_sito(const string &i_url, const string &i_file, bool i_showupdate)
+{
+	string primo= i_url;
+#ifdef _WIN32
+	const bool https= (i_url.compare(0, 8, "https://") == 0);
+	/// -httpsfake: the https attempt goes to a port nobody listens to, as on a system that cannot do it
+	if (flaghttpsfake && https)
+		primo= "https://127.0.0.1:1/" + i_url.substr(8);
+#endif
+	if (downloadfile(primo, i_file, i_showupdate))
+		return true;
+#ifdef _WIN32
+	if (https)
+	{
+		if (fileexists(i_file))
+			delete_file(i_file.c_str());
+		color_yellow();
+		myprintf("03826: https failed, now http (the file is verified anyway; -nohttps: straight http)\n");
+		color_restore();
+		return downloadfile("http://" + i_url.substr(8), i_file, i_showupdate);
+	}
+#endif
+	return false;
 }
 
 
@@ -118174,7 +118338,7 @@ int getdllfrominternet(std::string &i_filename, const std::string &i_sha256)
 	}
 
 	std::string		  filepath= includetrailingbackslash(getwinexedir()) + i_filename;
-	const std::string base_url= "http://www.francocorbelli.it/zpaqfranz/win64/"; // Configurabile
+	const std::string base_url= franzsito("win64/"); /// 65.19c: https (-nohttps: http)
 
 	for (int attempt= 0; attempt < 2; ++attempt)
 	{
@@ -118215,7 +118379,7 @@ int getdllfrominternet(std::string &i_filename, const std::string &i_sha256)
 			myprintf("01412: Download %20s from %s\n", i_filename.c_str(), dllurl.c_str());
 			color_restore();
 
-			if (!downloadfile(dllurl, filepath, true))
+			if (!downloadfile_sito(dllurl, filepath, true))
 			{
 				/// error already printed
 				/// myprintf("01413: Something wrong downloading %Z, sorry (no Internet?)\n", filepath.c_str());
@@ -130433,6 +130597,33 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
+#ifdef unix
+/*
+	65.19h: the mode given on *nix to what is extracted (i_modo: what the archive says).
+	As tar: root gets it exactly; a user (not root) gets it with its own umask, and without
+	setuid, setgid and sticky (-sameperms: exactly, for a user too, as tar -p).
+	Before: exactly for everybody, the umask ignored: whoever made the archive decided. A file
+	0777 in the archive was 0777 (anybody could replace it) for the admin who extracted it, a
+	setuid one stayed setuid. An archive made on Windows was never touched (attributes 'w':
+	no chmod, the umask decides) and is not touched now
+	The umask is read ONCE, before main: umask() has to change it to read it, and the
+	extraction is multithreaded (a file created in that moment would get 0666)
+*/
+static mode_t leggi_umask()
+{
+	const mode_t u= umask(0);
+	umask(u);
+	return u;
+}
+static const mode_t g_umask= leggi_umask();
+mode_t modo_estratto(mode_t i_modo)
+{
+	i_modo&= 07777;
+	if (flagsameperms || (geteuid() == 0))
+		return i_modo;
+	return i_modo & 0777 & ~g_umask;
+}
+#endif
 // Close fp if open. Set date and attributes unless 0
 bool close(const char *filename, int64_t date, int64_t attr, FP fp= FPNULL)
 {
@@ -130450,7 +130641,7 @@ bool close(const char *filename, int64_t date, int64_t attr, FP fp= FPNULL)
 		utime(filename, &ub);
 	}
 	if ((attr & 255) == 'u')
-		chmod(filename, attr >> 8); ///(CWE-362). Use fchmod( ) instead.
+		chmod(filename, modo_estratto((mode_t)(attr >> 8))); ///(CWE-362). Use fchmod( ) instead. 65.19h: as tar
 	return true;
 #else
 	const bool ads	= strstr(filename, ":$DATA") != 0; // alternate data stream?
@@ -130579,7 +130770,7 @@ bool touch(const char *filename, int64_t date, int64_t attr)
 	}
 	if (attr != -1)
 		if ((attr & 255) == 'u')
-			chmod(filename, attr >> 8);
+			chmod(filename, modo_estratto((mode_t)(attr >> 8))); /// 65.19h: as tar
 	return true;
 #else
 	bool allok= true;
@@ -130765,8 +130956,9 @@ string g_gettempdirectory()
 	wchar_t charpath[MAX_PATH];
 	if (GetTempPathW(MAX_PATH, charpath))
 	{
-		wstring ws(charpath);
-		string	str(ws.begin(), ws.end());
+		/// 65.19e: wtou, not one char per wchar_t: a TEMP with an accent (C:\Users\Niccolo'\...) became
+		/// Latin-1 bytes in a string that is UTF-8 everywhere else, and every run died here (00181)
+		string	str= wtou(charpath);
 		/// 65.15y: and the PID: two zpaqfranz that start in the same moment had the same folder, and one took away the
 		/// test file of the other (00181, x "cannot write": 5 of 590,366 in a work probe with 8 at a time)
 		string	randomfolder= str + "_zpaqfranz\\" + myto_string(g_start) + "_" + myto_string((int64_t)GetCurrentProcessId()) + '\\';
@@ -158805,7 +158997,7 @@ static const franz_helpriga g_helprighetutte[]=
 	HIT(474, 0x7DFC4D30, "Modalita' store: niente deduplica, niente compressione"),
 	HRU(474, 0x7DFC4D30, "Режим store: без дедупликации, без сжатия"),
 	/// 65.18o: the levels by name (g_livelli), from the lightest to the strongest. What they are, there: here
-	/// the words of the author, for who does not know -m80 or -m7 (-lean -m80 -t2 -noturbo, -fast -m80,
+	/// my words, for who does not know -m80 or -m7 (-lean -m80 -t2 -noturbo, -fast -m80,
 	/// -normal -m8, -good -m9, -better -m7, -ultra -m6, -max -m5)
 	HU(1923, "a", "-lean", "Minimal resources, slower (e.g. NAS)"),
 	HIT(1923, 0xC4A7A8CA, "Risorse minime, piu' lento (es. NAS)"),
@@ -159425,6 +159617,15 @@ losetup -d /dev/loop0
 	HIT(646, 0xCD31A33F, "Dettagli della firma p7m (CF,|chiave RSA, catena dei digest)|Il file .sha256 viene sempre|verificato con una firma digitale|PKCS#7/CAdES (il CF del firmatario|deve essere CRBFNC72T25H294X)"),
 	HRU(646, 0xCD31A33F, "Подробности подписи p7m (CF, ключ RSA, цепочка дайджестов)|Файл .sha256 всегда проверяется по цифровой подписи|PKCS#7/CAdES (CF подписавшего должен быть CRBFNC72T25H294X)"),
 #endif // corresponds to #ifdef (#ifdef _WIN64)
+#ifdef _WIN32
+	HU(1945, "update", "-nohttps", "Plain http (default: https, then http by itself if|https fails; the files are verified anyway)"),
+	HIT(1945, 0xB98771C0, "Solo http (di default https, poi da solo http se|https fallisce; i file sono verificati comunque)"),
+	HRU(1945, 0xB98771C0, "Только http (по умолчанию https, затем сам http,|если https не работает; файлы проверяются всегда)"),
+	/// 65.19o: update_senzafirma
+	HU(1951, "update", "-force -kill", "Also with a signature NOT verified (my certificate|expired or renewed): a captcha, the URL of the exe typed|EXACTLY, then it is installed AS IT IS, from that URL only|(always asked, also with -nocaptcha). At your own risk"),
+	HIT(1951, 0xD48E83A2, "Anche con una firma NON verificata (il mio certificato|scaduto o rinnovato): un captcha, l'URL dell'exe scritto|ESATTAMENTE, poi viene installato COSI' COM'E', solo da|quell'URL (chiesto sempre, anche con -nocaptcha).|A tuo rischio"),
+	HRU(1951, 0xD48E83A2, "Даже с НЕпроверенной подписью (мой сертификат|истёк или обновлён): капча — URL exe, набранный|ТОЧНО, затем он устанавливается КАК ЕСТЬ, только|с этого URL (спрашивается всегда, даже с -nocaptcha).|На ваш риск"),
+#endif
 	HESEMPI("update", 'b'),
 	HE(647, "update", "Check for updates", "update"),
 	HIT(647, 0x70AD7706, "Cerca aggiornamenti"),
@@ -159498,6 +159699,9 @@ losetup -d /dev/loop0
 	HU(667, "kickstart", "-space", "Do not check the output folder"),
 	HIT(667, 0xEB38A461, "Non controlla la cartella di output"),
 	HRU(667, 0xEB38A461, "Не проверять папку вывода"),
+	HU(1946, "kickstart", "-nohttps", "Plain http (default: https, then http by itself if|https fails; the files are verified anyway)"),
+	HIT(1946, 0xB98771C0, "Solo http (di default https, poi da solo http se|https fallisce; i file sono verificati comunque)"),
+	HRU(1946, 0xB98771C0, "Только http (по умолчанию https, затем сам http,|если https не работает; файлы проверяются всегда)"),
 	HESEMPI("kickstart", 'b'),
 	HE(668, "kickstart", "Into the current folder", "kickstart"),
 	HIT(668, 0x948D7083, "Nella cartella corrente"),
@@ -159935,6 +160139,9 @@ losetup -d /dev/loop0
 	HU(785, "x", "-numeric", "With -tar: owner by uid/gid only (as tar --numeric-owner)"),
 	HIT(785, 0x9DA9E417, "Con -tar: proprietario solo per|  uid/gid (come tar --numeric-owner)"),
 	HRU(785, 0x9DA9E417, "С -tar: владелец только по uid/gid|  (как tar --numeric-owner)"),
+	HU(1947, "x", "-sameperms", "Not root: the modes exactly as in the archive|(setuid, setgid, sticky too; the umask ignored)|Default, as tar: umask, no setuid/setgid/sticky; root: exact"),
+	HIT(1947, 0xE08AC10D, "Non root: i permessi esattamente come nell'archivio|(anche setuid, setgid, sticky; umask ignorata)|Default, come tar: umask, niente setuid/setgid/|sticky; root: sempre esatti"),
+	HRU(1947, 0xE08AC10D, "Не root: права точно как в архиве|(и setuid, setgid, sticky; umask не учитывается)|По умолчанию, как tar: umask, без setuid/setgid/|sticky; root: всегда точно"),
 #endif
 #ifdef _WIN32
 	HGENERA(786, "x", 'u', 's', "-sparse", "Files >= %s as sparse files, the zeros are not written (default)"),
@@ -161597,9 +161804,12 @@ losetup -d /dev/loop0
 	HIT(1245, 0x54EDD919, "Unisce un archivio multiparte in uno solo"),
 	HRU(1245, 0x54EDD919, "Объединить многотомный архив в один"),
 	/// d
-	HU(1246, "d", "CMD d", "Deduplicate|Find and delete duplicate files in a single folder, and in all that is below.|WARNING: This operation is destructive!|A folder, or a folder and what to search: d c:\\dir\\*.mp4, or (as find) d c:\\dir\\ *.mp4|Of the files with the same content the first one by name stays, the others go"),
-	HIT(1246, 0x5FFB6063, "Deduplica|Trova e cancella i file duplicati in una cartella, e in tutto cio' che sta sotto.|ATTENZIONE: questa operazione e' distruttiva!|Una cartella, o una cartella e cosa cercare:|d c:\\dir\\*.mp4, o (come find) d c:\\dir\\ *.mp4|Dei file con lo stesso contenuto resta il primo per nome, gli altri se ne vanno"),
-	HRU(1246, 0x5FFB6063, "Дедупликация|Находит и удаляет файлы-дубликаты в папке и во всём, что ниже.|ВНИМАНИЕ: операция разрушительная!|Папка, или папка и что искать: d c:\\dir\\*.mp4, или (как find) d c:\\dir\\ *.mp4|Из файлов с одинаковым содержимым остаётся первый по имени, остальные удаляются"),
+	HU(1246, "d", "CMD d", "Deduplicate|Find and delete duplicate files in a folder (or more), and in all that is below.|WARNING: This operation is destructive!|A folder, or a folder and what to search: d c:\\dir\\*.mp4, or (as find) d c:\\dir\\ *.mp4|Of the files with the same content the first one by name stays, the others go"),
+	HIT(1246, 0x0B67BD82, "Deduplica|Trova e cancella i file duplicati in una cartella (o piu'),|e in tutto cio' che sta sotto.|ATTENZIONE: questa operazione e' distruttiva!|Una cartella, o una cartella e cosa cercare:|d c:\\dir\\*.mp4, o (come find) d c:\\dir\\ *.mp4|Dei file con lo stesso contenuto resta il primo per nome, gli altri se ne vanno"),
+	HRU(1246, 0x0B67BD82, "Дедупликация|Находит и удаляет файлы-дубликаты в папке (или нескольких)|и во всём, что ниже.|ВНИМАНИЕ: операция разрушительная!|Папка, или папка и что искать: d c:\\dir\\*.mp4, или (как find) d c:\\dir\\ *.mp4|Из файлов с одинаковым содержимым остаётся первый по имени, остальные удаляются"),
+	HU(1949, "d", " ", "More folders, each written with its final \\ (or /): one copy in all of them.|The first folder wins, then the first by name.|Never the same folder twice, nor one inside another."),
+	HIT(1949, 0x9C8F9303, "Piu' cartelle, ognuna scritta con la \\ (o /) finale: una copia in tutte.|Vince la prima cartella, poi il primo per nome.|Mai la stessa cartella due volte, ne' una dentro l'altra."),
+	HRU(1949, 0x9C8F9303, "Несколько папок, каждая с \\ (или /) в конце: одна копия во всех.|Побеждает первая папка, затем первый по имени.|Никогда одна папка дважды или одна внутри другой."),
 	HU(1247, "d", "-ssd", "Multithread run"),
 	HIT(1247, 0xE3CA2673, "Esecuzione multithread"),
 	HRU(1247, 0xE3CA2673, "Многопоточный запуск"),
@@ -161629,6 +161839,9 @@ losetup -d /dev/loop0
 	HE(1255, "d", "Deduplicate d0 (dry run, w/xxh3)", "d c:\\d0\\"),
 	HIT(1255, 0x3372B847, "Deduplica d0 (prova a secco, con xxh3)"),
 	HRU(1255, 0x3372B847, "Дедупликация d0 (пробный прогон, xxh3)"),
+	HE(1950, "d", "One copy in two drives (dry run)", "d c:\\video\\ d:\\film\\"),
+	HIT(1950, 0x62E853ED, "Una copia in due unita' (prova a secco)"),
+	HRU(1950, 0x62E853ED, "Одна копия на двух дисках (пробный прогон)"),
 	HE(1256, "d", "Only the .mp4 of u: (dry run)", "d u:\\*.mp4"),
 	HIT(1256, 0x7138477A, "Solo gli .mp4 di u: (prova a secco)"),
 	HRU(1256, 0x7138477A, "Только .mp4 на u: (пробный прогон)"),
@@ -163426,6 +163639,12 @@ losetup -d /dev/loop0
 	HTESTO(1775, "@flag", 'a', 0, "Fix CAse"),
 	HIT(1775, 0xC73CFE74, "Sistema maiuscole/minuscole"),
 	HRU(1775, 0xC73CFE74, "Исправлять регистр"),
+	HTESTO(1948, "@flag", 'a', 0, "*nix, not root: extract the modes exactly (as root does)"),
+	HIT(1948, 0x968474BB, "*nix, non root: estrae i permessi esatti (come fa root)"),
+	HRU(1948, 0x968474BB, "*nix, не root: извлекать права точно (как root)"),
+	HTESTO(1944, "@flag", 'a', 0, "www.francocorbelli.it via http, not https"),
+	HIT(1944, 0xF6C2EC8E, "www.francocorbelli.it in http, non in https"),
+	HRU(1944, 0xF6C2EC8E, "www.francocorbelli.it по http, не по https"),
 	HTESTO(0, "@flag", 'a', 0, "fixreserved"),
 	HTESTO(1776, "@flag", 'a', 0, "Do NOT fix Windows-invalid filenames"),
 	HIT(1776, 0x7577E7DF, "NON sistema i nomi non validi per Windows"),
@@ -164591,7 +164810,7 @@ int help_controlla()
 	for (size_t i= 0; i < sizeof(amano) / sizeof(amano[0]); i++)
 		help_aggiungi(parser, amano[i]);
 	std::set<string>   nascosti; /// on purpose: the flags with no description, and these
-	static const char *senza[]= {"-elevatedpid", "-rescuefake", "-cpfake", "-turbochunk"};
+	static const char *senza[]= {"-elevatedpid", "-rescuefake", "-cpfake", "-turbochunk", "-updatefake", "-signfake"};
 	for (size_t i= 0; i < sizeof(senza) / sizeof(senza[0]); i++)
 		nascosti.insert(help_chiave(senza[i]));
 	for (MAPPAFLAGS::iterator p= g_programflags.mappaflags.begin(); p != g_programflags.mappaflags.end(); ++p)
@@ -166439,6 +166658,9 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagdeflate,		"-zip",					"zip: the same as -deflate",							"");
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store/show Posix metadata)",							"");
 	g_programflags.add(&flagnumeric,		"-numeric",				"x -tar: owners by uid/gid only, not by name",			"");
+#ifdef unix
+	g_programflags.add(&flagsameperms,		"-sameperms",			"*nix, not root: extract the modes exactly (as root does)",	""); /// 65.19h
+#endif
 	g_programflags.add(&flagtmp,			"-tmp",					"Use .tmp instead of .zpaq during backup",			"");
 	g_programflags.add(i_flagtest,			"-test",				"Only do test",										"");
 	g_programflags.add(&flagtouch,			"-touch",				"Re-hash files without a usable hash (7.15 to zpaqfranz)",		"");
@@ -166484,6 +166706,8 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagacfake,			"-acfake",				"",												""); /// not in the help: for the tests of xc (ac on a disk that is not the one of Windows)
 	g_programflags.add(&flagwinpefake,		"-winpefake",			"",												""); /// not in the help: ac as from a Windows PE (the tests of 65.14j)
 	g_programflags.add(&flaggui,			"-gui",					"ac, xc, f: choose on a screen (what to take, where to restore, what f does)",	"");
+	g_programflags.add(&flagnohttps,		"-nohttps",				"www.francocorbelli.it via http, not https",		""); /// 65.19c
+	g_programflags.add(&flaghttpsfake,		"-httpsfake",			"",												""); /// not in the help: the https attempt fails (the tests of the fallback to http)
 #endif
 	g_programflags.add(&flagelevatefake,	"-elevatefake",			"",												""); /// not in the help: for the tests of the relaunch of cloud -image
 	g_programflags.add(&flagraw,			"-raw",					"Image of the whole partition (or disk)",			"");
@@ -167841,6 +168065,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getint(opt, "-rescuetime", false, "", argc, argv, &i, 2, &g_rescuetime));
 		else if (cli_onlystring(opt, "-rescuefake", "", g_rescuefake, argc, argv, &i, NULL)); /// not in the help: for the tests
 		else if (cli_onlystring(opt, "-cpfake", "", g_cpfake, argc, argv, &i, NULL)); /// 65.13d: not in the help: for the tests
+		else if (cli_onlystring(opt, "-signfake", "", g_p7mfake, argc, argv, &i, NULL)); /// 65.19l: not in the help: for the tests. NOT -p7mfake: a letter and a digit (-p7...) is the short -p (password of mysql) with "7mfake" as value
 		else if (opt == "-turbo") /// the flag is set by g_programflags; a number after it (only digits: a folder "2024_photos" stays a folder) are its threads
 		{
 			g_turbodetto= true; /// 65.18o: -lean does not turn it off
@@ -167856,6 +168081,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 		}
 		else if (cli_getuint64	(opt,"-turbochunk",	false,	"",								argc,argv,&i,g_turbochunk,		&g_turbochunk)); /// 65.18l: not in the help: for the tests
+		else if (cli_getuint64	(opt,"-updatefake",	false,	"",								argc,argv,&i,0,					&g_updatefake)); /// 65.19j: not in the help: for the tests
 		else if (cli_getint		(opt,"-summary",	true, 	"",								argc,argv,&i,1,					&summary));
 		///else if (cli_getint		(opt,"-red4",		false, 	"",								argc,argv,&i,-1,				&red4));
 		else if (cli_onlystring	(opt,"-snapshot",			"",				snapmark,		argc,argv,&i,					NULL));
@@ -168548,6 +168774,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagutf				=false;
 		flagflat			=false;
 		flagparanoid		=false;
+		flagnohttps			=false;
+		flaghttpsfake		=false;
 		///flagpaq				=false;
 		flagcollision		=false;
 		flagnodedup			=false;
@@ -171516,7 +171744,7 @@ int kickstart_mount()
 	const string  msiname	= "winfsp-2.1.25156.msi";
 	const int64_t msisize	= 2191360;
 	const string  msisha256	= "073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A";
-	const string  msiurl	= "http://www.francocorbelli.it/zpaqfranz/win64/" + msiname;
+	const string  msiurl	= franzsito("win64/" + msiname); /// 65.19c: https (-nohttps: http)
 
 	color_yellow();
 	myprintf("94200: WinFsp is not installed (or cannot be loaded)\n");
@@ -171606,7 +171834,7 @@ int kickstart_mount()
 				color_cyan();
 				myprintf("94205: Downloading WinFsp installer from %s\n", msiurl.c_str());
 				color_restore();
-				if (!downloadfile(msiurl + "?" + generaterandomstring(10), msifile, true))
+				if (!downloadfile_sito(msiurl + "?" + generaterandomstring(10), msifile, true))
 				{
 					myprintf("94206! download of %s failed\n", msiname.c_str());
 					exit(2);
@@ -176548,7 +176776,8 @@ int restorefilemetadata(const char *filepath, const struct franz_posix *metadata
 	const char	 tipo = metadata->typeflag[0];
 	const uid_t	 uid  = tar_restoreuid(metadata);
 	const gid_t	 gid  = tar_restoregid(metadata);
-	const mode_t mode = (mode_t)(strtol(tar_field(metadata->mode, sizeof(metadata->mode)).c_str(), NULL, 8) & 07777);
+	/// 65.19h: as tar, a user (not root) with its umask and without setuid, setgid, sticky (-sameperms: exactly)
+	const mode_t mode = modo_estratto((mode_t)(strtol(tar_field(metadata->mode, sizeof(metadata->mode)).c_str(), NULL, 8) & 07777));
 	const time_t ctime= (time_t)atoll(tar_field(metadata->ctime, sizeof(metadata->ctime)).c_str());
 	const bool	 root = (geteuid() == 0);
 
@@ -179340,7 +179569,9 @@ int Jidac::list()
 	flagchecksum= ischecksum() || flagchecksum;
 
 	int thesizesize= 19;
-	if (!flagattr)
+	/// 65.19g: -attr too (it had Size 19 wide, always, and no header: -terse sets flagattr to drop the
+	/// header, and -attr went with it). -terse stays as it was, for the scripts: Size 19 wide, no header
+	if (!flagterse)
 	{
 		int64_t largest= 0;
 		for (unsigned int i= 0; i < filelist.size(); i++)
@@ -179394,38 +179625,42 @@ int Jidac::list()
 			/// return 0;
 		}
 
+		/*
+			65.19g: the header built column by column, as the lines are (list_datetime, tabba,
+			list_creationdate, list_attributes, list_filesize, list_compressedfilesize...): with -attr
+			the column Attr, and every title over its column. Before, from Size on everything was one
+			character to the left: the [ (or space) before the size was not counted
+			date+time 19 +1 | -date: " creation " 21 +1 | -attr: 5 +1 | [size 1+thesizesize +1 | ratio 5 +1 | -all: ver all, |
+		*/
+		string testa= "   Date      Time   ";
+		string riga = "---------- -------- ";
+		if (flagdate)
+		{
+			testa+= "      Creation        ";
+			riga += " -------------------  ";
+		}
+		if (flagattr)
+		{
+			testa+= "Attr  ";
+			riga += "----- ";
+		}
 		char lineatemp[200];
+		snprintf(lineatemp, sizeof(lineatemp), "%*s Ratio ", thesizesize + 1, "Size");
+		testa+= lineatemp;
+		riga += string(thesizesize + 1, '-') + " ----- ";
 		if (all)
 		{
-			string verheader(all, '-');
-			if (flagdate)
-			{
-				snprintf(lineatemp, sizeof(lineatemp), "    Date     Time           Creation      %*s Ratio %*s Name/Info", thesizesize, "Size", all, "Ver");
-				myprintf("00757: %s\n", lineatemp);
-				myprintf("00758: ---------- --------  -------------------- %s ----- %s ----------\n", sizeheader.c_str(), verheader.c_str());
-			}
-			else
-			{
-				snprintf(lineatemp, sizeof(lineatemp), "   Date      Time   %*s Ratio %*s Name/Info", thesizesize, "Size", all, "Ver");
-				myprintf("00759: %s\n", lineatemp);
-				myprintf("00760: ---------- --------  %s ----- %s ----------\n", sizeheader.c_str(), verheader.c_str());
-			}
+			snprintf(lineatemp, sizeof(lineatemp), "%*s Name/Info", all, "Ver");
+			testa+= lineatemp;
+			riga += string(all, '-') + " ----------";
 		}
 		else
 		{
-			if (flagdate)
-			{
-				snprintf(lineatemp, sizeof(lineatemp), "    Date      Time          Creation      %*s Ratio Name", thesizesize, "Size");
-				myprintf("00761: %s\n", lineatemp);
-				myprintf("00762: ---------- --------  -------------------- %s ----- -----\n", sizeheader.c_str());
-			}
-			else
-			{
-				snprintf(lineatemp, sizeof(lineatemp), "   Date      Time   %*s Ratio Name", thesizesize, "Size");
-				myprintf("00763: %s\n", lineatemp);
-				myprintf("00764: ---------- --------  %s ----- -----\n", sizeheader.c_str());
-			}
+			testa+= "Name";
+			riga += "-----";
 		}
+		myprintf("00757: %s\n", testa.c_str());
+		myprintf("00758: %s\n", riga.c_str());
 	}
 
 	t_prep= mtime() - t_start - t_read;
@@ -180974,6 +181209,69 @@ int Jidac::kill()
 	section: multithread
 */
 /// 65.15a: d, a file on the disk as franz_qualefile() says it, taken by the thread that hashes it
+/// 65.19i: d on more folders (each written with its final \ or /): their order decides who stays (the
+/// first folder wins, then the first by name, as with one). Empty with one folder
+static std::vector<std::string> g_dedupradici;
+/// which of the folders of d a name is in (0: the first); how many they are, if none
+static size_t dedup_rango(const string &i_nome)
+{
+	for (size_t r= 0; r < g_dedupradici.size(); r++)
+	{
+		const string &radice= g_dedupradici[r];
+		if (i_nome.size() < radice.size())
+			continue;
+#ifdef _WIN32
+		if (stringtolower(i_nome.substr(0, radice.size())) == stringtolower(radice))
+			return r;
+#else
+		if (i_nome.compare(0, radice.size(), radice) == 0)
+			return r;
+#endif
+	}
+	return g_dedupradici.size();
+}
+/// the real folder (subst, junction, symlink resolved; Windows: lower case), with "/" and the final "/":
+/// the same folder written twice, or one inside another, would give d the same files twice
+static string dedup_reale(const string &i_cartella)
+{
+	string reale= "";
+#ifdef _WIN32
+	typedef DWORD(WINAPI * t_finale)(HANDLE, LPWSTR, DWORD, DWORD);
+	t_finale finale= (t_finale)(void *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetFinalPathNameByHandleW"); /// not on XP
+	HANDLE	 h	   = CreateFileW(utow(i_cartella.c_str()).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h != INVALID_HANDLE_VALUE)
+	{
+		if (finale != NULL)
+		{
+			std::vector<wchar_t> buf(33000);
+			const DWORD			 n= finale(h, &buf[0], 32999, 0); /// FILE_NAME_NORMALIZED, VOLUME_NAME_DOS
+			if ((n > 0) && (n < 32999))
+				reale= wtou(std::wstring(&buf[0], n).c_str());
+		}
+		CloseHandle(h);
+	}
+	if (reale == "")
+	{
+		std::vector<wchar_t> buf(33000);
+		const DWORD			 n= GetFullPathNameW(utow(i_cartella.c_str()).c_str(), 32999, &buf[0], NULL);
+		if ((n > 0) && (n < 32999))
+			reale= wtou(std::wstring(&buf[0], n).c_str());
+	}
+	myreplaceall(reale, "\\", "/");
+	if (reale.compare(0, 8, "//?/UNC/") == 0)
+		reale= "//" + reale.substr(8);
+	else if (reale.compare(0, 4, "//?/") == 0)
+		reale= reale.substr(4);
+	reale= stringtolower(reale);
+#else
+	reale= my_realpath(i_cartella);
+#endif
+	if (reale == "")
+		reale= i_cartella;
+	if (reale[reale.size() - 1] != '/')
+		reale+= "/";
+	return reale;
+}
 struct franzidentita
 {
 	uint64_t volume;
@@ -181088,19 +181386,75 @@ int Jidac::deduplicate()
 		myprintf("01038: Sorry, works only on exactly 1 dir (d c:\\dir\\), or 1 dir and what to search (d c:\\dir\\*.mp4)\n");
 		return 1;
 	}
-	if (files.size() > 2)
+	/// 65.19i: more folders, one copy in all of them (d c:\video\ d:\film\). If and only if they are
+	/// really folders: each one written with its final \ (or /), and there (I decided: a typo must not
+	/// become something to search). The first folder wins, then the first by name
+	g_dedupradici.clear();
+	bool piucartelle= (files.size() >= 2);
+	for (unsigned int i= 0; i < files.size(); i++)
+		if ((files[i] == "") || ((files[i][files[i].size() - 1] != '/') && (files[i][files[i].size() - 1] != '\\')))
+			piucartelle= false;
+	if (piucartelle)
+	{
+		vector<string> reali;
+		for (unsigned int i= 0; i < files.size(); i++)
+		{
+			myreplaceall(files[i], "\\", "/");
+			if (!direxists(files[i]))
+			{
+				myprintf("65944! <<%Z>> is not a folder\n", files[i].c_str());
+				return 2;
+			}
+			reali.push_back(dedup_reale(files[i]));
+		}
+		for (unsigned int i= 0; i < files.size(); i++)
+			for (unsigned int j= 0; j < files.size(); j++)
+			{
+				if (i == j)
+					continue;
+				bool stessa= (reali[i] == reali[j]);
+#ifdef unix
+				/// the same folder by another way (a bind mount): the same device and inode
+				struct stat si, sj;
+				if ((stat(files[i].c_str(), &si) == 0) && (stat(files[j].c_str(), &sj) == 0) && (si.st_dev == sj.st_dev) && (si.st_ino == sj.st_ino))
+					stessa= true;
+#endif
+				if (stessa && (i < j))
+				{
+					myprintf("65945! <<%Z>> and <<%Z>> are the same folder (%s): no\n", files[i].c_str(), files[j].c_str(), reali[i].c_str());
+					return 2;
+				}
+				if ((!stessa) && (reali[j].size() > reali[i].size()) && (reali[j].compare(0, reali[i].size(), reali[i]) == 0))
+				{
+					myprintf("65946! <<%Z>> is inside <<%Z>> (%s): no\n", files[j].c_str(), files[i].c_str(), reali[j].c_str());
+					return 2;
+				}
+			}
+		myprintf("65947: %d folders, one copy in all of them: the first folder wins, then the first by name\n", (int)files.size());
+		for (unsigned int i= 0; i < files.size(); i++)
+			myprintf("65948: %3d) %Z\n", (int)i + 1, files[i].c_str());
+		g_dedupradici= files;
+	}
+	if ((!piucartelle) && (files.size() > 2))
 	{
 		myprintf("01039: Sorry, works only on exactly 1 dir, and one thing to search at most (d c:\\dir\\ *.mp4)\n");
+		myprintf("65949: More folders: each one with its final \\ (d c:\\video\\ d:\\film\\)\n");
 		return 1;
+	}
+	/// 65.19i: d c:\video\ d:\film (the second without its \): a folder, not something to search
+	if ((!piucartelle) && (files.size() == 2) && direxists(files[1] + "/"))
+	{
+		myprintf("65950! <<%Z>> is a folder: more folders, each one with its final \\ (d c:\\video\\ d:\\film\\)\n", files[1].c_str());
+		return 2;
 	}
 	string cerca;	  /// as find: a pattern on the whole name (*.mp4, *2019*)
 	string nomecerca; /// in one piece: a name or a pattern, without the folder
-	if (files.size() == 2)
+	if ((!piucartelle) && (files.size() == 2))
 	{
 		cerca= files[1];
 		files.pop_back();
 	}
-	if (!isdirectory(files[0]))
+	if ((!piucartelle) && (!isdirectory(files[0])))
 	{
 		const string nome	  = extractfilename(files[0]);
 		const bool	 unpattern= (nome.find('*') != string::npos) || (nome.find('?') != string::npos);
@@ -184424,7 +184778,7 @@ int Jidac::autotest()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		filebatch= nomefileseesistegia(filebatch);
 		if (fileexists(filebatch))
-			if (remove(filebatch.c_str()) != 0)
+			if (!delete_file(filebatch.c_str()))
 			{
 				myprintf("01218: Highlander batch  %s\n", filebatch.c_str());
 				franz_free(buffer8bit);
@@ -184500,7 +184854,7 @@ int Jidac::autotest()
 		}
 #endif // corresponds to #if (#if defined(ZPAQMOUNT))
 
-		FILE *batch= fopen(filebatch.c_str(), "wb");
+		FILE *batch= cri_fopen(filebatch.c_str(), "wb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 		if (batch == NULL)
 		{
 			myprintf("01222: cannot write on %s\n", filebatch.c_str());
@@ -185674,6 +186028,13 @@ int zpaq_main_internal(int argc, const char **argv)
         }
     if ((g_frammentiorfani > 0) && (errorcode == 0)) /// 72414: the last archive read has files missing from a version
         errorcode = 1;
+    if (g_crcdiversi > 0) /// 65.19n: add -verify/-collision saw it (02108, GURU-C) and ended "all OK", rc 0
+    {
+        color_red();
+        myprintf("03856! %s file(s) stored with fragments that do not give the CRC-32 of the data read: the archive is NOT good\n", migliaia(g_crcdiversi));
+        color_restore();
+        errorcode = 2;
+    }
 #ifndef NOFRANZEN
     if (g_franzen_lettirotti > 0) /// 65.11l: whatever the command made of it, a franzen file is damaged
     {
@@ -195267,6 +195628,7 @@ struct franzdoppio
 	uint64_t volume, file, nomi; /// which file on the disk it is, and how many names that file has
 	bool	 noto;				 /// ...if the system said so
 	bool	 libera;			 /// deleting this name gives its space back
+	bool	 resta;				 /// 65.19i: the same file as the one that stays (a symlink, a bind mount...): never deleted
 };
 struct franzdoppi
 {
@@ -195322,14 +195684,21 @@ void Jidac::dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsig
 				j++;
 		if (j - i >= 2)
 		{
+			/// 65.19i: more folders: the first folder wins, then (as with one) the first by name, as the
+			/// group is sorted by name: (folder, position) keeps that order inside each folder
+			std::vector<std::pair<size_t, size_t> > ordine;
+			for (size_t k= i; k < j; k++)
+				ordine.push_back(std::make_pair((g_dedupradici.size() > 1) ? dedup_rango(i_vec[k].first) : (size_t)0, k));
+			std::sort(ordine.begin(), ordine.end());
 			franzdoppi g;
 			g.da	   = tutti.size();
 			g.hash	   = i_vec[i].second;
-			g.primo	   = i_vec[i].first;
+			g.primo	   = i_vec[ordine[0].second].first;
 			g.risparmio= 0;
-			for (size_t k= i; k < j; k++)
+			for (size_t o= 0; o < ordine.size(); o++)
 			{
-				franzdoppio d;
+				const size_t k= ordine[o].second;
+				franzdoppio	 d;
 				d.nome				= i_vec[k].first;
 				DTMap::iterator p	= edt.find(d.nome);
 				d.size				= (p != edt.end()) ? p->second.size : 0;
@@ -195347,6 +195716,7 @@ void Jidac::dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsig
 				else
 					d.noto= franz_qualefile(d.nome, d.volume, d.file, d.nomi) && (d.file != 0) && (d.nomi > 0);
 				d.libera			= true;
+				d.resta				= false;
 				tutti.push_back(d);
 			}
 			g.a= tutti.size();
@@ -195363,7 +195733,13 @@ void Jidac::dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsig
 				{
 					const std::pair<uint64_t, uint64_t> chi= std::make_pair(d.volume, d.file);
 					if (vivo.noto && (d.volume == vivo.volume) && (d.file == vivo.file))
-						d.libera= false; /// another name of the file that stays
+					{
+						/// 65.19i: another name of the file that stays: it STAYS too. Before it was deleted:
+						/// a hard link lost a name (nothing freed), but a symlink of a file (Windows) or a
+						/// bind mount (Linux) first by name stayed, and the file itself went (all OK, rc 0)
+						d.libera= false;
+						d.resta = true;
+					}
 					else if ((vanno[chi] < d.nomi) || (!contati.insert(chi).second))
 						d.libera= false; /// one of its names is left somewhere, or its space is already counted
 				}
@@ -195396,12 +195772,12 @@ void Jidac::dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsig
 				printUTF8(d.nome.c_str());
 				if ((k != g.da) && (!d.libera))
 				{
-					myprintf(" [hard link]");
+					myprintf(d.resta ? " [the same file as the first: it stays]" : " [hard link]");
 					color_restore();
 				}
 				myprintf("\n");
 			}
-			if (k != g.da)
+			if ((k != g.da) && (!d.resta))
 			{
 				o_files++;
 				if (flagforce)
@@ -208256,7 +208632,12 @@ void Jidac::buildindexchunks(vector<string> &o_chunks)
 					for (unsigned i= 0; i < p->second.ptr.size(); ++i)
 						currentcrc32= crc32_combine(currentcrc32, ht[p->second.ptr[i]].crc32, ht[p->second.ptr[i]].crc32size);
 					if (currentcrc32 != p->second.file_crc32)
+					{
+						/// 65.19n: seen, printed, and then "all OK" with rc 0 (issue 355: -stdin -longpath -paranoid,
+						/// the stream stored as a folder, GURU-C, all OK). Now counted: rc 2 at the end (03856)
 						myprintf("02108: SOMETHING WRONG ON %s\n", p->first.c_str());
+						g_crcdiversi++;
+					}
 				}
 
 				++added;
@@ -213287,14 +213668,17 @@ static int p7m_der_read_len(const uint8_t *d, int dn, int &pos)
 	int n= first & 0x7F;
 	if (n == 0 || n > 4)
 		return -1;
-	int r= 0;
+	/// 65.19k: unsigned (the shift of 4 bytes went into the sign of an int), and at most INT_MAX
+	uint32_t r= 0;
 	for (int i= 0; i < n; i++)
 	{
 		if (pos >= dn)
 			return -1;
-		r= (r << 8) | (int)d[pos++];
+		r= (r << 8) | (uint32_t)d[pos++];
 	}
-	return r;
+	if (r > 0x7FFFFFFFu)
+		return -1;
+	return (int)r;
 }
 
 static bool p7m_der_read_node(const uint8_t *d, int dn, int &pos,
@@ -213307,7 +213691,9 @@ static bool p7m_der_read_node(const uint8_t *d, int dn, int &pos,
 	if (expectedTag >= 0 && (int)tag != expectedTag)
 		return false;
 	int len= p7m_der_read_len(d, dn, pos);
-	if (len < 0 || pos + len > dn)
+	/// 65.19k: not pos + len > dn: with a length of 0x7FFFFFF0 the sum overflowed, the check passed and the
+	/// reads went outside the file (a .p7m made on purpose: zpaqfranz crashed, rc 139)
+	if (len < 0 || len > dn - pos)
 		return false;
 	cs= pos;
 	cl= len;
@@ -213410,6 +213796,8 @@ static bool p7m_der_read_bitstr(const uint8_t *d, int dn, int &pos, int &off, in
 	int cs, cl;
 	if (!p7m_der_read_node(d, dn, pos, 0x03, cs, cl))
 		return false;
+	if ((cl < 1) || (d[cs] != 0)) /// 65.19k: the count of unused bits, 0 for a key (an empty one gave len -1)
+		return false;
 	off= cs + 1;
 	len= cl - 1;
 	pos= cs + cl;
@@ -213495,18 +213883,157 @@ static const uint8_t P7M_SHA256_DIGESTINFO[19]= {
 	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
 	0x05, 0x00, 0x04, 0x20};
 
+/// 65.19j: my keys, the only ones zpaqfranz trusts. Before, the RSA key was taken from the certificate
+/// inside the .p7m itself, and only the CF of its subject was checked: a self-signed certificate with
+/// serialNumber=TINIT-CRBFNC72T25H294X, that anyone makes with openssl, gave "Digital signature OK" (tried:
+/// update -force went on until "OK => updating"). Now the certificate must be one of these.
+/// 65.19m: the SHA-256 of the WHOLE certificate (its "fingerprint"), not only of its key (65.19j-l): every
+/// byte of it counts (issuer, dates, extensions...: a byte changed there was "Digital signature OK")
+/// A qualified signature certificate lasts 3 years at most: when I renew it (a new SIM), the new
+/// one is ADDED here (the old one stays); a zpaqfranz built before does not know it, and its update stops
+/// with 00552 and 03840-03850 (download it by hand). The SHA-256 of the certificate of a .p7m, its expiry:
+/// openssl pkcs7 -inform DER -in x.p7m -print_certs | openssl x509 -outform DER | sha256sum
+/// openssl pkcs7 -inform DER -in x.p7m -print_certs | openssl x509 -noout -enddate
+struct p7m_chiave
+{
+	const char *certsha256;	   ///< SHA-256 of the DER of the certificate, lowercase hex
+	int64_t		scadenza;	   ///< notAfter of the certificate, seconds from 1970 UTC
+	const char *scadenzatesto; ///< the same, to print
+};
+static const p7m_chiave g_p7mchiavi[]= {
+	/// FRANCO CORBELLI, ArubaPEC EU Qualified Certificates CA G1, 2025-12-24 16:21:08 => 2028-12-24 16:21:08 UTC
+	{"c3294652aaf8d9d30a06ec7033289b72e2072f8d507fadb925c8239406274b30", 1861287668, "2028-12-24"},
+};
+static const int g_p7mquantechiavi= (int)(sizeof(g_p7mchiavi) / sizeof(g_p7mchiavi[0]));
+
+/// the key with the latest expiry: after it, this zpaqfranz cannot verify a new signature of mine
+static int p7m_ultimachiave()
+{
+	int ultima= 0;
+	for (int i= 1; i < g_p7mquantechiavi; i++)
+		if (g_p7mchiavi[i].scadenza > g_p7mchiavi[ultima].scadenza)
+			ultima= i;
+	return ultima;
+}
+
+/// now, in seconds from 1970 UTC; -updatefake YYYYMMDD: that day at noon (the tests of the expiry)
+static int64_t p7m_adesso()
+{
+	if (g_updatefake == 0)
+		return (int64_t)time(NULL);
+	int64_t y= (int64_t)(g_updatefake / 10000);
+	int64_t m= (int64_t)((g_updatefake / 100) % 100);
+	int64_t d= (int64_t)(g_updatefake % 100);
+	if ((y < 1970) || (y > 9999) || (m < 1) || (m > 12) || (d < 1) || (d > 31))
+		return (int64_t)time(NULL);
+	/// days from 1970-01-01 of a Gregorian date (days_from_civil of H. Hinnant)
+	y-= (m <= 2);
+	const int64_t era= (y >= 0 ? y : y - 399) / 400;
+	const int64_t yoe= y - era * 400;
+	const int64_t doy= (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+	const int64_t doe= yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return (era * 146097 + doe - 719468) * 86400 + 12 * 3600;
+}
+
+/// 65.19j: the keys expire, and the user has to know it, with the date (as with an expired https
+/// certificate). i_buona: signature good, key known => only when the last key of this zpaqfranz has expired
+/// or expires within 180 days, in yellow. Not good: a good signature made with a key this zpaqfranz does not
+/// know (a new key of mine, or a fake): always, in red (65.19k: the colors, the explanation in a box)
+static void p7m_spiegascadenza(bool i_buona)
+{
+	const p7m_chiave &ultima = g_p7mchiavi[p7m_ultimachiave()];
+	const int64_t	  adesso = p7m_adesso();
+	const bool		  scaduta= adesso > ultima.scadenza;
+	const int64_t	  giorni = scaduta ? 0 : (ultima.scadenza - adesso) / 86400;
+	if (i_buona && (!scaduta) && (giorni > 180))
+		return;
+	if (i_buona)
+		color_yellow();
+	else
+		color_red();
+	printbar('-');
+	if (i_buona)
+	{
+		if (scaduta)
+			myprintf("03840: The key of my signature EXPIRED on %s\n", ultima.scadenzatesto);
+		else
+			myprintf("03841: The key of my signature expires on %s (in %s days)\n", ultima.scadenzatesto, migliaia(giorni));
+	}
+	else
+	{
+		myprintf("03842: This zpaqfranz trusts only my key, written in it, valid until %s\n", ultima.scadenzatesto);
+		if (scaduta)
+			myprintf("03845: That date is PAST: the key has EXPIRED (as an https certificate does)\n");
+		else
+			myprintf("03846: That date is not past: a new key of mine before it, OR A FAKE SIGNATURE\n");
+	}
+	myprintf("03843: It is a qualified signature, on a SIM: it lasts 3 years at most. Then I\n");
+	myprintf("03844: sign with a new SIM, a new key, that a zpaqfranz built before cannot know:\n");
+	if (i_buona)
+		myprintf("03850: the versions signed with the new key are REFUSED (they cannot be told from a fake)\n");
+	else
+		myprintf("03850: they are REFUSED, as a fake is: nothing has been installed\n");
+	myprintf("03847: => %s download zpaqfranz BY HAND, once, from %s\n", i_buona ? "then" : "now", franzsito("").c_str());
+	myprintf("03848:    or https://github.com/fcorbelli/zpaqfranz/releases: the new one updates by itself again\n");
+	printbar('-');
+	color_restore();
+}
+
+/// 65.19m: the parts of the .p7m that the signature does not cover (the CMS "envelope": versions,
+/// algorithms, type of the content, sid, lengths) were skipped, whatever they said: a byte changed there
+/// (the 47, the type of the content) was "Digital signature OK". Now each one must be what it has to be
+static const char *P7M_OID_DATA	  = "1.2.840.113549.1.7.1";
+static const char *P7M_OID_SHA256 = "2.16.840.1.101.3.4.2.1";
+static const char *P7M_OID_RSA	  = "1.2.840.113549.1.1.1";
+static const char *P7M_OID_RSA256 = "1.2.840.113549.1.1.11";
+
+/// an AlgorithmIdentifier exactly SEQUENCE { that OID, NULL or nothing }
+static bool p7m_algid(const uint8_t *d, int dn, int &pos, const char *i_oid)
+{
+	int fine;
+	if (!p7m_der_enter(d, dn, pos, 0x30, fine))
+		return false;
+	std::string oid;
+	if ((!p7m_der_read_oid(d, dn, pos, oid)) || (oid != i_oid))
+		return false;
+	if (pos < fine)
+	{
+		int cs, cl;
+		if ((!p7m_der_read_node(d, dn, pos, 0x05, cs, cl)) || (cl != 0))
+			return false;
+		pos= cs;
+	}
+	return pos == fine;
+}
+
+/// a small INTEGER (the versions) that is exactly i_valore
+static bool p7m_intero(const uint8_t *d, int dn, int &pos, int i_valore)
+{
+	int cs, cl;
+	if ((!p7m_der_read_node(d, dn, pos, 0x02, cs, cl)) || (cl != 1) || (d[cs] != i_valore))
+		return false;
+	pos= cs + cl;
+	return true;
+}
+
 // Verify CMS SignedData signature (PKCS#7) — pure C++
 // Returns true if signature is valid and CF matches.
 // textContent receives the signed payload, errMsg the error.
 // verbose: print detailed dump.
+// 65.19j: o_chiave = the index in g_p7mchiavi (true), -1 = a good signature with a key that is not
+// there (false), -2 any other failure; o_spki = SHA-256 of the certificate (65.19m: the whole one)
 static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 							 const char	 *expectedCF,
 							 std::string &textContent,
 							 std::string &errMsg,
-							 bool		  verbose)
+							 bool		  verbose,
+							 int		 &o_chiave,
+							 std::string &o_spki)
 {
 	textContent= "";
 	errMsg	   = "";
+	o_chiave   = -2;
+	o_spki	   = "";
 	int pos	   = 0;
 
 #define P7MLOG0(label, value)                               \
@@ -213546,6 +214073,12 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		errMsg= "Outer SEQUENCE missing";
 		return false;
 	}
+	/// 65.19k: the file is the signature and nothing else (100 bytes after it were "Digital signature OK")
+	if (endOuter != p7mLen)
+	{
+		errMsg= "something after the end of the signature";
+		return false;
+	}
 	std::string oid;
 	if (!p7m_der_read_oid(p7m, p7mLen, pos, oid))
 	{
@@ -213564,7 +214097,9 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		errMsg= "[0] wrapper missing";
 		return false;
 	}
-	if (!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endOuter))
+	/// 65.19m: every container ends exactly where the one around it ends (a length changed was skipped)
+	int endWrap;
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endWrap)) || (endWrap != endOuter))
 	{
 		errMsg= "[0] wrapper error";
 		return false;
@@ -213572,19 +214107,20 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 
 	// SignedData SEQUENCE
 	int endSD;
-	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSD))
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSD)) || (endSD != endWrap))
 	{
 		errMsg= "SignedData SEQUENCE missing";
 		return false;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
+	if (!p7m_intero(p7m, p7mLen, pos, 1)) /// 65.19m: was skipped, whatever it was
 	{
-		errMsg= "version missing";
+		errMsg= "SignedData version is not 1";
 		return false;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
+	int endDA; /// 65.19m: SHA-256 and only it (was skipped)
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0x31, endDA)) || (!p7m_algid(p7m, p7mLen, pos, P7M_OID_SHA256)) || (pos != endDA))
 	{
-		errMsg= "digestAlgorithms missing";
+		errMsg= "digestAlgorithms is not SHA-256 only";
 		return false;
 	}
 
@@ -213595,9 +214131,10 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		errMsg= "encapContentInfo missing";
 		return false;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
+	std::string tipo; /// 65.19m: id-data (was skipped: the byte 47 changed was "Digital signature OK")
+	if ((!p7m_der_read_oid(p7m, p7mLen, pos, tipo)) || (tipo != P7M_OID_DATA))
 	{
-		errMsg= "encap OID missing";
+		errMsg= "the type of the content is not id-data";
 		return false;
 	}
 	if (p7m_der_peek(p7m, p7mLen, pos) != 0xA0)
@@ -213606,13 +214143,13 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		return false;
 	}
 	int endContent;
-	if (!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endContent))
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endContent)) || (endContent != endEncap))
 	{
 		errMsg= "[0] content error";
 		return false;
 	}
 	int contentOff, contentLen;
-	if (!p7m_der_read_octet(p7m, p7mLen, pos, contentOff, contentLen))
+	if ((!p7m_der_read_octet(p7m, p7mLen, pos, contentOff, contentLen)) || (pos != endContent))
 	{
 		errMsg= "Content OCTET STRING missing";
 		return false;
@@ -213661,6 +214198,35 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		errMsg= "Certificate SEQUENCE missing";
 		return false;
 	}
+	if (cend != endCerts) /// 65.19m: mine, and nothing else
+	{
+		errMsg= "more than one certificate";
+		return false;
+	}
+
+	/// 65.19j: which certificate it is (65.19m: the whole one, not only its key). Unknown: the checks go on
+	/// all the same, to tell a file just broken (a byte changed: another check fails) from a good signature
+	/// made with a certificate not in g_p7mchiavi (a new SIM of mine, or a fake): that one is refused
+	/// at the end, with o_chiave -1
+	int chiave= -1;
+	{
+		libzpaq::SHA256 sha;
+		sha.write(reinterpret_cast<const char *>(p7m + certs_cs), (int64_t)(cend - certs_cs));
+		const char *r= sha.result();
+		char		hexcert[65];
+		hexcert[0]= '\0';
+		for (int k= 0; k < 32; k++)
+			snprintf(hexcert + k * 2, 3, "%02x", (unsigned char)r[k]);
+		o_spki= hexcert;
+		for (int k= 0; k < g_p7mquantechiavi; k++)
+			if (o_spki == g_p7mchiavi[k].certsha256)
+				chiave= k;
+		P7MLOG("Certificate SHA-256 (fingerprint)", "%s", hexcert);
+		if (chiave >= 0)
+			P7MLOG("Certificate known to this zpaqfranz", "YES (until %s)", g_p7mchiavi[chiave].scadenzatesto);
+		else
+			P7MLOG0("Certificate known to this zpaqfranz", "NO");
+	}
 
 	// TBSCertificate
 	int endTBS;
@@ -213675,21 +214241,25 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 			errMsg= "version [0] error";
 			return false;
 		}
+	const int serialTLV= cpos; /// 65.19m: issuer and serial, the sid of the signer has to be them
 	if (!p7m_der_skip(p7m, p7mLen, cpos))
 	{
 		errMsg= "serialNumber missing";
 		return false;
 	}
+	const int serialFine= cpos;
 	if (!p7m_der_skip(p7m, p7mLen, cpos))
 	{
 		errMsg= "algorithmIdentifier missing";
 		return false;
 	}
+	const int issuerTLV= cpos;
 	if (!p7m_der_skip(p7m, p7mLen, cpos))
 	{
 		errMsg= "issuer missing";
 		return false;
 	}
+	const int issuerFine= cpos;
 	if (!p7m_der_skip(p7m, p7mLen, cpos))
 	{
 		errMsg= "validity missing";
@@ -213748,31 +214318,40 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 
 	pos= endCerts;
 
-	// signerInfos SET
-	int endSI;
-	if (!p7m_der_enter(p7m, p7mLen, pos, 0x31, endSI))
+	// signerInfos SET (65.19m: right after the certificate, one signer only, until the end of SignedData)
+	int endSIset, endSI;
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0x31, endSIset)) || (endSIset != endSD))
 	{
 		errMsg= "signerInfos SET missing";
 		return false;
 	}
-	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSI))
+	if ((!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSI)) || (endSI != endSIset))
 	{
 		errMsg= "SignerInfo SEQUENCE missing";
 		return false;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
+	if (!p7m_intero(p7m, p7mLen, pos, 1)) /// 65.19m: was skipped
 	{
-		errMsg= "SignerInfo version missing";
+		errMsg= "SignerInfo version is not 1";
 		return false;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
 	{
-		errMsg= "sid missing";
-		return false;
+		/// 65.19m: the sid (was skipped) is issuer and serial of the certificate, byte for byte
+		const int lissuer= issuerFine - issuerTLV;
+		const int lserial= serialFine - serialTLV;
+		int		  endSid;
+		if ((!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSid)) || (endSid - pos != lissuer + lserial) ||
+			(memcmp(p7m + pos, p7m + issuerTLV, (size_t)lissuer) != 0) ||
+			(memcmp(p7m + pos + lissuer, p7m + serialTLV, (size_t)lserial) != 0))
+		{
+			errMsg= "sid is not the certificate";
+			return false;
+		}
+		pos= endSid;
 	}
-	if (!p7m_der_skip(p7m, p7mLen, pos))
+	if (!p7m_algid(p7m, p7mLen, pos, P7M_OID_SHA256)) /// 65.19m: was skipped
 	{
-		errMsg= "digestAlg SignerInfo missing";
+		errMsg= "digestAlgorithm of the signer is not SHA-256";
 		return false;
 	}
 
@@ -213794,6 +214373,7 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 	// Scan signedAttrs for messageDigest (OID 1.2.840.113549.1.9.4)
 	uint8_t msgDigest[32]= {};
 	bool	mdFound		 = false;
+	bool	ctFound		 = false; /// 65.19m
 	int		saPos= sa_cs, saEnd= sa_cs + sa_cl;
 	while (saPos < saEnd)
 	{
@@ -213816,6 +214396,14 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 			}
 			saPos= attrEnd;
 		}
+		else if (attrOID == "1.2.840.113549.1.9.3") /// 65.19m: contentType, the same of the content (RFC 5652 11.1)
+		{
+			int			setEnd;
+			std::string ct;
+			if (p7m_der_enter(p7m, p7mLen, saPos, 0x31, setEnd) && p7m_der_read_oid(p7m, p7mLen, saPos, ct) && (ct == P7M_OID_DATA) && (saPos == setEnd))
+				ctFound= true;
+			saPos= attrEnd;
+		}
 		else
 		{
 			saPos= attrEnd;
@@ -213826,6 +214414,11 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 	if (!mdFound)
 	{
 		errMsg= "messageDigest not found in signedAttrs";
+		return false;
+	}
+	if (!ctFound)
+	{
+		errMsg= "contentType of the signed attributes is not id-data";
 		return false;
 	}
 
@@ -213855,10 +214448,19 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		memcpy(saDigest, sha.result(), 32);
 	}
 
-	if (!p7m_der_skip(p7m, p7mLen, pos))
 	{
-		errMsg= "signatureAlgorithm missing";
-		return false;
+		/// 65.19m: RSA (with SHA-256 or not: the digest is the one above), was skipped
+		int prova= pos;
+		if (!p7m_algid(p7m, p7mLen, prova, P7M_OID_RSA))
+		{
+			prova= pos;
+			if (!p7m_algid(p7m, p7mLen, prova, P7M_OID_RSA256))
+			{
+				errMsg= "signatureAlgorithm is not RSA";
+				return false;
+			}
+		}
+		pos= prova;
 	}
 
 	// Signature OCTET STRING
@@ -213866,6 +214468,11 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 	if (!p7m_der_read_octet(p7m, p7mLen, pos, sigOff, sigLen))
 	{
 		errMsg= "signature OCTET STRING missing";
+		return false;
+	}
+	if (pos != endSI) /// 65.19m: nothing after the signature (unsigned attributes: no one checks them)
+	{
+		errMsg= "something after the signature of the signer";
 		return false;
 	}
 	if (sigLen != 256)
@@ -213908,9 +214515,11 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 		return false;
 	}
 	idx++;
-	if (idx + 19 + 32 > 256)
+	/// 65.19k: exactly at the end, not "within": 00 01 FF..FF 00 DigestInfo hash and nothing after the
+	/// hash (with something after it, the padding is shorter: the room of the forgeries of Bleichenbacher)
+	if (idx + 19 + 32 != 256)
 	{
-		errMsg= "DigestInfo out of bounds";
+		errMsg= "DigestInfo not at the end of the PKCS#1 block";
 		return false;
 	}
 	if (memcmp(resBuf + idx, P7M_SHA256_DIGESTINFO, 19) != 0)
@@ -213929,6 +214538,13 @@ static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
 
 #undef P7MLOG0
 #undef P7MLOG
+	if (chiave < 0)
+	{
+		o_chiave= -1;
+		errMsg	= "good signature, but with a certificate this zpaqfranz does not know (SHA-256 " + o_spki + ")";
+		return false;
+	}
+	o_chiave= chiave;
 	return true;
 }
 
@@ -213937,9 +214553,13 @@ static bool verify_p7m_file(const std::string &filename,
 							const char		  *expectedCF,
 							std::string		  &textContent,
 							std::string		  &errMsg,
-							bool			   verbose)
+							bool			   verbose,
+							int				  &o_chiave,
+							std::string		  &o_spki)
 {
-	FILE *f= fopen(filename.c_str(), "rb");
+	o_chiave= -2;
+	o_spki	= "";
+	FILE *f = cri_fopen(filename.c_str(), "rb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 	if (!f)
 	{
 		errMsg= "Cannot open p7m file";
@@ -213964,8 +214584,137 @@ static bool verify_p7m_file(const std::string &filename,
 		return false;
 	}
 	fclose(f);
-	return verify_p7m_bytes(&buf[0], (int)sz, expectedCF, textContent, errMsg, verbose);
+	return verify_p7m_bytes(&buf[0], (int)sz, expectedCF, textContent, errMsg, verbose, o_chiave, o_spki);
 }
+
+/// 65.19l: -signfake "byte[:xor],...": the .p7m just downloaded (from the site too, https or http) changed
+/// on the disk before the check, as someone in the middle would do; -paranoid then shows that file.
+/// byte from 0, in decimal; xor in hex, 01 if not given. false: a wrong list, or the file
+static bool p7m_manomesso(const string &i_file, const string &i_cosa)
+{
+	FILE *f= cri_fopen(i_file.c_str(), "rb");
+	if (!f)
+	{
+		myprintf("03851! -signfake: cannot read %Z\n", i_file.c_str());
+		return false;
+	}
+	std::vector<uint8_t> d;
+	uint8_t				 blocco[4096];
+	size_t				 letti;
+	while ((letti= fread(blocco, 1, sizeof(blocco), f)) > 0)
+		d.insert(d.end(), blocco, blocco + letti);
+	fclose(f);
+
+	const char *c= i_cosa.c_str();
+	while (*c)
+	{
+		char	*fine;
+		long long dove= strtoll(c, &fine, 10);
+		if ((fine == c) || (dove < 0))
+		{
+			myprintf("03852! -signfake: \"%s\" is not byte[:xor],... (byte from 0, xor in hex)\n", i_cosa.c_str());
+			return false;
+		}
+		c			  = fine;
+		unsigned long x= 1;
+		if (*c == ':')
+		{
+			c++;
+			x= strtoul(c, &fine, 16);
+			if ((fine == c) || (x > 0xFF))
+			{
+				myprintf("03852! -signfake: \"%s\" is not byte[:xor],... (byte from 0, xor in hex)\n", i_cosa.c_str());
+				return false;
+			}
+			c= fine;
+		}
+		if ((*c != ',') && (*c != 0))
+		{
+			myprintf("03852! -signfake: \"%s\" is not byte[:xor],... (byte from 0, xor in hex)\n", i_cosa.c_str());
+			return false;
+		}
+		if (*c == ',')
+			c++;
+		if ((uint64_t)dove >= (uint64_t)d.size())
+		{
+			myprintf("03853! -signfake: byte %s, but the .p7m has %s bytes\n", migliaia(dove), migliaia(d.size()));
+			return false;
+		}
+		const uint8_t prima= d[(size_t)dove];
+		d[(size_t)dove]^= (uint8_t)x;
+		char cambio[32];
+		snprintf(cambio, sizeof(cambio), "0x%02X => 0x%02X", (unsigned int)prima, (unsigned int)d[(size_t)dove]);
+		myprintf("03854$ -signfake: byte %s of the .p7m %s\n", migliaia(dove), cambio);
+	}
+	f= cri_fopen(i_file.c_str(), "wb");
+	if (!f)
+	{
+		myprintf("03851! -signfake: cannot write %Z\n", i_file.c_str());
+		return false;
+	}
+	const bool scritto= d.empty() || (fwrite(&d[0], 1, d.size(), f) == d.size());
+	if (fclose(f) != 0 || !scritto)
+	{
+		myprintf("03851! -signfake: cannot write %Z\n", i_file.c_str());
+		return false;
+	}
+	return true;
+}
+
+#ifdef _WIN32
+bool isnotevil(int i_char);
+/// 65.19o: the payload of a .p7m whose signature is NOT verified: the line it should be (as sanitizeline,
+/// that kills the process on a wrong one: 64 hex, space, *, the version), or nothing to take from it
+static bool update_rigabuona(const string &i_riga)
+{
+	if ((i_riga.size() <= 83) || (i_riga.size() > 87))
+		return false;
+	for (unsigned int i= 0; i < 64; i++)
+		if (!ishex(i_riga[i]))
+			return false;
+	if ((i_riga[64] != ' ') || (i_riga[65] != '*'))
+		return false;
+	for (unsigned int i= 66; i < i_riga.size(); i++)
+		if (!isnotevil((unsigned char)i_riga[i]))
+			return false;
+	return true;
+}
+
+/*
+	65.19o: update -force -kill with a signature that is NOT verified. When my certificate expires (a new
+	SIM, a new key that a zpaqfranz built before cannot know), when the signing software of Aruba changes
+	its format, update refuses: that is what it must do with a fake. I decided: better than nothing, the
+	exe can be installed all the same, after a captcha that is the URL it comes from, typed EXACTLY.
+	Always asked (also with -nocaptcha; without a console scanf reads nothing: never). The exe then comes
+	from that URL only: no http after an https that fails, because without the signature the certificate
+	of the site (https) is all that is left. Without -force -kill: one line that says it can be done
+*/
+static bool update_senzafirma(const string &i_url)
+{
+	if (!(flagforce && flagkill))
+	{
+		myprintf("03857: (update -force -kill: installed all the same after a captcha, the URL of the exe. At your own risk)\n");
+		return false;
+	}
+	color_red();
+	printbar('!');
+	myprintf("03858! THE SIGNATURE IS NOT VERIFIED: this zpaqfranz cannot tell the exe from a FAKE\n");
+	myprintf("03859! -force -kill: it is installed all the same, ONLY if you type EXACTLY the URL it comes from\n");
+	myprintf("03860! Do it only if you trust that URL (with https, the certificate of the site is all that is left)\n");
+	printbar('!');
+	color_restore();
+	const bool nocaptchaprima= flagnocaptcha;
+	flagnocaptcha			 = false; /// always asked
+	const bool confermato	 = getcaptcha(i_url, "update with a signature NOT verified: the URL of the exe");
+	flagnocaptcha			 = nocaptchaprima;
+	if (!confermato)
+	{
+		myprintf("03861: Nothing done\n");
+		return false;
+	}
+	return true;
+}
+#endif // _WIN32
 
 int Jidac::update()
 {
@@ -213984,23 +214733,27 @@ int Jidac::update()
 #endif // corresponds to #ifdef (#ifdef unix)
 
 	if (flagdebug)
-		myprintf("03192: randnocache %s\n", randnocache.c_str());
+		myprintf("03821: randnocache %s\n", randnocache.c_str());
 
-	string http_exe= "http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
-	string http_p7m= "http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256.p7m";
+	/// 65.19c: Windows https, then http by itself (-nohttps: http); *nix http
+	string http_exe= franzsito("win64/zpaqfranz.exe");
+	string http_p7m= franzsito("win64/zpaqfranz.sha256.p7m");
 
 #if defined(_WIN32) && (!defined(_WIN64))
-	http_exe= "http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe";
-	http_p7m= "http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256.p7m";
+	http_exe= franzsito("win32/zpaqfranz32.exe");
+	http_p7m= franzsito("win32/zpaqfranz32.sha256.p7m");
 #endif // corresponds to #if (#if defined(_WIN32) && (!defined(_WIN64)))
 
 #if defined(_WIN64) && (defined(HWSHA1))
-	http_exe= "http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe";
-	http_p7m= "http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256.p7m";
+	http_exe= franzsito("win64hw/zpaqfranzhw.exe");
+	http_p7m= franzsito("win64hw/zpaqfranzhw.sha256.p7m");
 #endif // corresponds to #if (#if defined(_WIN64) && ( defined(HWSHA1)))
 
+	/// the URLs of the user are taken as they are: no https first, no http after
+	bool dalsito= true;
 	if (files.size() == 2)
 	{
+		dalsito= false;
 		http_p7m= files[0];
 		http_exe= files[1];
 		myprintf("03193: Command-selected URL\n");
@@ -214009,38 +214762,77 @@ int Jidac::update()
 	}
 
 	string p7mContent;  // signed payload from verified .p7m (= .sha256 file content)
+	bool   senzafirma= false; /// 65.19o: -force -kill and the captcha: the signature is NOT verified (update_senzafirma)
 	{
 		string p7murl = http_p7m + randnocache;
 		string p7mfile= g_gettempdirectory() + "zpaqfranz_verfile.sha256.p7m";
 		p7mfile		  = nomefileseesistegia(p7mfile);
 
-		if (!downloadfile(p7murl, p7mfile, false))
-			myprintf("00551! Cannot download the signature file!\n");
-		else
+		/// 65.19b: without the signature file there is nothing to verify, nor to
+		/// show with -paranoid (it printed how to check a file that does not exist,
+		/// then ended "all OK"): error, here
+		if (!(dalsito ? downloadfile_sito(p7murl, p7mfile, false) : downloadfile(p7murl, p7mfile, false)))
 		{
-			myprintf("\n");
-			myprintf("00533: Verifying digital signature (.p7m)...\n");
-
-			std::string p7mErr;
-			if (flagverbose)
-				myprintf("03344: verify_p7m_file on %s\n", p7mfile.c_str());
-
-			if (!verify_p7m_file(p7mfile, "CRBFNC72T25H294X", p7mContent, p7mErr, flagverbose))
-			{
-				myprintf("00552! P7M signature verification FAILED: %s\n", p7mErr.c_str());
+			myprintf("00551! Cannot download the signature file!\n");
+			return 2;
+		}
+		if (g_p7mfake != "") /// 65.19l: for the tests, as someone in the middle
+			if (!p7m_manomesso(p7mfile, g_p7mfake))
 				return 2;
+		myprintf("\n");
+		myprintf("00533: Verifying digital signature (.p7m)...\n");
+
+		std::string p7mErr;
+		int			p7mchiave= -2; /// 65.19j: which of g_p7mchiavi (-1: good signature, unknown key)
+		std::string p7mspki;
+		if (flagverbose)
+			myprintf("03344: verify_p7m_file on %s\n", p7mfile.c_str());
+		if (g_updatefake)
+			myprintf("03849: -updatefake %d: the keys of the signature as on that day\n", (int)g_updatefake);
+
+		if (!verify_p7m_file(p7mfile, "CRBFNC72T25H294X", p7mContent, p7mErr, flagverbose, p7mchiave, p7mspki))
+		{
+			myprintf("00552! P7M signature verification FAILED: %s\n", p7mErr.c_str());
+			if (p7mchiave == -1)
+				p7m_spiegascadenza(false);
+#ifdef _WIN32
+			if (!update_senzafirma(http_exe)) /// the site, or the URL written by the user: the one the exe comes from
+				return 2;
+			senzafirma= true;
+			/// what the payload says (the SHA-256 of the exe, the version), if it is the line it should be:
+			/// the download is then checked against it (integrity, NOT authenticity). If not, nothing
+			string riga= p7mContent;
+			while (!riga.empty() && ((riga[riga.size() - 1] == '\r') || (riga[riga.size() - 1] == '\n') || (riga[riga.size() - 1] == ' ')))
+				riga.erase(riga.size() - 1);
+			if (update_rigabuona(riga))
+				myprintf("03862: The SHA-256 written in the .p7m (NOT verified) checks the download: integrity only\n");
+			else
+			{
+				p7mContent= "";
+				color_yellow();
+				myprintf("03863$ No SHA-256 and no version can be read from the .p7m: the exe is taken AS IT IS\n");
+				color_restore();
 			}
-			myprintf("00534: Digital signature OK (CF CRBFNC72T25H294X)\n");
+#else
+			return 2;
+#endif
+		}
+		if (!senzafirma)
+		{
+			color_green(); /// 65.19k: green OK, yellow it expires, red error
+			myprintf("00534: Digital signature OK (CF CRBFNC72T25H294X, key valid until %s)\n", g_p7mchiavi[p7mchiave].scadenzatesto);
+			color_restore();
+			p7m_spiegascadenza(true);
 		}
 #ifdef _WIN32
-		if (flagparanoid)
+		if (flagparanoid && (!senzafirma))
 		{
 			myprintf("\n");
 			color_yellow();
 			printbar('+');
 			myprintf("10034: Due to -paranoid you can check yourself the (Italian) digital sign of the sha256 hash\n");
 			myprintf("10035: This is a Qualified Electronic Signature (FEQ) in CAdES format\n");
-			myprintf("10034: https://www.agid.gov.it/it/piattaforme/firma-elettronica-qualificata/software-verifica\n");
+			myprintf("03822: https://www.agid.gov.it/it/piattaforme/firma-elettronica-qualificata/software-verifica\n");
 			printbar('+');
 			color_restore();
 			string winp7m= linuxtowinpath(p7mfile);
@@ -214065,16 +214857,16 @@ int Jidac::update()
 			myprintf("\n");
 			myprintf("03322: Two options\n");
 			color_green();
-			myprintf("03322: (1) if you have openssl installed => run\n");
-			myprintf("03342: openssl smime -verify -in \"%s\" -inform DER  -noverify\n", winp7m.c_str());
+			myprintf("03823: (1) if you have openssl installed => run\n");
+			myprintf("03342: openssl smime -verify -in \"%s\" -inform DER -noverify\n", winp7m.c_str());
 
 			const char *notariato= "https://vol.ca.notariato.it/it";
 			myprintf("\n");
-			myprintf("03322: (2) or paste the clipboard (control-v) on 'Scegli un file firmato'\n");
+			myprintf("03824: (2) or paste the clipboard (control-v) on 'Scegli un file firmato'\n");
 			myprintf("03333: of the site %s, then click 'Verifica'\n", notariato);
 			color_restore();
 			printbar('-');
-			myprintf("03344: If the digital sign is good repeat the upgrade without -paranoid\n");
+			myprintf("03825: If the digital sign is good repeat the upgrade without -paranoid\n");
 			color_yellow();
 			myprintf("*** PRESS ANY KEY TO CONTINUE (the default browser will be launched) ***\n");
 			color_restore();
@@ -214092,95 +214884,102 @@ int Jidac::update()
 		return 2;
 	}
 
-	if (p7mContent.empty())
-	{
-		myprintf("00553! No p7m content available — cannot determine internet version\n");
-		return 2;
-	}
-	myprintf("03199: Testing internet version...\n");
-	string linea = p7mContent;
-	while (!linea.empty() && (linea[linea.size() - 1] == '\r' || linea[linea.size() - 1] == '\n' || linea[linea.size() - 1] == ' '))
-		linea.erase(linea.size() - 1);
-	if (flagdebug3)
-		myprintf("03202: p7m content line |%s|\n", linea.c_str());
-
-	if (linea.size() < 70)
-	{
-		myprintf("03203! Line size should be >=70 %8s\n", migliaia(linea.size()));
-		return 2;
-	}
-
-	if (!sanitizeline(linea))
-	{
-		myprintf("03204! ERROR C5 p7m payload is not in expected format\n");
-		seppuku();
-		return 2;
-	}
-
-	string thesha256= "";
-	for (unsigned int i= 0; i < 64; i++)
-		if ((isdigit(linea[i]) || (isalpha(linea[i]))))
-			thesha256+= linea[i];
-	if (thesha256.size() != 64)
-	{
-		myprintf("03205! sha256 len expected 64 vs %s |%s|\n", migliaia(thesha256.size()), thesha256.c_str());
-		return 2;
-	}
-	string theversion= "";
-	string maj		 = "";
-	string minor	 = "";
-	string letter	 = "";
-
-	unsigned int i= 65;
-
-	if (linea[i] == '*')
-		i++;
-	while (i < linea.size())
-	{
-		if ((isalnum(linea[i])) || (linea[i] == '.'))
-			theversion+= linea[i++];
-		else
-			break;
-	}
-
-	string thedate= linea.substr(i + 1, linea.size());
-
-	if (flagverbose)
-		myprintf("03206: Version to be decoded |%s| date |%s|\n", theversion.c_str(), thedate.c_str());
-
-	if (!decode_zpaq_version(theversion, maj, minor, letter))
-	{
-		myprintf("03207! decode zpaq version failed!\n");
-		return 2;
-	}
-
+	string thesha256	   = "";
+	string theversion	   = "";
+	string thedate		   = "";
 	string internal_version= ZPAQ_VERSION;
 	string internal_date   = ZPAQ_DATE;
-	string internal_maj	   = "";
-	string internal_minor  = "";
-	string internal_letter = "";
-	if (!decode_zpaq_version(internal_version, internal_maj, internal_minor, internal_letter))
+	bool   flagnewer	   = false;
+	/// 65.19o: -force -kill, the captcha, and nothing to read in the .p7m: no version, no SHA-256
+	const bool senzadati= senzafirma && p7mContent.empty();
+	if (!senzadati)
 	{
-		myprintf("03208! decode internal zpaq version failed!\n");
-		return 2;
-	}
-	bool flagnewer= false;
+		if (p7mContent.empty())
+		{
+			myprintf("00553! No p7m content available: cannot determine internet version\n");
+			return 2;
+		}
+		myprintf("03199: Testing internet version...\n");
+		string linea= p7mContent;
+		while (!linea.empty() && (linea[linea.size() - 1] == '\r' || linea[linea.size() - 1] == '\n' || linea[linea.size() - 1] == ' '))
+			linea.erase(linea.size() - 1);
+		if (flagdebug3)
+			myprintf("03202: p7m content line |%s|\n", linea.c_str());
 
-	int imaj		 = atoi(maj.c_str());
-	int internal_imaj= atoi(internal_maj.c_str());
+		if (linea.size() < 70)
+		{
+			myprintf("03203! Line size should be >=70 %8s\n", migliaia(linea.size()));
+			return 2;
+		}
 
-	int iminor		   = atoi(minor.c_str());
-	int internal_iminor= atoi(internal_minor.c_str());
-	flagnewer=
-		(imaj > internal_imaj) ||
-		((imaj == internal_imaj) && (iminor > internal_iminor)) ||
-		((imaj == internal_imaj) && (iminor == internal_iminor) && (letter > internal_letter));
+		if (!sanitizeline(linea))
+		{
+			myprintf("03204! ERROR C5 p7m payload is not in expected format\n");
+			seppuku();
+			return 2;
+		}
 
-	if (flagverbose)
-	{
-		myprintf("03209: Current major  %4s =>  %4s\n", internal_maj.c_str(), maj.c_str());
-		myprintf("03210: Current minor  %4s =>  %4s\n", internal_minor.c_str(), minor.c_str());
-		myprintf("03211: Current letter %4s =>  %4s\n", internal_letter.c_str(), letter.c_str());
+		for (unsigned int i= 0; i < 64; i++)
+			if ((isdigit(linea[i]) || (isalpha(linea[i]))))
+				thesha256+= linea[i];
+		if (thesha256.size() != 64)
+		{
+			myprintf("03205! sha256 len expected 64 vs %s |%s|\n", migliaia(thesha256.size()), thesha256.c_str());
+			return 2;
+		}
+		string maj	 = "";
+		string minor = "";
+		string letter= "";
+
+		unsigned int i= 65;
+
+		if (linea[i] == '*')
+			i++;
+		while (i < linea.size())
+		{
+			if ((isalnum(linea[i])) || (linea[i] == '.'))
+				theversion+= linea[i++];
+			else
+				break;
+		}
+
+		/// 65.19b: substr(i+1) with i == size() throws std::out_of_range (no date after the version)
+		thedate= (i + 1 < linea.size()) ? linea.substr(i + 1) : "";
+
+		if (flagverbose)
+			myprintf("03206: Version to be decoded |%s| date |%s|\n", theversion.c_str(), thedate.c_str());
+
+		if (!decode_zpaq_version(theversion, maj, minor, letter))
+		{
+			myprintf("03207! decode zpaq version failed!\n");
+			return 2;
+		}
+
+		string internal_maj	  = "";
+		string internal_minor = "";
+		string internal_letter= "";
+		if (!decode_zpaq_version(internal_version, internal_maj, internal_minor, internal_letter))
+		{
+			myprintf("03208! decode internal zpaq version failed!\n");
+			return 2;
+		}
+
+		int imaj		 = atoi(maj.c_str());
+		int internal_imaj= atoi(internal_maj.c_str());
+
+		int iminor		   = atoi(minor.c_str());
+		int internal_iminor= atoi(internal_minor.c_str());
+		flagnewer=
+			(imaj > internal_imaj) ||
+			((imaj == internal_imaj) && (iminor > internal_iminor)) ||
+			((imaj == internal_imaj) && (iminor == internal_iminor) && (letter > internal_letter));
+
+		if (flagverbose)
+		{
+			myprintf("03209: Current major  %4s =>  %4s\n", internal_maj.c_str(), maj.c_str());
+			myprintf("03210: Current minor  %4s =>  %4s\n", internal_minor.c_str(), minor.c_str());
+			myprintf("03211: Current letter %4s =>  %4s\n", internal_letter.c_str(), letter.c_str());
+		}
 	}
 
 #ifdef unix
@@ -214197,7 +214996,13 @@ int Jidac::update()
 	color_restore();
 	return 0;
 #else
-	if ((!flagnewer) && (flagkill))
+	if (senzadati)
+	{
+		color_yellow();
+		myprintf("03864: Your %s %s against a version that cannot be known: -kill => continue anyway\n", internal_version.c_str(), internal_date.c_str());
+		color_restore();
+	}
+	else if ((!flagnewer) && (flagkill))
 	{
 		color_yellow();
 		myprintf("03214: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",
@@ -214224,7 +215029,7 @@ int Jidac::update()
 	if (flagverbose)
 		myprintf("03217: myownsha256 %s\n", myownsha256.c_str());
 
-	if (stringtolower(myownsha256) == stringtolower(thesha256))
+	if ((!senzadati) && (stringtolower(myownsha256) == stringtolower(thesha256)))
 	{
 		color_yellow();
 		myprintf("03218: Really nothing to do because your build is == to the internet one\n");
@@ -214233,7 +215038,10 @@ int Jidac::update()
 	}
 
 	color_green();
-	myprintf("03219: Candidate %s of %s vs current %s of %s", theversion.c_str(), thedate.c_str(), internal_version.c_str(), internal_date.c_str());
+	if (senzadati)
+		myprintf("03865: Candidate of an unknown version vs current %s of %s", internal_version.c_str(), internal_date.c_str());
+	else
+		myprintf("03219: Candidate %s of %s vs current %s of %s", theversion.c_str(), thedate.c_str(), internal_version.c_str(), internal_date.c_str());
 	color_restore();
 
 	if (!flagforce)
@@ -214244,6 +215052,15 @@ int Jidac::update()
 		return 0;
 	}
 	myprintf("\n");
+
+	/// 65.19d: the batch has to put the new exe where this one is. A folder that cannot be written
+	/// (Program Files without administrator, a read-only medium or share): stop here, before the
+	/// download, with nothing killed and nothing changed
+	if (!saggiascrivibilitacartella(fullzpaqexename))
+	{
+		myprintf("03835! Cannot write in the folder of %Z: it cannot be replaced (administrator? read-only?)\n", fullzpaqexename.c_str());
+		return 2;
+	}
 
 	string exeurl = http_exe + randnocache;
 	string exefile= g_gettempdirectory() + "zpaqfranz_exe.exe";
@@ -214258,7 +215075,8 @@ int Jidac::update()
 
 	int64_t startdownload= mtime();
 
-	if (!downloadfile(exeurl, exefile, true))
+	/// 65.19o: with the signature NOT verified, the URL of the captcha only (no http after an https that fails)
+	if (!((dalsito && (!senzafirma)) ? downloadfile_sito(exeurl, exefile, true) : downloadfile(exeurl, exefile, true)))
 		return 2;
 	myprintf("\n");
 
@@ -214280,7 +215098,20 @@ int Jidac::update()
 		myprintf("03226: hash reloaded %s\n", hashreloaded.c_str());
 		myprintf("03227: expected hash %s\n", thesha256.c_str());
 	}
-	if (stringtolower(hashreloaded) != stringtolower(thesha256))
+	if (senzafirma) /// 65.19o: what was taken, to be checked by hand (GitHub, SourceForge)
+		myprintf("03866: SHA-256 of the exe downloaded (NOT verified) %s\n", hashreloaded.c_str());
+	if (senzadati)
+	{
+		if (stringtolower(hashreloaded) == stringtolower(myownsha256))
+		{
+			delete_file(exefile.c_str());
+			color_yellow();
+			myprintf("03218: Really nothing to do because your build is == to the internet one\n");
+			color_restore();
+			return 0;
+		}
+	}
+	else if (stringtolower(hashreloaded) != stringtolower(thesha256))
 	{
 		myprintf("03228! Hash mismatch => error C5 => Kaputt\n");
 		return 2;
@@ -214300,12 +215131,12 @@ int Jidac::update()
 	string filebatch= g_gettempdirectory() + "updatezpaqfranz.bat";
 	filebatch		= nomefileseesistegia(filebatch);
 	if (fileexists(filebatch))
-		if (remove(filebatch.c_str()) != 0)
+		if (!delete_file(filebatch.c_str()))
 		{
 			myprintf("03232! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
-	FILE *batch= fopen(filebatch.c_str(), "wb");
+	FILE *batch= cri_fopen(filebatch.c_str(), "wb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 	if (batch == NULL)
 	{
 		myprintf("03233! cannot write on %s\n", filebatch.c_str());
@@ -214315,24 +215146,152 @@ int Jidac::update()
 	fullzpaqexename= linuxtowinpath(fullzpaqexename);
 	exefile		   = linuxtowinpath(exefile);
 	filebatch	   = linuxtowinpath(filebatch);
-	fprintf(batch, "@echo OFF\r\n");
-	fprintf(batch, "echo Running update batch (this is good)\r\n");
-	fprintf(batch, ":again\r\n");
-	fprintf(batch, "taskkill /F /IM %s\r\n", extractfilename(zpaqfranzexename).c_str());
-	fprintf(batch, "del \"%s\"\r\n", fullzpaqexename.c_str());
-	fprintf(batch, "if exist \"%s\" goto again\r\n", fullzpaqexename.c_str());
-	fprintf(batch, "copy \"%s\" \"%s\" /y\r\n", exefile.c_str(), fullzpaqexename.c_str());
-	fprintf(batch, "del \"%s\"\r\n", exefile.c_str());
-	fprintf(batch, "echo Update done\r\n"); // this will not work, the calling task should be already killed
-	fprintf(batch, "del \"%s\"\r\n", filebatch.c_str());
+	/*
+		65.19d: the batch. Before: taskkill, del of the exe, "if exist goto again" forever (and invisible:
+		its output went into the pipe of the killed parent) when the exe could not be deleted; a del that
+		worked and a copy that did not = no zpaqfranz at all; the paths written in UTF-8, while cmd reads
+		a batch in the code page of the console (850: "C:\Users\Niccolo'" with the accent was not found).
+		Now (my idea): the exe is RENAMED to .old (after the taskkill: no exe running, any
+		file system), the new one copied, compared with fc /b, the .old deleted only at the end; every
+		error puts the old one back. 30 attempts, 1 s apart (ping: XP has no timeout.exe). The batch is
+		pure ASCII: the paths are in the environment (ZPAQFRANZ_UPD*), cmd expands them in Unicode, and
+		a % or a & in a path is just a character. It runs in this console: its messages are seen
+		65.19o: no "zpaqfranz updated" at the end. The taskkill ends this zpaqfranz, the shell writes its
+		prompt at once, and what the batch printed after it looked like a stop waiting for a key. Now
+		this zpaqfranz says it before (03867): the batch writes only when something goes wrong
+	*/
+	string vecchio= fullzpaqexename;
+	if ((vecchio.size() > 4) && (stringtolower(vecchio.substr(vecchio.size() - 4)) == ".exe"))
+		vecchio.erase(vecchio.size() - 4);
+	vecchio+= ".old";
+	/// GetModuleFileName: the real name of this process. extractfilename() looks for / only: with the \ of
+	/// a Windows path it gave the whole path, and taskkill /IM found nothing (zpaqfranz run with its full
+	/// path, as a scheduled task does: the old batch then looped forever on the del)
+	string nomeimmagine= fullzpaqexename;
+	myreplaceall(nomeimmagine, "\\", "/");
+	const string immagine= extractfilename(nomeimmagine);
+	static const char *righe[]=
+	{
+		"@echo off",
+		"rem zpaqfranz update: the paths are in ZPAQFRANZ_UPD* (this file is ASCII)",
+		"setlocal",
+		"echo Running update batch (this is good)",
+		"set /a ZPAQFRANZ_GIRI=0",
+		":again",
+		"taskkill /F /IM \"%ZPAQFRANZ_UPDIMAGE%\" >nul 2>&1",
+		"move /y \"%ZPAQFRANZ_UPDEXE%\" \"%ZPAQFRANZ_UPDOLD%\" >nul 2>&1",
+		"if not exist \"%ZPAQFRANZ_UPDEXE%\" goto moved",
+		"set /a ZPAQFRANZ_GIRI+=1",
+		"if %ZPAQFRANZ_GIRI% geq 30 goto nomove",
+		"ping -n 2 127.0.0.1 >nul",
+		"goto again",
+		":moved",
+		"copy /y /b \"%ZPAQFRANZ_UPDNEW%\" \"%ZPAQFRANZ_UPDEXE%\" >nul 2>&1",
+		"if errorlevel 1 goto restore",
+		"fc /b \"%ZPAQFRANZ_UPDNEW%\" \"%ZPAQFRANZ_UPDEXE%\" >nul 2>&1",
+		"if errorlevel 1 goto restore",
+		"set /a ZPAQFRANZ_GIRI=0",
+		":delold",
+		"del /f \"%ZPAQFRANZ_UPDOLD%\" >nul 2>&1",
+		"if not exist \"%ZPAQFRANZ_UPDOLD%\" goto deleted",
+		"set /a ZPAQFRANZ_GIRI+=1",
+		"if %ZPAQFRANZ_GIRI% geq 5 goto deleted",
+		"ping -n 2 127.0.0.1 >nul",
+		"goto delold",
+		":deleted",
+		"del /f \"%ZPAQFRANZ_UPDNEW%\" >nul 2>&1",
+		"if exist \"%ZPAQFRANZ_UPDOLD%\" echo The old one is still in use, delete it later: \"%ZPAQFRANZ_UPDOLD%\"",
+		"goto end",
+		":restore",
+		"del /f \"%ZPAQFRANZ_UPDEXE%\" >nul 2>&1",
+		"move /y \"%ZPAQFRANZ_UPDOLD%\" \"%ZPAQFRANZ_UPDEXE%\" >nul 2>&1",
+		"echo UPDATE FAILED: the new zpaqfranz could not be put in place",
+		"if exist \"%ZPAQFRANZ_UPDEXE%\" echo The old one is back: \"%ZPAQFRANZ_UPDEXE%\"",
+		"if not exist \"%ZPAQFRANZ_UPDEXE%\" echo RENAME BY HAND \"%ZPAQFRANZ_UPDOLD%\" to \"%ZPAQFRANZ_UPDEXE%\"",
+		"goto end",
+		":nomove",
+		"echo UPDATE FAILED: cannot move \"%ZPAQFRANZ_UPDEXE%\" away (in use? read-only?): nothing changed",
+		":end",
+		"(goto) 2>nul & del /f \"%~f0\"",
+	};
+	for (unsigned int i= 0; i < sizeof(righe) / sizeof(righe[0]); i++)
+	{
+		fputs(righe[i], batch);
+		fputs("\r\n", batch);
+	}
 	fclose(batch);
 	if (flagverbose)
 		myprintf("03234: filebatch %s\n", filebatch.c_str());
 
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDEXE", utow(fullzpaqexename.c_str()).c_str());
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDOLD", utow(vecchio.c_str()).c_str());
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDNEW", utow(exefile.c_str()).c_str());
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDIMAGE", utow(immagine.c_str()).c_str());
+
 	if (flagdebug3)
+	{
+		/// not run: what is needed to run it by hand
 		myprintf("01373: The file batch is <<%Z>>\n", filebatch.c_str());
-	else
-		waitexecutepadre(filebatch, "");
+		myprintf("03837: set \"ZPAQFRANZ_UPDEXE=%s\"\n", fullzpaqexename.c_str());
+		myprintf("03837: set \"ZPAQFRANZ_UPDOLD=%s\"\n", vecchio.c_str());
+		myprintf("03837: set \"ZPAQFRANZ_UPDNEW=%s\"\n", exefile.c_str());
+		myprintf("03837: set \"ZPAQFRANZ_UPDIMAGE=%s\"\n", immagine.c_str());
+		return 0;
+	}
+	/// cmd /d (no AutoRun) /c ""batch"", with the standard handles of this process (console, file or
+	/// pipe: no pipe of ours, as waitexecutepadre), so its messages go where ours go, even after this
+	/// process has been killed by its taskkill
+	wchar_t cartellasistema[MAX_PATH + 1];
+	UINT	lunghezza= GetSystemDirectoryW(cartellasistema, MAX_PATH);
+	if ((lunghezza == 0) || (lunghezza > MAX_PATH))
+	{
+		myprintf("03836! Cannot find the system folder (cmd.exe)\n");
+		return 2;
+	}
+	std::wstring		comando= std::wstring(cartellasistema) + L"\\cmd.exe";
+	std::wstring		riga   = L"cmd.exe /d /c \"\"" + utow(filebatch.c_str()) + L"\"\"";
+	STARTUPINFOW		si;
+	PROCESS_INFORMATION pi;
+	ZeroMemory(&si, sizeof(si));
+	si.cb= sizeof(si);
+	ZeroMemory(&pi, sizeof(pi));
+	const DWORD standard[3]= {STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE};
+	HANDLE		maniglie[3];
+	for (int i= 0; i < 3; i++)
+	{
+		maniglie[i]= GetStdHandle(standard[i]);
+		if ((maniglie[i] != NULL) && (maniglie[i] != INVALID_HANDLE_VALUE))
+			SetHandleInformation(maniglie[i], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+	}
+	si.dwFlags|= STARTF_USESTDHANDLES;
+	si.hStdInput = maniglie[0];
+	si.hStdOutput= maniglie[1];
+	si.hStdError = maniglie[2];
+	myprintf("03867: This zpaqfranz now closes, the new one takes its place: a message only if that fails\n");
+	fflush(stdout);
+	fflush(stderr);
+	if (!CreateProcessW(comando.c_str(), &riga[0], NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+	{
+		myprintf("03836! Cannot run the update batch %s (error %u): nothing changed\n", filebatch.c_str(), (unsigned)GetLastError());
+		return 2;
+	}
+	CloseHandle(pi.hThread);
+	/// the taskkill of the batch ends this process here. If not (no taskkill.exe: XP Home), the batch
+	/// went on all the same (NTFS lets a running exe be renamed): is the exe now the new one?
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	CloseHandle(pi.hProcess);
+	franz_do_hash dopo("SHA-256");
+	const int64_t dimensionedopo= prendidimensionefile(fullzpaqexename.c_str());
+	const string  hashdopo		= dopo.filehash(0, fullzpaqexename, false, mtime(), dimensionedopo);
+	if (stringtolower(hashdopo) == stringtolower(hashreloaded)) /// 65.19o: what was downloaded (== thesha256 when signed)
+	{
+		color_green();
+		myprintf("03838: %Z is now the new one (%s)\n", fullzpaqexename.c_str(), theversion.empty() ? "version unknown" : theversion.c_str());
+		color_restore();
+		return 0;
+	}
+	myprintf("03839! %Z is NOT the new one: see the messages of the batch above\n", fullzpaqexename.c_str());
+	return 2;
 #endif // corresponds to #ifdef (#ifdef unix)
 
 #endif // corresponds to #if (#if defined(SOLARIS) || defined(__HAIKU__))
@@ -214525,7 +215484,7 @@ int Jidac::kickstart()
 
 	std::vector<risorse> elenco;
 	kickstart_elenco(elenco);
-	const std::string base_url= "http://www.francocorbelli.it/zpaqfranz/win64/";
+	const std::string base_url= franzsito("win64/"); /// 65.19c: https (-nohttps: http)
 	HMODULE			  hExe	  = GetModuleHandle(NULL);
 	/// a zpaqfranz-full has the resources linked in: one is enough to know
 	const bool full= (hExe != NULL) && (FindResource(hExe, MAKEINTRESOURCE(elenco[0].number), RT_RCDATA) != NULL);
@@ -214584,7 +215543,7 @@ int Jidac::kickstart()
 		{
 			const string url= base_url + r.filename;
 			myprintf("60281: Download %s\n", url.c_str());
-			fatto= downloadfile(url + "?" + generaterandomstring(10), dest, true);
+			fatto= downloadfile_sito(url + "?" + generaterandomstring(10), dest, true);
 			myprintf("\n");
 		}
 		if (!fatto)
@@ -219800,12 +220759,12 @@ int Jidac::work()
 		string filebatch= g_gettempdirectory() + "resetacl.bat";
 		filebatch		= nomefileseesistegia(filebatch);
 		if (fileexists(filebatch))
-			if (remove(filebatch.c_str()) != 0)
+			if (!delete_file(filebatch.c_str()))
 			{
 				myprintf("95536! Highlander batch  %s\n", filebatch.c_str());
 				return 2;
 			}
-		FILE *batch= fopen(filebatch.c_str(), "wb");
+		FILE *batch= cri_fopen(filebatch.c_str(), "wb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 		if (batch == NULL)
 		{
 			myprintf("95342! cannot write on %s\n", filebatch.c_str());
@@ -220742,12 +221701,12 @@ int Jidac::external()
 	print_datetime();
 	myprintf("03448: Starting External \n");
 	if (fileexists(filebatch))
-		if (remove(filebatch.c_str()) != 0)
+		if (!delete_file(filebatch.c_str()))
 		{
 			myprintf("03449! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
-	FILE *batch= fopen(filebatch.c_str(), "wb");
+	FILE *batch= cri_fopen(filebatch.c_str(), "wb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 	if (batch == NULL)
 	{
 		myprintf("03450! cannot write on %s\n", filebatch.c_str());
@@ -238458,12 +239417,12 @@ int Jidac::maxcpu(int i_percent)
 	string filebatch= g_gettempdirectory() + "notb.bat";
 	filebatch		= nomefileseesistegia(filebatch);
 	if (fileexists(filebatch))
-		if (remove(filebatch.c_str()) != 0)
+		if (!delete_file(filebatch.c_str()))
 		{
 			myprintf("91673! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
-	FILE *batch= fopen(filebatch.c_str(), "wb");
+	FILE *batch= cri_fopen(filebatch.c_str(), "wb"); /// 65.19e: UTF-8 name (a TEMP with an accent)
 	if (batch == NULL)
 	{
 		myprintf("92672! cannot write on %s\n", filebatch.c_str());
@@ -262522,6 +263481,15 @@ int Jidac::testparametriadd()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 #ifdef _WIN32
+	/// 65.19n (issue 355): with -stdin the name is a label, not a file on the disk. -longpath made it
+	/// //?/C:/folder/name, with C:/folder/ in tofiles: the stream was stored as the FOLDER C:/folder/
+	/// (the name lost, l showed a dir). The name stays as written, as without -longpath
+	if (flagstdin && flaglongpath)
+	{
+		flaglongpath= false;
+		myprintf("03855: -longpath ignored with -stdin (the name is a label, not a file on the disk)\n");
+	}
+
 	if (!flaglongpath)
 		if (tofiles.size() == 0)
 			for (unsigned int i= 0; i < files.size(); i++)

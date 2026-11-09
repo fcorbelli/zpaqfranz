@@ -224904,7 +224904,9 @@ int Jidac::audit_add(const string &i_archivio, const vector<string> &i_da, const
 		g_franzen	 = "";
 		plainpassword= "";
 	}
+#ifndef NOFRANZEN
 	g_franzen_filename= "";
+#endif
 	jidacreset();
 	files		  = i_da;
 	tofiles		  = i_a;
@@ -224924,7 +224926,9 @@ int Jidac::audit_add(const string &i_archivio, const vector<string> &i_da, const
 	g_password		  = vecchiapassword;
 	g_franzen		  = vecchiofranzen;
 	plainpassword	  = vecchiachiaro;
+#ifndef NOFRANZEN
 	g_franzen_filename= "";
+#endif
 	return esito;
 }
 /// the zip of the public part: STORED, the names as in public_<node>.zpaq

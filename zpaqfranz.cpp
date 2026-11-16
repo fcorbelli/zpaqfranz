@@ -116,8 +116,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #undef SFTP			 /// 65.20c: whatever the command line says (Fedora's spec gives -DSFTP)
 #endif // BUILD_FEDORA
 
-#define ZPAQ_VERSION "65.20z"
-#define ZPAQ_DATE "(2026-11-11)"
+#define ZPAQ_VERSION "65.21o"
+#define ZPAQ_DATE "(2026-11-16)"
 
 
 /*
@@ -128,10 +128,6 @@ Here's the "spiegone"
 https://github.com/fcorbelli/zpaqfranz/wiki/Security-open-software
 */
  
-#ifdef DLL
-	#undef OPEN
-	#define OPEN
-#endif
 #ifdef OPEN ///NOSFTPSTART
 	#undef ZPAQFULL
 	#undef ZPAQMOUNT /// open: no FUSE, no WinFsp
@@ -360,12 +356,6 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security-open-software
 #endif
 
 
-#ifdef DLL
-// Callback function pointers for DLL output redirection
-typedef void (*OutputCallback)(const char* line);
-static OutputCallback g_outputCallback = nullptr;
-static OutputCallback g_errorCallback = nullptr;
-#endif
 
 
 
@@ -1648,7 +1638,6 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 -DOPEN								// Strips the executable of all non-immediately analyzable components, 
 									// disables temporary file creation, restricts potentially dangerous functions 
 									// such as library loading and file deletion
--DDLL								// Experimental DLL interface for GUI
 
 #endif ///NOSFTPEND
 
@@ -2291,13 +2280,6 @@ g++ -O3 zpaqfranz.cpp -o zpaqfranz -pthread
 Debian with SFTP and libcurl
 This gets a DYNAMIC LOADING of curl library: you must have (somewhere) a libcurl.so!
 g++ -O3 -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz  -pthread -s -ldl -Wall -Wpedantic
-
-Making DLL on Windows (highly experimental)
-g++ -O3 -shared -static -static-libgcc -static-libstdc++ -s -DDLL -DSFTP -DHWSHA2 -DHWBLAKE3 ^
-blake3_windows_gnu.S ^
-c:\zpaqfranz\zpaqfranz.cpp ^
--o c:\zpaqfranz\zpaqfranz.dll ^
--pthread -lws2_32 -lwininet -lurlmon -ladvapi32 -luser32 -lkernel32 -lshlwapi
 
 ///NOSFTPEND
 
@@ -87950,6 +87932,7 @@ bool	g_ramsizeauto= false;
 int64_t g_ramtetto	 = 0;
 
 std::string g_franzen;
+std::string g_listfrom; /// 65.21e: -listfrom thefile, the names (and their -to) from a file
 std::string g_franzen2; /// 65.13n: password -franzen2, the new password of a Franzen archive
 int64_t		g_dt_ram;
 int64_t		g_debug_sequence= 0;
@@ -88105,6 +88088,7 @@ std::string g_keyfile;
 std::string g_keyfilehash;
 std::string g_error;
 std::string g_ifexist;
+int g_timer= -1; /// 65.21n: -timer X, the seconds of -pause (pause: as -n X). -1 = not typed
 std::string g_script;
 #ifdef ZPAQFULL /// NOSFTPSTART
 std::string g_sfx;
@@ -88356,6 +88340,7 @@ bool flagnosort;
 bool flaglast;
 bool flagpakka;
 bool flagcatpaqmode;
+bool flagjson; /// 65.21b: -json, the output for programs (see json_riga)
 bool flagdistinct;
 bool flagparanoid;
 bool flagnohttps;	/// 65.19c: Windows, the files of www.francocorbelli.it via http only (default: https, then http by itself)
@@ -88829,6 +88814,10 @@ class franzntfs2;
 struct franzntfs2_conti;
 bool flagvhd;
 bool flaglongpath;
+bool		flagwim;	   /// 65.21 -wim: the image does not read the blocks of 2 MB that did not change (see franzwim)
+std::string g_wimarchivio; /// 65.21 -wim: the archive, for the state of -wim next to it
+bool		flagwimcheck;  /// 65.21 -wim FD3: -wimcheck, the skipped blocks are read anyway and compared
+std::set<std::string> g_wimsenzahash; /// 65.21 -wim FD3: images with skipped blocks: CRC-32 only (no hash of the file)
 bool flagopen;
 int	 g_ConsoleCP;
 int	 g_ConsoleOutputCP;
@@ -89578,11 +89567,17 @@ void outbuf_stop()
 	g_outbuf_console= false;
 }
 
+void json_pezzo(const std::string &i_testo, int i_codice= -1, char i_sev= 'I'); /// 65.21b: -json, further down
 void printUTF8(const char *s, FILE *f= stdout)
 {
 	assert(f);
 	assert(s);
 	mailcattura_scrivi(s, g_mailcattura_segnaposto); /// printUTF8 is for the names
+	if (flagjson && (f == stdout)) /// 65.21b: -json, a piece of the JSON line (the name after the hash...)
+	{
+		json_pezzo(s);
+		return;
+	}
 	if (g_outbuf_on && (f == stdout))
 	{
 		outbuf_append(s);
@@ -90208,6 +90203,204 @@ void zpaqfranz_vformat(std::string &o_out, const char *format, va_list args, boo
 	}
 }
 
+/*
+	65.21b: -json, the output for programs (catpaq, scripts). On stdout one JSON object per line, nothing else.
+	catpaq runs zpaqfranz as a program and reads it: the DLL could not run twice in the same process, I decided
+	so. The first line is "start", the last one "end" with the exit code (the same of the process: that one
+	counts if the run dies on its way, an exit() somewhere). In between:
+	  {"ev":"msg","code":66841,"sev":"E","text":"..."}  a line with its code: E is !, W is $, I is :
+	  {"ev":"text","text":"..."}                         a line with no code (the banner, a summary...)
+	  {"ev":"prog","ph":"ext","pct":37,"done":123,"tot":456,"eta":12,"pf":80}
+	      ph: dec = reading the archive, prg = pakka and the others with a total, ext = extract, test
+	      (the three @SPK@ of -catpaqmode), lst = writing the list of pakka (65.21c). pf, when there, is
+	      the % of the file being done
+	pakka -json writes its list too (count, ver, f: see pakkalist)
+	A line that redraws itself (\r at the end) is not written: its progress is "prog". proto is the version of
+	this format: new things are only added, never changed, and a reader skips what it does not know
+*/
+int64_t		mtime();
+std::string g_json_comando;			  /// argv[1], for the "start" line
+static bool g_json_iniziato= false;
+static bool g_json_finito  = false;
+
+/// a JSON string, quotes included: UTF-8 as it is, " \ and the control characters escaped
+std::string json_stringa(const char *i_s, size_t i_len)
+{
+	std::string o;
+	o.reserve(i_len + 2);
+	o+= '"';
+	for (size_t i= 0; i < i_len; i++)
+	{
+		const unsigned char c= (unsigned char)i_s[i];
+		if (c == '"')
+			o+= "\\\"";
+		else if (c == '\\')
+			o+= "\\\\";
+		else if (c == '\n')
+			o+= "\\n";
+		else if (c == '\r')
+			o+= "\\r";
+		else if (c == '\t')
+			o+= "\\t";
+		else if (c < 0x20)
+		{
+			char u[8];
+			snprintf(u, sizeof(u), "\\u%04x", (unsigned int)c);
+			o+= u;
+		}
+		else
+			o+= (char)c;
+	}
+	o+= '"';
+	return o;
+}
+std::string json_stringa(const std::string &i_s)
+{
+	return json_stringa(i_s.c_str(), i_s.size());
+}
+/// the "start" line, before anything else on stdout (once)
+void json_avvia()
+{
+	if (g_json_iniziato)
+		return;
+	g_json_iniziato			= true;
+	const std::string inizio= "{\"ev\":\"start\",\"proto\":1,\"ver\":" + json_stringa(std::string(ZPAQ_VERSION)) +
+							  ",\"cmd\":" + json_stringa(g_json_comando) + "}\n";
+	fwrite(inizio.data(), 1, inizio.size(), stdout);
+}
+/// a line on stdout; before the first one, "start"
+void json_riga(const std::string &i_oggetto)
+{
+	json_avvia();
+	fwrite(i_oggetto.data(), 1, i_oggetto.size(), stdout);
+	fputc('\n', stdout);
+	fflush(stdout);
+}
+/// a line is often written in pieces ("03287: <hash> ", the name, the blanks, "\n"): it goes out whole, at its \n.
+/// Globals, not statics in a function: the line still there at an exit() is written by json_alluscita (atexit)
+std::string g_json_sospeso;
+int			g_json_sospeso_codice= -1;
+char		g_json_sospeso_sev	 = 'I';
+/// a whole line: "msg" if it started with its code, "text" if not; nothing if empty
+static void json_scrivi_riga(const std::string &i_riga)
+{
+	const int  codice= g_json_sospeso_codice;
+	const char sev	 = g_json_sospeso_sev;
+	g_json_sospeso_codice= -1;
+	const size_t primo	 = i_riga.find_first_not_of("\r ");
+	if (primo == std::string::npos)
+		return;
+	const size_t	  ultimo= i_riga.find_last_not_of("\r ");
+	const std::string testo = i_riga.substr(primo, ultimo - primo + 1);
+	if (codice >= 0)
+	{
+		char testa[80];
+		snprintf(testa, sizeof(testa), "{\"ev\":\"msg\",\"code\":%d,\"sev\":\"%c\",\"text\":", codice, sev);
+		json_riga(testa + json_stringa(testo) + "}");
+	}
+	else
+		json_riga("{\"ev\":\"text\",\"text\":" + json_stringa(testo) + "}");
+}
+/// a piece of a line (myprintf, printUTF8, pakka). i_codice >= 0: it starts a line with that code
+void json_pezzo(const std::string &i_testo, int i_codice, char i_sev)
+{
+	if ((i_codice >= 0) && (!g_json_sospeso.empty())) /// a new line with its code: the one before had no \n
+	{
+		json_scrivi_riga(g_json_sospeso);
+		g_json_sospeso.clear();
+	}
+	if ((i_codice >= 0) && g_json_sospeso.empty())
+	{
+		g_json_sospeso_codice= i_codice;
+		g_json_sospeso_sev	 = i_sev;
+	}
+	g_json_sospeso+= i_testo;
+	size_t acapo;
+	while ((acapo= g_json_sospeso.find('\n')) != std::string::npos)
+	{
+		json_scrivi_riga(g_json_sospeso.substr(0, acapo));
+		g_json_sospeso.erase(0, acapo + 1);
+	}
+	/// a line that redraws itself (\r at the end, nothing after): its progress is "prog"
+	if ((!g_json_sospeso.empty()) && (g_json_sospeso[g_json_sospeso.size() - 1] == '\r'))
+	{
+		g_json_sospeso.clear();
+		g_json_sospeso_codice= -1;
+	}
+}
+static void json_svuota()
+{
+	if (!g_json_sospeso.empty())
+	{
+		json_scrivi_riga(g_json_sospeso);
+		g_json_sospeso.clear();
+	}
+}
+/// the last line: the exit code and the seconds. Once (seppuku, the end of zpaq_main_internal)
+void json_fine(int i_rc)
+{
+	if ((!flagjson) || g_json_finito)
+		return;
+	g_json_finito= true;
+	json_svuota();
+	char riga[128];
+	snprintf(riga, sizeof(riga), "{\"ev\":\"end\",\"rc\":%d,\"sec\":%.3f}", i_rc, (mtime() - g_start) / 1000.0);
+	json_riga(riga);
+}
+/// an exit() somewhere else (there are many): the "end" line all the same. rc null: the exit code is not known
+/// here, it is the one of the process
+void json_alluscita()
+{
+	if ((!flagjson) || g_json_finito)
+		return;
+	g_json_finito= true;
+	json_svuota();
+	char riga[128];
+	snprintf(riga, sizeof(riga), "{\"ev\":\"end\",\"rc\":null,\"sec\":%.3f}", (mtime() - g_start) / 1000.0);
+	json_riga(riga);
+}
+/// the progress, -json (-catpaqmode keeps its @SPK@ lines, written where they are). i_pf < 0: no "pf".
+/// (a line still in pieces stays in g_json_sospeso: nothing of it is on stdout yet, the two do not mix)
+void json_prog(const char *i_fase, int i_perc, int64_t i_fatti, int64_t i_totali, int i_eta, int i_pf= -1)
+{
+	/// 65.21e: never a % out of 0..100 or an eta below 0 (done over the total, a clock that went back)
+	if (i_perc < 0)
+		i_perc= 0;
+	if (i_perc > 100)
+		i_perc= 100;
+	if (i_eta < 0)
+		i_eta= 0;
+	char riga[256];
+	if (i_pf >= 0)
+		snprintf(riga, sizeof(riga), "{\"ev\":\"prog\",\"ph\":\"%s\",\"pct\":%d,\"done\":%lld,\"tot\":%lld,\"eta\":%d,\"pf\":%d}",
+				 i_fase, i_perc, (long long)i_fatti, (long long)i_totali, i_eta, i_pf);
+	else
+		snprintf(riga, sizeof(riga), "{\"ev\":\"prog\",\"ph\":\"%s\",\"pct\":%d,\"done\":%lld,\"tot\":%lld,\"eta\":%d}",
+				 i_fase, i_perc, (long long)i_fatti, (long long)i_totali, i_eta);
+	json_riga(riga);
+}
+/// a piece of myprintf: with its code if it has one (the line goes out whole, see json_pezzo)
+static void json_messaggio(const char *i_formato, va_list i_args)
+{
+	int			codice= -1;
+	char		sev	  = 'I';
+	const char *resto = i_formato;
+	if ((strlen(i_formato) >= 6) && isdigit((unsigned char)i_formato[0]) && isdigit((unsigned char)i_formato[1]) &&
+		isdigit((unsigned char)i_formato[2]) && isdigit((unsigned char)i_formato[3]) &&
+		isdigit((unsigned char)i_formato[4]) && ((i_formato[5] == ':') || (i_formato[5] == '!') || (i_formato[5] == '$')))
+	{
+		codice= (i_formato[0] - '0') * 10000 + (i_formato[1] - '0') * 1000 + (i_formato[2] - '0') * 100 +
+				(i_formato[3] - '0') * 10 + (i_formato[4] - '0');
+		sev	  = (i_formato[5] == '!') ? 'E' : ((i_formato[5] == '$') ? 'W' : 'I');
+		resto = i_formato + 6;
+		while (*resto == ' ')
+			resto++;
+	}
+	std::string testo;
+	zpaqfranz_vformat(testo, resto, i_args, false);
+	json_pezzo(testo, codice, sev);
+}
+
 void my_vprintf_refactored(const char *format, va_list args)
 {
 	if (!format)
@@ -90219,6 +90412,12 @@ void my_vprintf_refactored(const char *format, va_list args)
 
 	if (should_skip_print(format))
 		return;
+
+	if (flagjson) /// 65.21b: for programs, a JSON line (errors too with -silent)
+	{
+		json_messaggio(format, args);
+		return;
+	}
 
 	if (flagsilent)
 	{
@@ -90294,20 +90493,6 @@ void myprintf(const char *format, ...)
             printf("02750: myprintf format NULL\n");
         return;
     }
-#ifdef DLL    
-    // Se c'è un callback attivo (modalità DLL), usalo
-    if (g_outputCallback)
-    {
-		/// the zpaqfranz formatter: %Z %K %H too
-		std::string buffer;
-		va_list		args;
-		va_start(args, format);
-		zpaqfranz_vformat(buffer, format, args, false);
-		va_end(args);
-		g_outputCallback(buffer.c_str());
-    }
-    else
-#endif
 
 
     {
@@ -90321,11 +90506,7 @@ void myprintf(const char *format, ...)
 /// l: a piece of a line, as myprintf("%s",i_text) would put it, without a format to decode
 void list_out(const char *i_text, size_t i_len)
 {
-	bool diretto= g_outbuf_on && (!flagsilent);
-#ifdef DLL
-	if (g_outputCallback)
-		diretto= false;
-#endif
+	bool diretto= g_outbuf_on && (!flagsilent) && (!flagjson); /// 65.21b: -json, through myprintf (JSON lines)
 	if (!diretto)
 	{
 		g_mailcattura_elenco= g_mailcattura; /// the lines of a listing are names: not in the purged text
@@ -96601,10 +96782,6 @@ void stretchKey(char*, const char*, const char*) {error("this build has no AES (
 // The first byte will not be 'z' or '7' (start of a ZPAQ archive).
 // For a pure random number, discard the first byte.
 // In VC++, must link to advapi32.lib.
-#ifdef DLL
-void random(char* buf, int n) 
-{}
-#else
 	
 void random(char* buf, int n) {
 #ifdef unix
@@ -96634,7 +96811,6 @@ void random(char* buf, int n) {
   if (n>=1 && (buf[0]=='z' || buf[0]=='7'))
     buf[0]^=0x80;
 }
-#endif
 //////////////////////////// Component ///////////////////////
 // A Component is a context model, indirect context model, match model,
 // fixed weight mixer, adaptive 2 input mixer without or with current
@@ -104692,6 +104868,7 @@ void mailreport_avvia(int argc, const char **argv);
 void seppuku(int i_codice= 2)
 {
 	i_codice= mailreport(i_codice); /// a command that dies here must be told too
+	json_fine(i_codice);			/// 65.21b: -json, the "end" line here too
 	if (g_output_handle)
 		fclose(g_output_handle);
 	if (g_error_handle)
@@ -111749,8 +111926,6 @@ int64_t mtime()
 
 
 #ifdef _WIN32
-#ifdef DLL
-#else
 HRESULT ModifyPrivilege(
 	IN LPCTSTR szPrivilege,
 	IN BOOL	   fEnable)
@@ -111792,7 +111967,6 @@ HRESULT ModifyPrivilege(
 	CloseHandle(hToken);
 	return hr;
 }
-#endif
 /* NTFS reparse point definitions */
 /* Constants from http://msdn.microsoft.com/en-us/library/dd541667.aspx */
 /* Some, but not all, of them also defined in recent versions of winnt.h. */
@@ -111940,6 +112114,39 @@ string wtou(const wchar_t *s)
 	return r;
 }
 
+#ifdef _WIN32
+/// 65.21l: issue 363 (YadeWira). The name as Windows takes it: a relative name (src/x, ../x, c:x, /x) is the
+/// current folder + the name, and the limits of Windows (248 for a folder, 260) are on that one. It was measured as
+/// written: a relative source in a deep current folder had its folders over the limit skipped in silence, "all OK"
+/// and rc 0. c:/..., //server/... and //?/... are as they are (nothing asked to Windows: no cost)
+static bool nome_assolutowin(const string &i_nome)
+{
+	if ((i_nome.size() >= 3) && (i_nome[1] == ':') && ((i_nome[2] == '/') || (i_nome[2] == '\\')))
+		return true;
+	return (i_nome.size() >= 2) && ((i_nome[0] == '/') || (i_nome[0] == '\\')) && ((i_nome[1] == '/') || (i_nome[1] == '\\'));
+}
+/// the full name (UTF-8, with /); the name itself if it is not relative, or if Windows cannot say
+static string nome_pienowin(const string &i_nome)
+{
+	if (i_nome.empty() || nome_assolutowin(i_nome))
+		return i_nome;
+	const std::wstring w	= utow(i_nome.c_str());
+	const DWORD		   serve= GetFullPathNameW(w.c_str(), 0, NULL, NULL);
+	if (serve == 0)
+		return i_nome;
+	std::vector<wchar_t> pieno(serve + 1, 0);
+	const DWORD			 fatti= GetFullPathNameW(w.c_str(), serve + 1, &pieno[0], NULL);
+	if ((fatti == 0) || (fatti > serve))
+		return i_nome;
+	return wtou(&pieno[0]);
+}
+/// its length in UTF-16 (the unit of the limits of Windows)
+static size_t lunghezza_pienowin(const string &i_nome)
+{
+	return utow(nome_pienowin(i_nome).c_str()).size();
+}
+#endif
+
 string win_getcomputername()
 {
 	wchar_t buffer[256];
@@ -111949,12 +112156,6 @@ string win_getcomputername()
 		risultato= wtou(buffer);
 	return risultato;
 }
-#ifdef DLL
-string win_getusername()
-{
-	return "";
-}
-#else
 string win_getusername()
 {
 	wchar_t buffer[256];
@@ -111964,7 +112165,6 @@ string win_getusername()
 		risultato= wtou(buffer);
 	return risultato;
 }
-#endif
 string my_realpath(std::string const &i_path)
 {
 	if (i_path == "")
@@ -114353,6 +114553,30 @@ bool direxists(const std::string &i_directory)
 	return false; // Fallback for unsupported systems
 }
 
+/// 65.21m: -ifexist X, a file or a folder. It was direxists() only: with a file the run aborted, the
+/// file being there. No FindFirstFile (fileexists): a * or a ? in the name would be a pattern
+bool ifexist_presente(const std::string &i_nome)
+{
+	if (i_nome.empty())
+		return false;
+#ifdef unix
+	struct stat sb;
+	return stat(i_nome.c_str(), &sb) == 0;
+#endif
+#ifdef _WIN32
+	const std::wstring wnome= utow(i_nome.c_str());
+	if (GetFileAttributesW(wnome.c_str()) != INVALID_FILE_ATTRIBUTES)
+		return true;
+	/// a long one: \\?\ (as direxists), on the FULL name: a short relative one in a deep current folder is
+	/// long too (issue 363), and with \\?\ a .. is not resolved
+	const std::wstring lungo= preparelongpath(utow(nome_pienowin(i_nome).c_str()));
+	if (lungo != wnome)
+		return GetFileAttributesW(lungo.c_str()) != INVALID_FILE_ATTRIBUTES;
+	return false;
+#endif
+	return false;
+}
+
 #ifdef _WIN32
 string trimbarra(string i_path)
 {
@@ -114719,9 +114943,11 @@ string decodewinerror(DWORD i_error, const char *i_filename, bool i_padded)
 
 	if ((i_error == 3L) && (i_filename))
 	{
-		if (strlen(i_filename) > 255)
+		/// 65.21l: issue 363, the full name (a relative one in a deep current folder was short here)
+		const size_t lunghezzanome= lunghezza_pienowin(i_filename);
+		if (lunghezzanome > 255)
 		{
-			snprintf(buffer, sizeof(buffer), "%08d", (int)strlen(i_filename));
+			snprintf(buffer, sizeof(buffer), "%08d", (int)lunghezzanome);
 			string lunghezza= buffer;
 			risultato+= "_:_MAYBE_LENGTH_" + lunghezza + "_>255?";
 			g_255++;
@@ -115045,6 +115271,36 @@ uint32_t crc32_combine(uint32_t crcA, uint32_t crcB, size_t lengthB)
   }
   // return combined crc
   return crcA ^ crcB;
+}
+/// 65.21 -wim FD8: crc32_combine builds its operator (the zeros of lengthB) from nothing every time: ~20 us. -wim
+/// combines a CRC-32 for every block skipped and twice for every piece of 64 KB (a million of times on a PC). The
+/// operator is linear: for a length its matrix (32 columns: what it makes of every bit) is taken once, and kept.
+/// Few lengths are used (an element, a piece): 8 kept, the others the slow way. One thread only (the reader)
+uint32_t wim_crccombina(uint32_t i_crca, uint32_t i_crcb, uint64_t i_lungb)
+{
+	static uint64_t lunghezze[8];
+	static uint32_t matrici[8][32];
+	static int		quante= 0;
+	if (i_lungb == 0)
+		return i_crca;
+	int i= 0;
+	while ((i < quante) && (lunghezze[i] != i_lungb))
+		i++;
+	if (i == quante)
+	{
+		if (quante == 8)
+			return crc32_combine(i_crca, i_crcb, (size_t)i_lungb);
+		for (int k= 0; k < 32; k++)
+			matrici[i][k]= crc32_combine(1u << k, 0, (size_t)i_lungb);
+		lunghezze[i]= i_lungb;
+		quante++;
+	}
+	uint32_t		s= 0;
+	const uint32_t *m= matrici[i];
+	for (uint32_t v= i_crca; v; v>>= 1, m++)
+		if (v & 1)
+			s^= *m;
+	return s ^ i_crcb;
 }
 // //////////////////////////////////////////////////////////
 // constants
@@ -117139,9 +117395,14 @@ bool myavanzamentoby1sec(int64_t i_lavorati, int64_t i_totali, int64_t i_inizio,
 		
 		if (flagcatpaqmode) 
         {
+            if (flagjson) /// 65.21b
+                json_prog("prg", percentuale, i_lavorati, i_totali, (int)eta);
+            else
+            {
             // Formato macchina: @SPK@PRG@<percentuale>@<lavorati>@<totali>@<eta>
             printf("@SPK@PRG@%d@%lld@%lld@%d\n", percentuale, (long long)i_lavorati, (long long)i_totali, (int)eta);
             fflush(stdout); // CRITICO: svuota il buffer del pipe verso Lazarus!
+            }
             return true;
         }
 		
@@ -128923,6 +129184,36 @@ unsigned char g_franzen_sale[SIZEOF_SALT];
 int64_t		  g_franzen_lettirotti= 0;
 
 string g_franzen_filename = "";     // Franzen file path
+/*
+	65.21h: issue 362 (YadeWira). Every InputArchive wrote g_franzen_filename, and x and t make one InputArchive
+	for every decompression thread: several threads assigning the same std::string at the same time. With the
+	reference-counted std::string (the old libstdc++ ABI: gcc < 5, -D_GLIBCXX_USE_CXX11_ABI=0) the count went
+	wrong and the destructor freed twice ("double free or corruption", exit code 134, ~10 x out of 100);
+	with the other ABI no crash, but the same undefined behaviour. Now it is written under a lock, and only
+	when it changes: the threads find the name the main thread has already set, and do not write at all
+	(so get_thread_franzenfile, which reads it, never reads it while it is being written)
+*/
+static pthread_mutex_t g_franzen_filename_mutex= PTHREAD_MUTEX_INITIALIZER;
+static void franzen_filename_metti(const string &i_nome)
+{
+	pthread_mutex_lock(&g_franzen_filename_mutex);
+	if (g_franzen_filename != i_nome)
+		g_franzen_filename= i_nome;
+	pthread_mutex_unlock(&g_franzen_filename_mutex);
+}
+/// the same, only if it is empty: true if this call set it
+static bool franzen_filename_sevuoto(const string &i_nome)
+{
+	bool messo= false;
+	pthread_mutex_lock(&g_franzen_filename_mutex);
+	if (g_franzen_filename == "")
+	{
+		g_franzen_filename= i_nome;
+		messo			  = true;
+	}
+	pthread_mutex_unlock(&g_franzen_filename_mutex);
+	return messo;
+}
 
 bool g_franzen_zpaq_nowrite= false; // -franzen without -debug (with or without -key): do not write the .zpaq at all
 
@@ -130036,12 +130327,6 @@ int waitexecutepadre(const std::string &i_filename, const std::string &i_paramet
 }
 #endif /// NOSFTPEND
 
-#ifdef DLL
-bool isadmin()
-{
-	return false;
-}
-#else
 bool isadmin()
 {
 	BOOL			fIsElevated= FALSE;
@@ -130069,7 +130354,6 @@ Cleanup:
 	}
 	return fIsElevated;
 }
-#endif
 
 #endif // corresponds to #if (#if defined(_WIN32))
 // Return true if a file or directory (UTF-8 without trailing /) exists.
@@ -132158,6 +132442,7 @@ string mygetpasswordblind(const string& i_default)
 			color_restore();
 			if (g_tantiarchivi) /// 65.16g
 				throw std::runtime_error("no password (-key)");
+			json_fine(2); /// 65.21b: -json, the "end" line with its exit code
 			exit(2);
 		}
 	}
@@ -132531,7 +132816,7 @@ ArchiveType InputArchive::detect_archive_type(const string& base_file)
 	// Determine which physical file to use
 	if (franzen_exists && is_file_franzen(franzen_file))
 	{
-		g_franzen_filename=franzen_file;
+		franzen_filename_metti(franzen_file); /// 65.21h: issue 362, every decompression thread comes here
 		if (flagdebug)
 			myprintf("Franzen exist & isfranzen %s\n",franzen_file.c_str());
 		// Franzen file exists and is valid
@@ -132806,11 +133091,8 @@ InputArchive::InputArchive(const char *filename) : fn(filename), uses_franzen(fa
 		}
 		
 		// Initialize global Franzen parameters (once)
-		if (g_franzen_filename == "")
-		{
-			g_franzen_filename = physical_file;
-			myprintf("Franzen mode enabled: %s\n", g_franzen_filename.c_str());
-		}
+		if (franzen_filename_sevuoto(physical_file)) /// 65.21h: issue 362, under the lock (a read-modify-write)
+			myprintf("Franzen mode enabled: %s\n", physical_file.c_str());
 		
 		// FIX: sz[] currently contains PHYSICAL file sizes (encrypted + header/footer/overhead).
 		// But zpaq uses totalsize()/sz[] to compute logical seek offsets, and read_at_to()
@@ -135702,6 +135984,8 @@ class list_Archive : public libzpaq::Reader, public libzpaq::Writer
 
 void list_print_datetime(void)
 {
+	if (flagjson) /// 65.21c: -json, no time in front of the lines (it is not a line of its own)
+		return;
 	int hours, minutes, seconds, day, month, year;
 
 	time_t now;
@@ -135762,7 +136046,7 @@ bool list_Archive::open(bool i_quiet, const char *filename, const char *password
 		if (next == filename)
 			break; // no wildcards
 	}
-	if (!i_quiet)
+	if ((!i_quiet) && (!flagjson)) /// 65.21c: -json, not a JSON line
 	{
 		list_print_datetime();
 		printf("Multipart scan %f s chunks %d\n", (mtime() - startscan) / 1000.0, i);
@@ -137537,6 +137821,7 @@ typedef void(WINAPI *RpcStringFreeAFunc)(RPC_CSTR *);
 
 // costanti
 #define FRANZIMAGER_SECTOR_SIZE 512
+#define FRANZIMAGER_SALTATO (-3) /// 65.21 -wim FD3: elaboravhd, an element of the stream skipped (no data)
 #define FRANZIMAGER_BLOCK_SIZE (2 * 1024 * 1024)
 #define FRANZIMAGER_BUFFER_SIZE (FRANZIMAGER_BLOCK_SIZE + FRANZIMAGER_SECTOR_SIZE)
 #define FRANZIMAGER_NTFS_OEM_ID "NTFS    "
@@ -138816,6 +139101,8 @@ class franzimager
 		return m_totalclusters;
 	}
 	/// -dashboard: the block just given by elaboravhd, the blocks of the virtual disk and what they are
+	bool	 wimpezzi() const { return m_wimpezzi; }		/// 65.21 -wim FD4
+	uint32_t wimmaschera() const { return m_wimmaschera; } /// 65.21 -wim FD4
 	int64_t ultimoblocco() const
 	{
 		return m_ultimoblocco;
@@ -138967,6 +139254,17 @@ class franzimager
 	// blockmap: map saved_block_index -> original_block_index
 	std::vector<uint32_t> m_blockmap;
 	int64_t				  m_ultimoblocco; /// the block just given by elaboravhd (-dashboard)
+	void				 *m_wimsquadra;	  /// 65.21 -wim FD7: the threads that read a block in parallel (wim_squadra)
+	bool				  m_wimsquadraprovata; /// 65.21 -wim FD7: opened once (if it does not open, never again)
+	void				 *m_wimavanti;		   /// 65.21 -wim FD10: the reads of the blocks that come next (wim_avanti)
+	bool				  m_wimavantiprovato;  /// 65.21 -wim FD10: opened once
+	bool				  wim_daleggere(uint64_t i_offset, uint32_t &o_nonleggere, DWORD &o_bytes) const;
+	void				  wim_avantiriempi();
+	char				 *wim_avantiprendi(uint64_t i_offset, uint32_t i_nonleggere, DWORD i_bytes);
+	void				  wim_avantirilascia();
+	void				  wim_avantichiudi();
+	bool				  m_wimpezzi;	  /// 65.21 -wim FD4: that block is cut in pieces
+	uint32_t			  m_wimmaschera;  /// and these pieces of it are not read (their fragments of before)
 
   private:
 	// endianness utility functions
@@ -139261,6 +139559,10 @@ franzimager::franzimager()
 	m_vmdkaccum		= NULL;
 	m_vmdkaccumsize = 0;
 	m_vmdkblocchi	= 0;
+	m_wimsquadra	= NULL; /// 65.21 -wim FD7
+	m_wimsquadraprovata= false;
+	m_wimavanti		   = NULL; /// 65.21 -wim FD10
+	m_wimavantiprovato = false;
 }
 
 // destructor
@@ -139716,12 +140018,370 @@ bool franzimager::opensourcedrive(char i_driveletter)
 	return true;
 }
 
+/*
+	65.21 -wim FD5: the files of a volume that change with no trace in the $MFT. Written in place, with the times
+	not updated (the registry, ETW and some services ask so) and the USN written once for every opening: for them
+	the signature of a block says "the same" when it is not (a -wimcheck KO on a real PC: a block with the log of
+	NTUSER.DAT and an .etl of SleepStudy). Their clusters are always read: the hives loaded and their logs
+	(hivelist), the files of the ETW sessions running, the files open for writing by the processes whose handles
+	can be seen (not the protected ones). Taken before and after the shadow copy: a file closed in between left
+	its trace (USN) or was open before
+*/
+#include <evntrace.h>
+static std::set<uint64_t> g_wimvolatili;	  /// numbers of records of the $MFT
+static int64_t			  g_wimvolconti[5]; /// hives, ETW, open for writing, processes not seen, handles given up
+/// FD6: where the time goes (seconds from the start of the program)
+static double wim_ora()
+{
+	return (mtime() - g_start) / 1000.0;
+}
+static double g_wimvssinizio= 0, g_wimvssfine= 0, g_wimtscan= 0;
+static std::wstring wim_davolume(const std::wstring &i_percorso, char i_lettera, const std::wstring &i_dispositivo)
+{
+	std::wstring p= i_percorso;
+	if ((p.size() >= 4) && (p.substr(0, 4) == L"\\??\\"))
+		p= p.substr(4);
+	if ((p.size() >= 2) && (p[1] == L':'))
+		return (towupper(p[0]) == (wchar_t)toupper(i_lettera)) ? p : L"";
+	if ((i_dispositivo != L"") && (p.size() > i_dispositivo.size()) && (_wcsnicmp(p.c_str(), i_dispositivo.c_str(), i_dispositivo.size()) == 0) && (p[i_dispositivo.size()] == L'\\'))
+		return std::wstring(1, (wchar_t)toupper(i_lettera)) + L":" + p.substr(i_dispositivo.size());
+	return L"";
+}
+static bool wim_numerodi(const std::wstring &i_percorso, DWORD i_seriale, uint64_t &o_numero)
+{
+	/// FILE_READ_ATTRIBUTES only: no sharing check, a hive in use opens too
+	HANDLE h= CreateFileW(i_percorso.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	BY_HANDLE_FILE_INFORMATION bi;
+	const bool				   ok= GetFileInformationByHandle(h, &bi) && (bi.dwVolumeSerialNumber == i_seriale) && !(bi.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+	CloseHandle(h);
+	if (ok)
+		o_numero= (((uint64_t)bi.nFileIndexHigh << 32) | bi.nFileIndexLow) & 0xFFFFFFFFFFFFULL;
+	return ok;
+}
+/// a file and its company: NAME* in its folder (NTUSER.DAT: .LOG1, .LOG2, {guid}.TM.blf, .regtrans-ms)
+static int wim_conparenti(const std::wstring &i_file, DWORD i_seriale)
+{
+	const size_t barra= i_file.find_last_of(L'\\');
+	if (barra == std::wstring::npos)
+		return 0;
+	const std::wstring cartella= i_file.substr(0, barra + 1);
+	WIN32_FIND_DATAW   fd;
+	HANDLE			   t= FindFirstFileW((i_file + L"*").c_str(), &fd);
+	if (t == INVALID_HANDLE_VALUE)
+		return 0;
+	int quanti= 0;
+	do
+	{
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			continue;
+		uint64_t n= 0;
+		if (wim_numerodi(cartella + fd.cFileName, i_seriale, n))
+		{
+			g_wimvolatili.insert(n);
+			quanti++;
+		}
+	} while (FindNextFileW(t, &fd));
+	FindClose(t);
+	return quanti;
+}
+struct wim_manicand
+{
+	HANDLE processo;
+	HANDLE h;
+};
+struct wim_manitutto /// on the heap: a worker given up may still be inside a query of it
+{
+	std::vector<wim_manicand> c;
+	std::vector<uint64_t>	  esito; /// number + 1, 0 none
+	DWORD					  seriale;
+};
+struct wim_manijob
+{
+	wim_manitutto *t;
+	size_t		   da;
+	volatile LONG  pos;
+	volatile LONG  licenziato;
+};
+static DWORD WINAPI wim_manithread(LPVOID i_arg)
+{
+	wim_manijob *j= (wim_manijob *)i_arg;
+	for (size_t i= j->da; i < j->t->c.size(); i++)
+	{
+		if (j->licenziato)
+			break;
+		InterlockedExchange(&j->pos, (LONG)i);
+		HANDLE d= NULL;
+		if (DuplicateHandle(j->t->c[i].processo, j->t->c[i].h, GetCurrentProcess(), &d, 0, FALSE, DUPLICATE_SAME_ACCESS))
+		{
+			/// a pipe can block here (a synchronous one, with a read pending): the main thread gives this worker up
+			if (GetFileType(d) == FILE_TYPE_DISK)
+			{
+				BY_HANDLE_FILE_INFORMATION bi;
+				if (GetFileInformationByHandle(d, &bi) && (bi.dwVolumeSerialNumber == j->t->seriale) && !(bi.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+					j->t->esito[i]= ((((uint64_t)bi.nFileIndexHigh << 32) | bi.nFileIndexLow) & 0xFFFFFFFFFFFFULL) + 1;
+			}
+			CloseHandle(d);
+		}
+	}
+	return 0;
+}
+static void wim_privilegio(const char *i_nome)
+{
+	HANDLE token;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+		return;
+	TOKEN_PRIVILEGES tp;
+	tp.PrivilegeCount			= 1;
+	tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	if (LookupPrivilegeValueA(NULL, i_nome, &tp.Privileges[0].Luid))
+		AdjustTokenPrivileges(token, FALSE, &tp, 0, NULL, NULL);
+	CloseHandle(token);
+}
+/// the files open for writing (FILE_WRITE_DATA or FILE_APPEND_DATA) on the volume, by every process that lets
+/// its handles be duplicated
+static void wim_maniglie(DWORD i_seriale, char i_lettera)
+{
+	typedef LONG(NTAPI * t_nqsi)(ULONG, PVOID, ULONG, PULONG);
+	HMODULE nt= GetModuleHandleA("ntdll.dll");
+	t_nqsi	q = nt ? (t_nqsi)GetProcAddress(nt, "NtQuerySystemInformation") : NULL;
+	if (!q)
+		return;
+	wim_privilegio("SeDebugPrivilege");
+	struct voce
+	{
+		PVOID	  oggetto;
+		ULONG_PTR pid;
+		ULONG_PTR maniglia;
+		ULONG	  accesso;
+		USHORT	  traccia;
+		USHORT	  tipo;
+		ULONG	  attributi;
+		ULONG	  riservato;
+	};
+	struct elenco
+	{
+		ULONG_PTR quante;
+		ULONG_PTR riservato;
+		voce	  v[1];
+	};
+	/// the type of a file object: the one of a handle of mine
+	char   radice[4]= {(char)toupper(i_lettera), ':', '\\', 0};
+	HANDLE mio		= CreateFileA(radice, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (mio == INVALID_HANDLE_VALUE)
+		return;
+	std::vector<char> buf((size_t)16 << 20);
+	LONG			  st= -1;
+	for (int giri= 0; giri < 8; giri++)
+	{
+		ULONG serve= 0;
+		st		   = q(64, &buf[0], (ULONG)buf.size(), &serve); /// SystemExtendedHandleInformation
+		if (st != (LONG)0xC0000004)							   /// STATUS_INFO_LENGTH_MISMATCH
+			break;
+		buf.resize((serve > buf.size() * 2) ? (size_t)serve + ((size_t)1 << 20) : buf.size() * 2);
+	}
+	if (st != 0)
+	{
+		CloseHandle(mio);
+		return;
+	}
+	const elenco   *e	  = (const elenco *)&buf[0];
+	const ULONG_PTR miopid= GetCurrentProcessId();
+	USHORT			tipo  = 0xFFFF;
+	for (ULONG_PTR i= 0; i < e->quante; i++)
+		if ((e->v[i].pid == miopid) && (e->v[i].maniglia == (ULONG_PTR)mio))
+		{
+			tipo= e->v[i].tipo;
+			break;
+		}
+	CloseHandle(mio);
+	if (tipo == 0xFFFF)
+		return;
+	wim_manitutto					*tutto= new wim_manitutto;
+	std::map<ULONG_PTR, HANDLE>		 processi;
+	std::set<ULONG_PTR>				 nonvisti;
+	tutto->seriale= i_seriale;
+	for (ULONG_PTR i= 0; i < e->quante; i++)
+	{
+		const voce &v= e->v[i];
+		if ((v.tipo != tipo) || (v.pid == miopid) || !(v.accesso & (FILE_WRITE_DATA | FILE_APPEND_DATA)))
+			continue;
+		std::map<ULONG_PTR, HANDLE>::iterator p= processi.find(v.pid);
+		if (p == processi.end())
+		{
+			HANDLE hp= OpenProcess(PROCESS_DUP_HANDLE, FALSE, (DWORD)v.pid);
+			p		 = processi.insert(std::make_pair(v.pid, hp)).first;
+			if (!hp)
+				nonvisti.insert(v.pid);
+		}
+		if (!p->second)
+			continue;
+		wim_manicand c;
+		c.processo= p->second;
+		c.h		  = (HANDLE)v.maniglia;
+		tutto->c.push_back(c);
+	}
+	tutto->esito.assign(tutto->c.size(), 0);
+	g_wimvolconti[3]+= (int64_t)nonvisti.size();
+	/// a worker at a time: stuck on one handle for 250 ms, it is given up, and another one goes on after it
+	size_t da		  = 0;
+	int	   abbandonati= 0;
+	while ((da < tutto->c.size()) && (abbandonati < 20))
+	{
+		wim_manijob *j= new wim_manijob;
+		j->t		  = tutto;
+		j->da		  = da;
+		j->pos		  = (LONG)da;
+		j->licenziato = 0;
+		HANDLE th	  = CreateThread(NULL, 0, wim_manithread, j, 0, NULL);
+		if (!th)
+		{
+			delete j;
+			break;
+		}
+		LONG  ultimo= -1;
+		DWORD fermo = GetTickCount();
+		while (true)
+		{
+			if (WaitForSingleObject(th, 20) == WAIT_OBJECT_0)
+			{
+				CloseHandle(th);
+				delete j;
+				da= tutto->c.size();
+				break;
+			}
+			const LONG p= j->pos;
+			if (p != ultimo)
+			{
+				ultimo= p;
+				fermo = GetTickCount();
+			}
+			else if (GetTickCount() - fermo > 250)
+			{
+				InterlockedExchange(&j->licenziato, 1);
+				CloseHandle(th); /// the worker stays (and j, and tutto): it may still come back
+				abbandonati++;
+				da= (size_t)p + 1;
+				break;
+			}
+		}
+	}
+	g_wimvolconti[4]+= abbandonati;
+	for (size_t i= 0; i < tutto->esito.size(); i++)
+		if (tutto->esito[i])
+		{
+			g_wimvolatili.insert(tutto->esito[i] - 1);
+			g_wimvolconti[2]++;
+		}
+	if (abbandonati == 0) /// else a worker may still use them
+	{
+		for (std::map<ULONG_PTR, HANDLE>::iterator p= processi.begin(); p != processi.end(); ++p)
+			if (p->second)
+				CloseHandle(p->second);
+		delete tutto;
+	}
+}
+/// the hives loaded, the ETW logs, the files open for writing of volume i_lettera. i_prima: before the shadow copy
+static void wim_volatili_(char i_lettera, bool i_prima);
+static void wim_volatili(char i_lettera, bool i_prima)
+{
+	const double t0= wim_ora();
+	if (i_prima)
+		g_wimtscan= 0;
+	wim_volatili_(i_lettera, i_prima);
+	g_wimtscan+= wim_ora() - t0;
+}
+static void wim_volatili_(char i_lettera, bool i_prima)
+{
+	if (i_prima)
+	{
+		g_wimvolatili.clear();
+		for (int i= 0; i < 5; i++)
+			g_wimvolconti[i]= 0;
+	}
+	char  radice[4]= {(char)toupper(i_lettera), ':', '\\', 0};
+	DWORD seriale  = 0;
+	if (!GetVolumeInformationA(radice, NULL, 0, &seriale, NULL, NULL, NULL, 0))
+		return;
+	wchar_t		 dosnome[3]= {(wchar_t)toupper(i_lettera), L':', 0};
+	wchar_t		 disp[1024]= {0};
+	std::wstring dispositivo;
+	if (QueryDosDeviceW(dosnome, disp, 1024))
+		dispositivo= disp;
+	wim_privilegio("SeBackupPrivilege");
+	/// the hives loaded: HKLM\SYSTEM\CurrentControlSet\Control\hivelist, "\REGISTRY\..." = "\Device\HarddiskVolumeN\..."
+	HKEY k;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\hivelist", 0, KEY_READ, &k) == ERROR_SUCCESS)
+	{
+		for (DWORD i= 0; i < 4096; i++)
+		{
+			wchar_t nome[1024];
+			wchar_t val[2048];
+			DWORD	ln	= 1024;
+			DWORD	lv	= sizeof(val) - sizeof(wchar_t);
+			DWORD	tipo= 0;
+			memset(val, 0, sizeof(val));
+			const LONG r= RegEnumValueW(k, i, nome, &ln, NULL, &tipo, (LPBYTE)val, &lv);
+			if (r == ERROR_NO_MORE_ITEMS)
+				break;
+			if ((r != ERROR_SUCCESS) || (tipo != REG_SZ) || (val[0] == 0))
+				continue;
+			const std::wstring file= wim_davolume(val, i_lettera, dispositivo);
+			if (file != L"")
+				g_wimvolconti[0]+= wim_conparenti(file, seriale);
+		}
+		RegCloseKey(k);
+	}
+	/// the ETW sessions running with a file (SleepStudy, the diagnostics, ...)
+	typedef ULONG(WINAPI * t_qat)(PEVENT_TRACE_PROPERTIES *, ULONG, PULONG);
+	HMODULE a= LoadLibraryA("advapi32.dll");
+	t_qat	qat= a ? (t_qat)GetProcAddress(a, "QueryAllTracesW") : NULL;
+	if (qat)
+	{
+		const ULONG						 sessioni= 128;
+		const ULONG						 dim	 = sizeof(EVENT_TRACE_PROPERTIES) + 2 * 1024 * sizeof(wchar_t);
+		std::vector<std::vector<char> >	 b(sessioni, std::vector<char>(dim, 0));
+		std::vector<PEVENT_TRACE_PROPERTIES> pp(sessioni);
+		for (ULONG i= 0; i < sessioni; i++)
+		{
+			pp[i]					= (PEVENT_TRACE_PROPERTIES)&b[i][0];
+			pp[i]->Wnode.BufferSize = dim;
+			pp[i]->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
+			pp[i]->LogFileNameOffset= sizeof(EVENT_TRACE_PROPERTIES) + 1024 * sizeof(wchar_t);
+		}
+		ULONG	   n= 0;
+		const ULONG r= qat(&pp[0], sessioni, &n);
+		if ((r == ERROR_SUCCESS) || (r == ERROR_MORE_DATA))
+			for (ULONG i= 0; (i < n) && (i < sessioni); i++)
+			{
+				const ULONG off= pp[i]->LogFileNameOffset;
+				if ((off == 0) || (off + sizeof(wchar_t) >= dim))
+					continue;
+				std::wstring f((const wchar_t *)&b[i][off]);
+				f= wim_davolume(f, i_lettera, dispositivo);
+				uint64_t num= 0;
+				if ((f != L"") && wim_numerodi(f, seriale, num))
+				{
+					g_wimvolatili.insert(num);
+					g_wimvolconti[1]++;
+				}
+			}
+	}
+	wim_maniglie(seriale, i_lettera);
+}
+
 // opening drive with VSS
 bool franzimager::opensourcedrivevsss(char i_driveletter)
 {
 	m_usingvss= false;
 
 	m_motivovss= "";
+	if (flagwim) /// 65.21 -wim FD5: the files that change with no trace, before the copy
+	{
+		g_wimvssinizio= wim_ora();
+		wim_volatili(i_driveletter, true);
+	}
 	if (!createvss(i_driveletter))
 	{
 		if (m_motivovss == "")
@@ -139741,6 +140401,8 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 	}
 
 	m_usingvss= true;
+	if (flagwim) /// 65.21 -wim FD5: and after it
+		wim_volatili(i_driveletter, false);
 
 	if (flagverbose)
 		myprintf("43477: drive %c: open for vss\n", i_driveletter);
@@ -139796,6 +140458,8 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 	color_cyan();
 	myprintf("43519: VSS ready!\n");
 	color_restore();
+	if (flagwim)
+		g_wimvssfine= wim_ora(); /// 65.21 -wim FD6
 	return true;
 }
 
@@ -141180,6 +141844,2619 @@ bool franzimager::deleteExcludedFiles(
 	return deleteExcludedFiles(m_filesToDelete, i_targetVolume);
 }
 
+/// ======================================================================================================
+/// 65.21 -wim (FD2): "skip the unchanged blocks", for now ONLY MEASURED. The image is made as always
+/// (every block read; the archive is the one without -wim, but for FD1). -wim adds, for an NTFS read from a
+/// copy that cannot change (VSS, or the volume locked):
+/// - from the $MFT of the copy, a signature for every block of 2 MB of the virtual disk: who owns its
+///   clusters and how ($STANDARD_INFORMATION without the access time, USN, sequence number, the runs). A block
+///   with metadata (records < 24, what is under $Extend, folders, attributes that are not $DATA) or with used
+///   clusters of nobody is "metadata": always read
+/// - the hash (XXH3) of every block as it goes in the image
+/// - next to the archive, <archive>.<letter>.wim with both. The run after says what it WOULD have skipped
+///   (same signature as before) and if skipping would have been RIGHT (same hash), and how long the reading
+///   of the blocks really needed took
+/// FD2b: the report is printed after the final map of the dashboard (printed at the end of the stream, the
+/// map put the cursor back under itself and the next lines were written over it); how much metadata there
+/// is in the blocks with metadata (44030: reading only those clusters, instead of the whole blocks) and how
+/// much it would be with pieces of 256 KB and 64 KB instead of 2 MB (44031)
+/// FD3: the skip, for real (add2, -turbo, an NTFS read from a copy). The stream of the image is cut element
+/// by element (512 of bitmap + a block of 2 MB, a cut at its end): a block that did not change has the same
+/// fragments. The state (FDWIM002) has, by block, the numbers of its fragments, the XXH64 of their SHA-1, the
+/// CRC-32 of the element. A block with the same signature, whose fragments are in the archive as they were
+/// (validariuso, against ht), is not read: its fragments go in the list of the file. The hash of such a file
+/// cannot be taken: CRC-32 only (combined, see g_wimsenzahash). -wimcheck: the skipped blocks are read anyway
+/// and compared with the hash of before. The first run with FD3 reads all (no fragments of before)
+/// FD4: a block with metadata (now) is cut in 32 pieces of 64 KB (the first with the 512 of bitmap): each piece
+/// has its signature and its "metadata" mark. A block cut in pieces before reads only its pieces with metadata,
+/// changed or new; the others take their fragments and CRC-32 of before (FDWIM003: the pieces of every block)
+/// FD5: files that change with no trace in the $MFT (hives and logs, ETW logs, open for writing) always read;
+/// -wimcheck takes a DIFFERENT block or piece from the data just read (the version is right)
+/// ======================================================================================================
+#define WIM_META 1
+#define WIM_PRESENTE 2
+#pragma pack(push, 1)
+struct franzwimtesta
+{
+	char	 magic[8]; /// FDWIM001
+	uint64_t seriale, ncl, partstart, nblocchi, quando, voci;
+	uint32_t cl, blocco;
+};
+struct franzwimvoce
+{
+	uint32_t blocco;
+	uint8_t	 stato;
+	uint8_t	 libero[3];
+	uint64_t firma, hash;
+};
+/// FD3: the state with the fragments, then nfrag numbers of fragments (uint32_t)
+#define WIM_RIUSO 4
+struct franzwimtesta2
+{
+	char	 magic[8]; /// FDWIM002
+	uint64_t seriale, ncl, partstart, nblocchi, quando, voci, nfrag;
+	uint32_t cl, blocco;
+};
+struct franzwimvoce2
+{
+	uint32_t blocco;
+	uint32_t stato; /// WIM_META, WIM_RIUSO
+	uint64_t firma, hash, fh;
+	uint32_t crc, quanti;
+	uint64_t primo;
+};
+/// FD4: the blocks with metadata are cut in pieces of WIM_PEZZO (the first one has the 512 of bitmap too):
+/// FDWIM003 = FDWIM002 + by block the first of its pieces (WIM_NOPEZZI: none), then npz pieces, then the fragments
+#define WIM_NOHASH 8 /// the hash of the block is not known (pieces of it skipped)
+#define WIM_PEZZO 65536
+#define WIM_NOPEZZI 0xFFFFFFFFu
+#define WIM_AVANTI_THREAD 8 /// FD10: the reads ahead (wim_avanti)
+/// FD11: why a piece is metadata (causap): the $DATA of the $MFT, other files of the system (< 24, $Extend), files
+/// always read (FD5), attributes not $DATA (indexes of the folders...), clusters of nobody, the rest (records not in use)
+#define WIM_C_MFT 1
+#define WIM_C_SISTEMA 2
+#define WIM_C_SEMPRE 4
+#define WIM_C_ATTRIBUTI 8
+#define WIM_C_NESSUNO 16
+#define WIM_C_ALTRO 32
+#define WIM_AVANTI_SLOT 16
+struct franzwimtesta3
+{
+	char	 magic[8]; /// FDWIM003
+	uint64_t seriale, ncl, partstart, nblocchi, quando, voci, nfrag, npz;
+	uint32_t cl, blocco, pezzo, npezzi;
+};
+struct franzwimvoce3
+{
+	uint32_t blocco;
+	uint32_t stato; /// WIM_META, WIM_RIUSO, WIM_NOHASH
+	uint64_t firma, hash, fh;
+	uint32_t crc, quanti;
+	uint64_t primo;
+	uint32_t pbase, libero;
+};
+struct franzwimpezzo
+{
+	uint32_t stato; /// WIM_META, WIM_RIUSO
+	uint32_t crc, quanti, libero;
+	uint64_t firma, hash, fh, primo;
+};
+/// FD18: the state in the archive, as a file of the image (image_X.wim). FDWIM004 = this head, then by block:
+/// (FD19: FDWIM005 = FDWIM004 with globale by block, see franzwimdelta; the records in the order of the blocks)
+/// u32 block, u8 state (WIM_META WIM_RIUSO WIM_NOHASH, WIM_CONPEZZI), u64 signature, u64 hash, u32 CRC-32, varint
+/// fragments, the fragments (zigzag varint of the difference from the one before); with WIM_CONPEZZI its pieces, each
+/// one u8 state (WIM_META WIM_RIUSO), u32 CRC-32, u64 signature, u64 hash, varint fragments (its stretch of the list of
+/// the block, in order: they cover it). No sums of before: a block that does not change gives the same bytes (dedup)
+#define WIM_CONPEZZI 0x40
+#define WIM_VIA 0x80 /// FD19: (in the changes) the block has no record now
+struct franzwimtesta4
+{
+	char	 magic[8]; /// FDWIM004
+	uint64_t seriale, ncl, partstart, nblocchi, quando, voci, nfrag;
+	uint64_t globale;	 /// XXH64 of the SHA-1 of every fragment named, in order: the fragments of THIS archive (a repack renumbers)
+	uint64_t contenuto; /// XXH64 of what comes after the head
+	uint32_t cl, blocco, pezzo, npezzi;
+};
+/// FD19: the changes since the base (image_X.wimd): this head, then the records (as in the base) of the blocks whose
+/// record is not the same as the one of the base, and u32 block + u8 WIM_VIA for a block of the base with no record now.
+/// Base + changes = the state of the last run: globale is of that one (FDWIM005 way: by block its number, how many
+/// fragments, their SHA-1)
+struct franzwimdelta
+{
+	char	 magic[8]; /// FDWIMD01
+	uint64_t base;	   /// XXH64 of the whole base (image_X.wim) it goes with
+	uint64_t seriale, nblocchi, quando, voci, nfrag;
+	uint64_t globale;	/// of base + changes
+	uint64_t contenuto; /// XXH64 of what comes after the head
+	uint32_t npezzi, libero;
+};
+#pragma pack(pop)
+
+static inline uint16_t wim_u16(const unsigned char *p)
+{
+	uint16_t v;
+	memcpy(&v, p, 2);
+	return v;
+}
+static inline uint32_t wim_u32(const unsigned char *p)
+{
+	uint32_t v;
+	memcpy(&v, p, 4);
+	return v;
+}
+static inline uint64_t wim_u64(const unsigned char *p)
+{
+	uint64_t v;
+	memcpy(&v, p, 8);
+	return v;
+}
+static uint64_t wim_hash(const void *i_dati, size_t i_quanti) /// XXH64, the one of -xxhash
+{
+	XXH64_state_t stato;
+	XXH64_reset(&stato, 0);
+	XXH64_update(&stato, i_dati, i_quanti);
+	return XXH64_digest(&stato);
+}
+
+/// 65.21 -wim FD18: the state of -wim of the image about to be read, from the archive (image_X.wim), taken by
+/// Jidac::wim_caricastato before the image is prepared. g_wimprimaok: the archive has that file (it can say "no state")
+static std::vector<uint8_t> g_wimprima;
+static bool					g_wimprimaok= false;
+static std::string			g_wimprimanome;
+static std::vector<uint8_t> g_wimdelta;		   /// FD19: the changes since that base (image_X.wimd)
+static bool					g_wimdeltaok= false; /// the archive has them
+struct franzwim
+{
+	bool		attivo;
+	bool		primavolta;
+	char		lettera;
+	std::string file, motivo;
+	uint64_t	quandoprima;
+	HANDLE		h;
+	uint32_t	cl, recsize, blocco;
+	uint64_t	ncl, partstart, nblocchi, seriale, nrec, mftbytes;
+	struct pezzo
+	{
+		uint64_t vcn;
+		int64_t	 lcn;
+		uint64_t len;
+	};
+	std::vector<pezzo>	  mft;	   /// the runs of the $MFT
+	std::vector<uint64_t> firma;   /// by block of the virtual disk
+	std::vector<uint32_t> posseduti;
+	std::vector<uint8_t>  stato;
+	std::vector<uint64_t> hashora;
+	std::vector<uint8_t>  letto;
+	std::vector<uint64_t> pfirma, phash;
+	std::vector<uint8_t>  pstato;
+	std::vector<uint64_t> recstato; /// by record of the $MFT
+	std::vector<uint32_t> recpadre;
+	std::vector<uint8_t>  recflag; /// 1 base in use, 2 folder, 4 system
+	std::vector<uint8_t>  recvol;  /// FD5: changes with no trace in the $MFT (g_wimvolatili): always read
+	uint64_t			  clvolatili;
+	std::vector<uint8_t>	  recvss;	   /// FD9: stores of the shadow copies (by the $MFT of the copy)
+	std::vector<clusterrange> esclusivss; /// FD9: their clusters, zeros in the image
+	uint64_t			  n[5], byte[5];
+	double				  tempo[5]; /// 0 skipped, 1 metadata, 2 changed, 3 new, 4 same signature but read (FD3)
+	uint64_t			  giusti, allarmi, metablocchi, senzapadrone;
+	std::vector<uint32_t> sbagliati;
+	double				  tmft, tfirme;
+	bool				  dastampare;	   /// FD2b: fine() is done, stampa() not yet
+	bool				  scritto;		   /// the state for the next run written
+	uint64_t			  vociscritte, vociriuso;
+	std::vector<std::string> chisbagliati; /// by wrong block (the first 40): who owns it
+	uint64_t			  clmeta, clnessuno; /// clusters of metadata, used clusters of nobody
+	std::vector<uint8_t>  granmeta[2];		 /// FD2b, only measured: pieces of 256 KB and 64 KB with metadata
+	static uint64_t		  granulo(int i_g) { return i_g ? 65536 : 262144; }
+	void				  segnagranuli(uint64_t i_da, uint64_t i_a) /// bytes of the virtual disk, [i_da, i_a)
+	{
+		if (i_a <= i_da)
+			return;
+		for (int g= 0; g < 2; g++)
+			for (uint64_t k= i_da / granulo(g); (k <= (i_a - 1) / granulo(g)) && (k < granmeta[g].size()); k++)
+				granmeta[g][(size_t)k]= 1;
+	}
+	uint64_t contagranuli(int i_g) const
+	{
+		uint64_t quanti= 0;
+		for (size_t k= 0; k < granmeta[i_g].size(); k++)
+			quanti+= granmeta[i_g][k];
+		return quanti;
+	}
+	/// FD3: the skip, for real. The state of before (FDWIM002) has, by block, its fragments in the archive
+	std::vector<uint32_t> pcrc;			/// CRC-32 of the element of the stream (512 of bitmap + the block)
+	std::vector<uint64_t> pfh;			/// XXH64 of the SHA-1 of its fragments, in order
+	std::vector<uint64_t> pprimo;		/// where its fragments begin in pfrag
+	std::vector<uint32_t> pquanti;
+	std::vector<uint32_t> pfrag;		/// the numbers of the fragments in the archive
+	std::vector<uint8_t>  riusabile;	/// its fragments are in the archive as they were (validariuso)
+	std::vector<uint32_t> crcora;		/// CRC-32 of the element read now (by the reader of the stream)
+	bool				  saltoattivo;	/// the stream may give skipped elements (add2, -turbo, an image of NTFS)
+	bool				  controllo;	/// -wimcheck: the skipped blocks are read anyway, and compared
+	bool				  senzahash;	/// the hash of the file cannot be taken (skipped elements): CRC-32 only
+	bool				  statoscritto; /// chiudi() done
+	uint64_t			  nriusabili, nnonriusabili, giustis, sbagliatis;
+	struct elem
+	{
+		uint32_t blocco;
+		uint32_t quanti;
+		uint64_t inizio; /// in the list of the fragments of the file
+		uint32_t pbase;	 /// FD4: its pieces in elpezzi (WIM_NOPEZZI: cut as a whole)
+	};
+	std::vector<elem> elementi; /// the elements of the stream, in order (main thread only)
+	/// FD4: pieces of WIM_PEZZO inside the blocks with metadata
+	bool					   pezziok;	   /// the pieces can be used (clusters, block, see prepara)
+	uint32_t				   npezzi;	   /// by block (32)
+	std::vector<uint64_t>	   firmap;	   /// by piece of every block: signature
+	std::vector<uint8_t>	   metap;	   /// with metadata (or used clusters of nobody)
+	std::vector<uint16_t>	   possedutip; /// clusters owned
+	std::vector<uint32_t>	   ppbase;	   /// before: by block, its first piece in pp (WIM_NOPEZZI: none)
+	std::vector<franzwimpezzo> pp;
+	std::vector<uint8_t>	   riusabilep; /// by piece of before: its fragments are in the archive as they were
+	std::vector<uint32_t>	   curbase;	   /// now (reader of the stream): by block, its first piece in curhashp
+	std::vector<uint64_t>	   curhashp;
+	std::vector<uint32_t>	   curcrcp;
+	std::vector<uint32_t>	   maschere; /// now: by block, its pieces skipped
+	uint64_t				   npzsaltati, bytepzsaltati, npzriusabili, giustip, sbagliatip, pezziscritti;
+	struct elpz
+	{
+		uint32_t off, quanti; /// in the list of the element
+	};
+	std::vector<elpz> elpezzi; /// main thread only
+	/// FD6: where the time goes (seconds; tprepfine, tflussoinizio, tflussofine from the start of the program)
+	double tcarica, tvalida, tprepfine, tflussoinizio, tflussofine, tletture, tchiudi, tcalcoli, tattesa;
+	/// FD10: the reads ahead (wim_avanti), and the one pass on the $MFT
+	int		 avthread;
+	uint64_t avpresi, avmancati, avletture, avbyte, nattr, nrun, avcontrollati, avdiversi, avsoloazzerati;
+	std::vector<std::string> avko; /// -wimcheck: the first blocks read ahead found DIFFERENT, where
+	int64_t avprimomancato, avultimo; /// the first block the old way, the block where the partition ends
+	double avoccupato, avdurata; /// FD11: the threads of the reads ahead: reading (each, on average), and alive
+	/// FD11: why the pieces of the blocks with metadata are read, and the pieces of the $MFT known by their content
+	std::vector<uint8_t> causap; /// by piece of every block: WIM_C_*
+	uint64_t bytecausa[7]; /// read: $MFT, system, always read, attributes, nobody, other, no metadata
+	std::vector<std::pair<uint64_t, uint64_t> > mftpezzi; /// piece of the virtual disk, XXH64 (read in the pass)
+	bool hashmft; /// the pass on the $MFT takes the hashes of its pieces
+	uint64_t npzmft; /// pieces of the $MFT SKIPPED: the same content as before
+	/// FD18: the state in the archive (FDWIM004, image_X.wim): made by chiudi(), read by caricaprima() (g_wimprima)
+	std::vector<uint8_t> statobytes;
+	bool				 statoarchivio; /// the state of before came from the archive: its fragments checked all together
+	uint64_t			 pglobale;		 /// what it says of them (franzwimtesta4::globale)
+	std::string			 origine;		 /// where the state of before came from
+	/// FD19: the base read (image_X.wim) as it is, and where the record of every block is in it (length 0: none): chiudi()
+	/// writes it again with the changes since it (deltabytes, image_X.wimd), or a new base
+	std::vector<uint8_t>  basebytes, deltabytes;
+	std::vector<uint32_t> baseoff, baselen;
+	bool				  basenuova;	 /// the base read is FDWIM004 (FD18): a new one
+	bool				  basetenuta;	 /// chiudi kept the base
+	bool				  globalenuovo; /// pglobale is the FDWIM005 one (by block)
+	uint32_t			  basenpezzi;
+	uint64_t			  basequando, ndeltaprima, cambiscritti;
+	/// FD15 (the proposal 3): a block is cut in pieces of 64 KB with metadata now (FD4), or if it was in pieces before (it
+	/// stays so), or if it changed now (its first change is read whole, and cut in pieces: from the next change on, only
+	/// its pieces with a new signature are read). A block that never changes stays whole. A block in pieces skipped whole
+	/// keeps its pieces of before in the state (chiudi), else its next change would be read whole again
+	std::vector<uint8_t> apezzi;
+	uint64_t			 nbpezzicamb, nbnuovipezzi, npzsaltaticamb, bytepzsaltaticamb, nbriportati;
+	uint64_t			 nonverificati, ignoti4; /// FD15: -wimcheck and CHECK, the content of before not known (no hash, no pieces)
+	double	 avattesa, tpassata, truns;
+	bool	 avspento;
+	uint64_t		  pezzoinizio(uint32_t p) const { return p ? 512 + (uint64_t)p * WIM_PEZZO : 0; }
+	uint64_t		  pezzolung(uint32_t p) const { return p ? WIM_PEZZO : 512 + WIM_PEZZO; }
+
+	franzwim() : attivo(false), primavolta(true), lettera('C'), quandoprima(0), h(INVALID_HANDLE_VALUE), cl(0), recsize(0), blocco(0), ncl(0), partstart(0), nblocchi(0), seriale(0), nrec(0), mftbytes(0), clvolatili(0), giusti(0), allarmi(0), metablocchi(0), senzapadrone(0), tmft(0), tfirme(0), dastampare(false), scritto(false), vociscritte(0), vociriuso(0), clmeta(0), clnessuno(0), saltoattivo(false), controllo(false), senzahash(false), statoscritto(false), nriusabili(0), nnonriusabili(0), giustis(0), sbagliatis(0), pezziok(false), npezzi(0), npzsaltati(0), bytepzsaltati(0), npzriusabili(0), giustip(0), sbagliatip(0), pezziscritti(0)
+	{
+		tcarica= tvalida= tprepfine= tflussoinizio= tflussofine= tletture= tchiudi= tcalcoli= tattesa= 0;
+		avthread = 0;
+		statoarchivio= false; /// FD18
+		pglobale	 = 0;
+		basenuova= basetenuta= globalenuovo= false; /// FD19
+		basenpezzi= 0;
+		basequando= ndeltaprima= cambiscritti= 0;
+		avpresi	 = avmancati= avletture= avbyte= nattr= nrun= avcontrollati= avdiversi= avsoloazzerati= 0;
+		avattesa = tpassata= truns= 0;
+		avspento = false;
+		avprimomancato= avultimo= -1;
+		avoccupato= avdurata= 0;
+		for (int i= 0; i < 7; i++)
+			bytecausa[i]= 0;
+		hashmft= false;
+		npzmft = 0;
+		nbpezzicamb= nbnuovipezzi= npzsaltaticamb= bytepzsaltaticamb= nbriportati= 0; /// FD15
+		nonverificati= ignoti4= 0;
+		for (int i= 0; i < 5; i++)
+		{
+			n[i]	= 0;
+			byte[i] = 0;
+			tempo[i]= 0;
+		}
+	}
+	static double adesso()
+	{
+		LARGE_INTEGER f, c;
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		return (double)c.QuadPart / (double)f.QuadPart;
+	}
+	bool leggi(int64_t i_dove, void *o_buf, DWORD i_quanti)
+	{
+		LARGE_INTEGER p;
+		p.QuadPart= i_dove;
+		DWORD fatti= 0;
+		return SetFilePointerEx(h, p, NULL, FILE_BEGIN) && ReadFile(h, o_buf, i_quanti, &fatti, NULL) && (fatti == i_quanti);
+	}
+	static void runlist(const unsigned char *p, const unsigned char *i_fine, uint64_t i_vcn, std::vector<pezzo> &o_runs)
+	{
+		int64_t	 lcn= 0;
+		uint64_t vcn= i_vcn;
+		while ((p < i_fine) && *p)
+		{
+			const int nl= *p & 15, no= *p >> 4;
+			p++;
+			if ((nl == 0) || (nl > 8) || (no > 8) || (p + nl + no > i_fine))
+				return;
+			uint64_t q= 0;
+			for (int i= nl - 1; i >= 0; i--)
+				q= (q << 8) | p[i];
+			p+= nl;
+			pezzo r;
+			r.vcn= vcn;
+			r.len= q;
+			if (no == 0)
+				r.lcn= -1;
+			else
+			{
+				uint64_t d= (p[no - 1] & 0x80) ? ~0ULL : 0;
+				for (int i= no - 1; i >= 0; i--)
+					d= (d << 8) | p[i];
+				p+= no;
+				lcn+= (int64_t)d;
+				r.lcn= lcn;
+			}
+			o_runs.push_back(r);
+			vcn+= q;
+		}
+	}
+	bool fixup(unsigned char *r) const
+	{
+		const uint32_t off= wim_u16(r + 4), q= wim_u16(r + 6);
+		if ((q < 2) || (off + q * 2u > recsize) || ((q - 1) * 512u > recsize))
+			return false;
+		for (uint32_t i= 1; i < q; i++)
+		{
+			unsigned char *f= r + i * 512 - 2;
+			if ((f[0] != r[off]) || (f[1] != r[off + 1]))
+				return false;
+			f[0]= r[off + i * 2];
+			f[1]= r[off + i * 2 + 1];
+		}
+		return true;
+	}
+	/// where a byte of the $MFT is on the volume, -1 not known
+	int64_t mftdove(uint64_t i_byte) const
+	{
+		const uint64_t vcn= i_byte / cl;
+		for (size_t i= 0; i < mft.size(); i++)
+			if ((vcn >= mft[i].vcn) && (vcn < mft[i].vcn + mft[i].len))
+				return (mft[i].lcn < 0) ? -1 : (int64_t)(((uint64_t)mft[i].lcn + (vcn - mft[i].vcn)) * cl + i_byte % cl);
+		return -1;
+	}
+	/// one record of the $MFT read by itself (record 0, the ones that hold the rest of the $MFT)
+	bool record(uint64_t i_numero, std::vector<unsigned char> &o_rec)
+	{
+		const int64_t dove= mftdove(i_numero * recsize);
+		if (dove < 0)
+			return false;
+		const uint32_t	settore= 4096;
+		const int64_t	inizio = dove / settore * settore;
+		unsigned char  *b	   = (unsigned char *)VirtualAlloc(NULL, 2 * settore + recsize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		if (!b)
+			return false;
+		const DWORD quanto= (DWORD)(((dove - inizio) + recsize + settore - 1) / settore * settore);
+		const bool	ok	  = leggi(inizio, b, quanto);
+		if (ok)
+			o_rec.assign(b + (dove - inizio), b + (dove - inizio) + recsize);
+		VirtualFree(b, 0, MEM_RELEASE);
+		return ok && (memcmp(&o_rec[0], "FILE", 4) == 0) && fixup(&o_rec[0]);
+	}
+	/// the runs of the $MFT: record 0, and the records its attribute list points to
+	bool caricamft(uint64_t i_mftlcn)
+	{
+		mft.clear();
+		pezzo p0;
+		p0.vcn= 0;
+		p0.lcn= (int64_t)i_mftlcn;
+		p0.len= (recsize + cl - 1) / cl + 16; /// enough for record 0 and its neighbours
+		mft.push_back(p0);
+		std::vector<unsigned char> r0;
+		if (!record(0, r0))
+		{
+			motivo= "record 0 of the $MFT not readable";
+			return false;
+		}
+		mft.clear();
+		std::vector<uint64_t> altri;
+		for (uint32_t a= wim_u16(&r0[0x14]); a + 16 <= recsize;)
+		{
+			const uint32_t t= wim_u32(&r0[a]), len= wim_u32(&r0[a + 4]);
+			if ((t == 0xFFFFFFFF) || (len < 16) || (a + len > recsize))
+				break;
+			if (t == 0x20)
+			{
+				if (r0[a + 8])
+				{
+					motivo= "the attribute list of the $MFT is not resident";
+					return false;
+				}
+				const uint32_t v= a + wim_u16(&r0[a + 0x14]), vl= wim_u32(&r0[a + 0x10]);
+				for (uint32_t e= 0; (e + 0x1A <= vl) && (v + e + 0x1A <= recsize);)
+				{
+					const uint16_t el= wim_u16(&r0[v + e + 4]);
+					if (el < 0x1A)
+						break;
+					const uint64_t chi= wim_u64(&r0[v + e + 0x10]) & 0xFFFFFFFFFFFFULL;
+					if ((wim_u32(&r0[v + e]) == 0x80) && (chi != 0))
+						if (std::find(altri.begin(), altri.end(), chi) == altri.end())
+							altri.push_back(chi);
+					e+= el;
+				}
+			}
+			if ((t == 0x80) && r0[a + 8] && (r0[a + 9] == 0))
+			{
+				runlist(&r0[a] + wim_u16(&r0[a + 0x20]), &r0[a] + len, wim_u64(&r0[a + 0x10]), mft);
+				if (wim_u64(&r0[a + 0x10]) == 0)
+					mftbytes= wim_u64(&r0[a + 0x30]);
+			}
+			a+= len;
+		}
+		for (size_t i= 0; i < altri.size(); i++)
+		{
+			std::vector<unsigned char> re;
+			if (!record(altri[i], re))
+			{
+				motivo= "a record with the runs of the $MFT not readable";
+				return false;
+			}
+			for (uint32_t a= wim_u16(&re[0x14]); a + 16 <= recsize;)
+			{
+				const uint32_t t= wim_u32(&re[a]), len= wim_u32(&re[a + 4]);
+				if ((t == 0xFFFFFFFF) || (len < 16) || (a + len > recsize))
+					break;
+				if ((t == 0x80) && re[a + 8] && (re[a + 9] == 0))
+					runlist(&re[a] + wim_u16(&re[a + 0x20]), &re[a] + len, wim_u64(&re[a + 0x10]), mft);
+				a+= len;
+			}
+		}
+		if (mft.empty() || (mftbytes == 0))
+		{
+			motivo= "$DATA of the $MFT not found";
+			return false;
+		}
+		nrec= mftbytes / recsize;
+		return true;
+	}
+	/// FD7: the chunks of the $MFT read ahead by a thread of its own (4 buffers of 4 MB) while the records are worked
+	struct avanti
+	{
+		franzwim							   *w;
+		std::vector<std::pair<int64_t, DWORD> > pezzi; /// where (-1: a hole, zeros) and how much
+		unsigned char						   *buf[4];
+		HANDLE									liberi, pieni;
+		volatile LONG							errore;
+	};
+	static DWORD WINAPI avantithread(LPVOID i_arg)
+	{
+		avanti *a= (avanti *)i_arg;
+		for (size_t i= 0; i < a->pezzi.size(); i++)
+		{
+			WaitForSingleObject(a->liberi, INFINITE);
+			unsigned char *b= a->buf[i % 4];
+			if ((a->pezzi[i].first < 0) || a->errore)
+				memset(b, 0, a->pezzi[i].second);
+			else if (!a->w->leggi(a->pezzi[i].first, b, a->pezzi[i].second))
+			{
+				InterlockedExchange(&a->errore, 1);
+				memset(b, 0, a->pezzi[i].second);
+			}
+			ReleaseSemaphore(a->pieni, 1, NULL);
+		}
+		return 0;
+	}
+	/// the $MFT from start to end, a record at a time (i_fa: 1 = states, 2 = runs, 3 = names)
+	template <class F>
+	bool scorri(F &i_fa)
+	{
+		const DWORD PEZZO= 4u << 20;
+		avanti		a;
+		a.w		= this;
+		a.errore= 0;
+		uint64_t tot= 0;
+		for (size_t i= 0; (i < mft.size()) && (tot < mftbytes); i++)
+		{
+			uint64_t resta= mft[i].len * cl;
+			int64_t	 dove = (mft[i].lcn < 0) ? -1 : mft[i].lcn * (int64_t)cl;
+			while ((resta > 0) && (tot < mftbytes))
+			{
+				const DWORD q= (DWORD)((resta > PEZZO) ? PEZZO : resta);
+				a.pezzi.push_back(std::make_pair(dove, q));
+				tot+= q;
+				resta-= q;
+				if (dove >= 0)
+					dove+= q;
+			}
+		}
+		int buoni= 0;
+		for (int k= 0; k < 4; k++)
+		{
+			a.buf[k]= (unsigned char *)VirtualAlloc(NULL, PEZZO, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+			if (a.buf[k])
+				buoni++;
+		}
+		a.liberi  = CreateSemaphore(NULL, 4, 4, NULL);
+		a.pieni	  = CreateSemaphore(NULL, 0, 4, NULL);
+		HANDLE th= ((buoni == 4) && a.liberi && a.pieni) ? CreateThread(NULL, 0, avantithread, &a, 0, NULL) : NULL;
+		if (th)
+		{
+			std::vector<unsigned char> resto;
+			uint64_t				   fatti= 0, numero= 0;
+			for (size_t i= 0; i < a.pezzi.size(); i++)
+			{
+				WaitForSingleObject(a.pieni, INFINITE);
+				const unsigned char *b= a.buf[i % 4];
+				if (fatti < mftbytes)
+				{
+					if (hashmft && (a.pezzi[i].first >= 0)) /// FD11
+						hashpezzimft(a.pezzi[i].first, b, a.pezzi[i].second);
+					resto.insert(resto.end(), b, b + a.pezzi[i].second);
+					size_t usati= 0;
+					while ((resto.size() - usati >= recsize) && (fatti < mftbytes))
+					{
+						unsigned char *r= &resto[usati];
+						if ((memcmp(r, "FILE", 4) == 0) && fixup(r) && (wim_u16(r + 0x16) & 1))
+							i_fa(numero, r);
+						usati+= recsize;
+						fatti+= recsize;
+						numero++;
+					}
+					resto.erase(resto.begin(), resto.begin() + usati);
+				}
+				ReleaseSemaphore(a.liberi, 1, NULL);
+			}
+			WaitForSingleObject(th, INFINITE);
+			CloseHandle(th);
+		}
+		for (int k= 0; k < 4; k++)
+			if (a.buf[k])
+				VirtualFree(a.buf[k], 0, MEM_RELEASE);
+		if (a.liberi)
+			CloseHandle(a.liberi);
+		if (a.pieni)
+			CloseHandle(a.pieni);
+		if ((!th) || a.errore)
+		{
+			motivo= th ? "the $MFT is not readable" : "no memory (or thread) to read the $MFT";
+			return false;
+		}
+		return true;
+	}
+	struct fastati
+	{
+		franzwim *w;
+		void	  operator()(uint64_t r, unsigned char *rec)
+		{
+			if ((wim_u64(rec + 0x20) & 0xFFFFFFFFFFFFULL) != 0) /// an extension: what it holds is of its base
+				return;
+			w->recflag[r]|= 1 | ((wim_u16(rec + 0x16) & 2) ? 2 : 0);
+			const uint16_t seq= wim_u16(rec + 0x10);
+			for (uint32_t a= wim_u16(rec + 0x14); a + 16 <= w->recsize;)
+			{
+				const uint32_t t= wim_u32(rec + a), len= wim_u32(rec + a + 4);
+				if ((t == 0xFFFFFFFF) || (len < 16) || (a + len > w->recsize))
+					break;
+				if (!rec[a + 8])
+				{
+					const unsigned char *v = rec + a + wim_u16(rec + a + 0x14);
+					const uint32_t		 vl= wim_u32(rec + a + 0x10);
+					if ((t == 0x10) && (vl >= 0x24) && (v + vl <= rec + w->recsize))
+					{
+						unsigned char s[64];
+						memset(s, 0, sizeof(s));
+						memcpy(s, v, 0x18);			   /// creation, last write, change of the record (not the access)
+						memcpy(s + 0x18, v + 0x20, 4); /// attributes
+						if (vl >= 0x48)
+							memcpy(s + 0x20, v + 0x40, 8); /// USN
+						memcpy(s + 0x28, &seq, 2);
+						w->recstato[r]= wim_hash(s, sizeof(s));
+					}
+					if ((t == 0x30) && (vl >= 8) && (v + 8 <= rec + w->recsize))
+						w->recpadre[r]= (uint32_t)(wim_u64(v) & 0xFFFFFFFFFFFFULL);
+					/// FD9: a store of the shadow copies (System Volume Information\{...}{3808876b-...}): volsnap writes
+					/// it with no trace in the $MFT. Its clusters, as this copy has them, go zeros in the image
+					if ((t == 0x30) && (vl >= 0x42) && (v + vl <= rec + w->recsize) && (r < w->recvss.size()))
+					{
+						static const wchar_t coda[]= L"{3808876b-c176-4e48-b7ae-04046e6cc752}";
+						const int			 lc	   = 38;
+						const int			 q	   = v[0x40];
+						if ((q >= lc) && (v + 0x42 + q * 2 <= rec + w->recsize))
+						{
+							wchar_t nome[64];
+							memcpy(nome, v + 0x42 + (q - lc) * 2, lc * 2);
+							if (_wcsnicmp(nome, coda, lc) == 0)
+								w->recvss[r]= 1;
+						}
+					}
+				}
+				a+= len;
+			}
+		}
+	};
+	/// FD10: ONE pass on the $MFT. FD3..FD9 read it twice: the states and the parents (fastati), then the runs (faruns),
+	/// because a run is metadata if its file is of the system (under $Extend), and that is known only when all the
+	/// parents are. Now the runs of every attribute not resident are kept in the pass (attrs + arun, ~50 bytes each)
+	/// and worked after it (lavoraruns), as faruns did, in the same order
+	struct attrrun
+	{
+		uint32_t chi, tipo;
+		uint64_t nome;			/// XXH64 of the name of the attribute, 0 none
+		uint32_t primo, quanti; /// its runs in arun
+	};
+	std::vector<attrrun> attrs;
+	std::vector<pezzo>	 arun;
+	struct faunico
+	{
+		franzwim *w;
+		fastati	  st;
+		bool	  troppi;
+		void	  operator()(uint64_t r, unsigned char *rec)
+		{
+			st(r, rec);
+			const uint64_t base= wim_u64(rec + 0x20) & 0xFFFFFFFFFFFFULL;
+			const uint64_t chi = base ? base : r;
+			if ((chi >= w->nrec) || troppi)
+				return;
+			for (uint32_t a= wim_u16(rec + 0x14); a + 16 <= w->recsize;)
+			{
+				const uint32_t t= wim_u32(rec + a), len= wim_u32(rec + a + 4);
+				if ((t == 0xFFFFFFFF) || (len < 16) || (a + len > w->recsize))
+					break;
+				if (rec[a + 8])
+				{
+					if (w->arun.size() >= 0xF0000000ULL)
+					{
+						troppi= true;
+						return;
+					}
+					attrrun x;
+					x.chi		= (uint32_t)chi;
+					x.tipo		= t;
+					const int nl= rec[a + 9];
+					x.nome		= nl ? wim_hash(rec + a + wim_u16(rec + a + 10), (size_t)nl * 2) : 0;
+					x.primo		= (uint32_t)w->arun.size();
+					runlist(rec + a + wim_u16(rec + a + 0x20), rec + a + len, wim_u64(rec + a + 0x10), w->arun);
+					x.quanti= (uint32_t)(w->arun.size() - x.primo);
+					if (x.quanti)
+						w->attrs.push_back(x);
+				}
+				a+= len;
+			}
+		}
+	};
+	/// FD10: the runs kept, block by block (what faruns did in the second pass), then their memory is freed
+	void lavoraruns()
+	{
+		for (size_t i= 0; i < attrs.size(); i++)
+		{
+			const attrrun &x  = attrs[i];
+			const uint64_t chi= x.chi;
+			const bool	   vol= (chi < recvol.size()) && recvol[(size_t)chi]; /// FD5: changes with no trace
+			const bool	   meta= (chi < 24) || (recflag[(size_t)chi] & 4) || (x.tipo != 0x80) || !(recflag[(size_t)chi] & 1) || vol;
+			uint8_t	   causa= 0; /// FD11: why
+			if ((chi == 0) && (x.tipo == 0x80) && (x.nome == 0))
+				causa= WIM_C_MFT;
+			else if ((chi < 24) || (recflag[(size_t)chi] & 4))
+				causa= WIM_C_SISTEMA;
+			else if (vol)
+				causa= WIM_C_SEMPRE;
+			else if (x.tipo != 0x80)
+				causa= WIM_C_ATTRIBUTI;
+			else
+				causa= WIM_C_ALTRO;
+			for (uint32_t k= 0; k < x.quanti; k++)
+			{
+				const pezzo &run= arun[(size_t)x.primo + k];
+				if (run.lcn < 0)
+					continue;
+				segna(chi, x.tipo, x.nome, run, meta, causa);
+				if ((x.tipo == 0x80) && (chi < recvss.size()) && recvss[(size_t)chi] && (run.len > 0)) /// FD9: a store of the shadow copies
+				{
+					clusterrange z;
+					z.start_cluster= (uint64_t)run.lcn;
+					z.end_cluster  = (uint64_t)run.lcn + run.len - 1;
+					esclusivss.push_back(z);
+				}
+				if (vol)
+					clvolatili+= run.len;
+			}
+		}
+		nattr= attrs.size();
+		nrun = arun.size();
+		std::vector<attrrun>().swap(attrs);
+		std::vector<pezzo>().swap(arun);
+	}
+	/// FD11: the pieces of 64 KB all inside this chunk of the $MFT (on the volume at i_dove), with their XXH64. Its
+	/// clusters are used and not excluded: in the image they are as read. The pieces across two chunks are left out
+	void hashpezzimft(int64_t i_dove, const unsigned char *i_b, DWORD i_quanti)
+	{
+		const uint64_t inizio= partstart + (uint64_t)i_dove;
+		for (uint64_t x= (inizio + WIM_PEZZO - 1) / WIM_PEZZO * WIM_PEZZO; x + WIM_PEZZO <= inizio + i_quanti; x+= WIM_PEZZO)
+			mftpezzi.push_back(std::make_pair(x / WIM_PEZZO, wim_hash(i_b + (x - inizio), WIM_PEZZO)));
+	}
+	/// FD11: this piece is all of the $MFT, and its content (read in the pass) is the one of before
+	bool mftuguale(uint64_t i_pv, uint64_t i_hash) const
+	{
+		if ((i_pv >= causap.size()) || (causap[(size_t)i_pv] != WIM_C_MFT))
+			return false;
+		std::vector<std::pair<uint64_t, uint64_t> >::const_iterator it= std::lower_bound(mftpezzi.begin(), mftpezzi.end(), std::make_pair(i_pv, (uint64_t)0));
+		return (it != mftpezzi.end()) && (it->first == i_pv) && (it->second == i_hash);
+	}
+	/// a run, block by block: metadata, or a piece of the signature
+	void segna(uint64_t i_chi, uint32_t i_tipo, uint64_t i_nome, const pezzo &i_run, bool i_meta, uint8_t i_causa)
+	{
+		uint64_t	   c  = (uint64_t)i_run.lcn;
+		const uint64_t fin= ((uint64_t)i_run.lcn + i_run.len < ncl) ? (uint64_t)i_run.lcn + i_run.len : ncl;
+		while (c < fin)
+		{
+			const uint64_t b= (partstart + c * cl) / blocco;
+			if (b >= nblocchi)
+				return;
+			const uint64_t prossimo= ((b + 1) * blocco - partstart) / cl;
+			const uint64_t e	   = (fin < prossimo) ? fin : prossimo;
+			if (i_meta)
+			{
+				stato[b]|= WIM_META;
+				clmeta+= e - c;
+				segnagranuli(partstart + c * cl, partstart + e * cl);
+			}
+			else
+			{
+				uint64_t s[8]= {recstato[i_chi], i_chi, i_tipo, i_nome, i_run.vcn + (c - (uint64_t)i_run.lcn), c, e - c, b};
+				firma[b]+= wim_hash(s, sizeof(s));
+			}
+			posseduti[b]+= (uint32_t)(e - c);
+			if (pezziok) /// FD4: the same, piece by piece (pv: the piece of the virtual disk = b * npezzi + its number)
+			{
+				uint64_t c2= c;
+				while (c2 < e)
+				{
+					const uint64_t pv	= (partstart + c2 * cl) / WIM_PEZZO;
+					const uint64_t pfine= ((pv + 1) * WIM_PEZZO - partstart) / cl;
+					const uint64_t e2	= (e < pfine) ? e : pfine;
+					if (pv < firmap.size())
+					{
+						if (i_meta)
+						{
+							metap[(size_t)pv]= 1;
+							causap[(size_t)pv]|= i_causa; /// FD11
+						}
+						else
+						{
+							uint64_t s[8]= {recstato[i_chi], i_chi, i_tipo, i_nome, i_run.vcn + (c2 - (uint64_t)i_run.lcn), c2, e2 - c2, pv};
+							firmap[(size_t)pv]+= wim_hash(s, sizeof(s));
+						}
+						possedutip[(size_t)pv]+= (uint16_t)(e2 - c2);
+					}
+					c2= e2;
+				}
+			}
+			c= e;
+		}
+	}
+	/// FD18: varint (LEB128) and zigzag, for the lists of fragments of FDWIM004
+	static void wim_varint(std::vector<uint8_t> &o, uint64_t v)
+	{
+		while (v >= 0x80)
+		{
+			o.push_back((uint8_t)(v | 0x80));
+			v>>= 7;
+		}
+		o.push_back((uint8_t)v);
+	}
+	static bool wim_leggivarint(const uint8_t *d, size_t n, size_t &io_i, uint64_t &o_v)
+	{
+		o_v= 0;
+		for (int sh= 0; (sh < 64) && (io_i < n); sh+= 7)
+		{
+			const uint8_t c= d[io_i++];
+			o_v|= (uint64_t)(c & 0x7F) << sh;
+			if (!(c & 0x80))
+				return true;
+		}
+		return false;
+	}
+	template <class X>
+	static void wim_metti(std::vector<uint8_t> &o, const X &i_x)
+	{
+		const uint8_t *p= (const uint8_t *)&i_x;
+		o.insert(o.end(), p, p + sizeof(X));
+	}
+	template <class X>
+	static bool wim_prendi(const uint8_t *d, size_t n, size_t &io_i, X &o_x)
+	{
+		if ((io_i > n) || (n - io_i < sizeof(X)))
+			return false;
+		memcpy(&o_x, d + io_i, sizeof(X));
+		io_i+= sizeof(X);
+		return true;
+	}
+	static std::string wim_data(uint64_t i_quando)
+	{
+		char	   s[64]= "?";
+		time_t	   tt	= (time_t)i_quando;
+		struct tm *lt	= localtime(&tt);
+		if (lt)
+			strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", lt);
+		return s;
+	}
+	/// FD19: one record of the state (FDWIM004/005, and the changes FDWIMD01) at d + io_i, its end in io_i. o_b, o_st: its
+	/// block and state. i_metti: it goes in the state of before (pfirma ... pfrag, pp); else it is only measured
+	bool recordstato(const uint8_t *d, size_t n, size_t &io_i, uint32_t i_npezzi, bool i_pezziprima, bool i_metti, uint32_t &o_b, uint8_t &o_st)
+	{
+		o_b = 0;
+		o_st= 0;
+		if ((!wim_prendi(d, n, io_i, o_b)) || (!wim_prendi(d, n, io_i, o_st)) || (o_b >= nblocchi))
+			return false;
+		if (o_st & WIM_VIA) /// (the changes only) the block has no record now
+			return (o_st == WIM_VIA) && (!i_metti);
+		uint32_t crc  = 0;
+		uint64_t firma= 0, hash= 0, quanti= 0;
+		if ((!wim_prendi(d, n, io_i, firma)) || (!wim_prendi(d, n, io_i, hash)) || (!wim_prendi(d, n, io_i, crc)) || (!wim_leggivarint(d, n, io_i, quanti)) || (quanti >= ((uint64_t)1 << 20)))
+			return false;
+		const uint64_t primo= pfrag.size();
+		int64_t		   prima= 0;
+		for (uint64_t k= 0; k < quanti; k++)
+		{
+			uint64_t z= 0;
+			if (!wim_leggivarint(d, n, io_i, z))
+				return false;
+			prima+= (int64_t)(z >> 1) ^ -(int64_t)(z & 1);
+			if ((prima <= 0) || (prima >= ((int64_t)1 << 32)))
+				return false;
+			if (i_metti)
+				pfrag.push_back((uint32_t)prima);
+		}
+		const uint32_t b= o_b;
+		if (i_metti)
+		{
+			pfirma[b] = firma;
+			phash[b]  = hash;
+			pstato[b] = (uint8_t)((o_st & (WIM_META | WIM_RIUSO | WIM_NOHASH)) | WIM_PRESENTE);
+			pcrc[b]	  = crc;
+			pprimo[b] = primo;
+			pquanti[b]= (uint32_t)quanti;
+		}
+		if (!(o_st & WIM_CONPEZZI))
+			return true;
+		if ((i_npezzi < 1) || (i_npezzi > 32))
+			return false;
+		const size_t base= pp.size();
+		uint64_t	 dove= primo;
+		for (uint32_t q= 0; q < i_npezzi; q++)
+		{
+			franzwimpezzo z;
+			memset(&z, 0, sizeof(z));
+			uint8_t	 zs= 0;
+			uint64_t zq= 0;
+			if ((!wim_prendi(d, n, io_i, zs)) || (!wim_prendi(d, n, io_i, z.crc)) || (!wim_prendi(d, n, io_i, z.firma)) || (!wim_prendi(d, n, io_i, z.hash)) || (!wim_leggivarint(d, n, io_i, zq)) || (zq >= ((uint64_t)1 << 20)))
+			{
+				if (i_metti)
+					pp.resize(base);
+				return false;
+			}
+			z.stato = zs & (WIM_META | WIM_RIUSO);
+			z.primo = dove;
+			z.quanti= (uint32_t)zq;
+			dove+= zq;
+			if (!(o_st & WIM_RIUSO))
+				z.stato&= ~(uint32_t)WIM_RIUSO;
+			if (i_metti)
+				pp.push_back(z);
+		}
+		/// its pieces must cover the list of the block: else they are not used (the block is, whole)
+		if (i_metti)
+		{
+			if (i_pezziprima && (dove == primo + quanti) && (o_st & WIM_RIUSO))
+				ppbase[b]= (uint32_t)base;
+			else
+				pp.resize(base);
+		}
+		return true;
+	}
+	/// FD18-FD19: the state of before from the archive: its base (image_X.wim, FDWIM004 or FDWIM005) and, if there,
+	/// the changes since it (image_X.wimd, FDWIMD01): a record of the changes takes the place of the one of the base (or
+	/// says the block has none). Kept for chiudi(): the base as it is, and where every record of it is. false: motivo
+	bool leggistato(std::vector<uint8_t> &io_base, const std::vector<uint8_t> &i_delta, bool i_condelta)
+	{
+		const std::vector<uint8_t> &d= io_base;
+		franzwimtesta4				t;
+		const bool					cinque= (d.size() >= sizeof(t)) && (memcmp(&d[0], "FDWIM005", 8) == 0);
+		if ((d.size() < sizeof(t)) || ((memcmp(&d[0], "FDWIM004", 8) != 0) && (!cinque)) || (d.size() >= ((uint64_t)1 << 32)))
+		{
+			motivo= "the archive says: no state (the run before did not make it)";
+			return false;
+		}
+		memcpy(&t, &d[0], sizeof(t));
+		if (wim_hash(d.size() > sizeof(t) ? &d[sizeof(t)] : &d[0], d.size() - sizeof(t)) != t.contenuto)
+		{
+			motivo= "the state in the archive is not good (its hash)";
+			return false;
+		}
+		if ((t.seriale != seriale) || (t.ncl != ncl) || (t.cl != cl) || (t.partstart != partstart) || (t.blocco != blocco) || (t.nblocchi != nblocchi))
+		{
+			motivo= "the state in the archive is of another volume (or of another size)";
+			return false;
+		}
+		const bool pezziprima= pezziok && (t.pezzo == WIM_PEZZO) && (t.npezzi == npezzi);
+		/// where every record of the base is (measured, not taken)
+		std::vector<uint32_t> boff((size_t)nblocchi, 0), blen((size_t)nblocchi, 0);
+		size_t				  i= sizeof(t);
+		for (uint64_t r= 0; r < t.voci; r++)
+		{
+			const size_t i0= i;
+			uint32_t	 b = 0;
+			uint8_t		 st= 0;
+			if ((!recordstato(&d[0], d.size(), i, t.npezzi, false, false, b, st)) || (st & WIM_VIA) || (blen[b] != 0))
+			{
+				motivo= "the state in the archive is cut or not good";
+				return false;
+			}
+			boff[b]= (uint32_t)i0;
+			blen[b]= (uint32_t)(i - i0);
+		}
+		if (i != d.size())
+		{
+			motivo= "the state in the archive is cut or not good";
+			return false;
+		}
+		/// the changes since the base: dlen 0 none, 0xFFFFFFFF the block has no record now
+		std::vector<uint32_t> doff, dlen;
+		uint64_t			  globale= t.globale, quando= t.quando, ndelta= 0;
+		bool				  nuovo	 = cinque;
+		const uint64_t		  hbase	 = wim_hash(&d[0], d.size());
+		if (i_condelta)
+		{
+			franzwimdelta x;
+			if ((i_delta.size() < sizeof(x)) || (memcmp(&i_delta[0], "FDWIMD01", 8) != 0) || (i_delta.size() >= ((uint64_t)1 << 32)))
+			{
+				motivo= "the changes in the archive (.wimd) are not good";
+				return false;
+			}
+			memcpy(&x, &i_delta[0], sizeof(x));
+			if (wim_hash(i_delta.size() > sizeof(x) ? &i_delta[sizeof(x)] : &i_delta[0], i_delta.size() - sizeof(x)) != x.contenuto)
+			{
+				motivo= "the changes in the archive (.wimd) are not good (their hash)";
+				return false;
+			}
+			if ((x.base != hbase) || (x.seriale != seriale) || (x.nblocchi != nblocchi) || (x.npezzi != t.npezzi))
+			{
+				motivo= "the changes in the archive (.wimd) do not go with its base (.wim)";
+				return false;
+			}
+			doff.assign((size_t)nblocchi, 0);
+			dlen.assign((size_t)nblocchi, 0);
+			size_t j= sizeof(x);
+			for (uint64_t r= 0; r < x.voci; r++)
+			{
+				const size_t j0= j;
+				uint32_t	 b = 0;
+				uint8_t		 st= 0;
+				if ((!recordstato(&i_delta[0], i_delta.size(), j, t.npezzi, false, false, b, st)) || (dlen[b] != 0))
+				{
+					motivo= "the changes in the archive (.wimd) are cut or not good";
+					return false;
+				}
+				doff[b]= (uint32_t)j0;
+				dlen[b]= (st & WIM_VIA) ? 0xFFFFFFFFu : (uint32_t)(j - j0);
+			}
+			if (j != i_delta.size())
+			{
+				motivo= "the changes in the archive (.wimd) are cut or not good";
+				return false;
+			}
+			globale= x.globale;
+			quando = x.quando;
+			ndelta = x.voci;
+			nuovo  = true;
+		}
+		/// the state: in the order of the blocks, the record of the changes if there, else the one of the base
+		pfirma.assign(nblocchi, 0);
+		phash.assign(nblocchi, 0);
+		pstato.assign(nblocchi, 0);
+		pcrc.assign(nblocchi, 0);
+		pfh.assign(nblocchi, 0);
+		pprimo.assign(nblocchi, 0);
+		pquanti.assign(nblocchi, 0);
+		ppbase.assign(nblocchi, WIM_NOPEZZI);
+		pp.clear();
+		pfrag.clear();
+		if (t.nfrag < ((uint64_t)1 << 32))
+			pfrag.reserve((size_t)t.nfrag);
+		for (uint64_t b= 0; b < nblocchi; b++)
+		{
+			const uint8_t *q= NULL;
+			size_t		   n= 0;
+			if (i_condelta && (dlen[(size_t)b] != 0))
+			{
+				if (dlen[(size_t)b] == 0xFFFFFFFFu)
+					continue;
+				q= &i_delta[doff[(size_t)b]];
+				n= dlen[(size_t)b];
+			}
+			else if (blen[(size_t)b] != 0)
+			{
+				q= &d[boff[(size_t)b]];
+				n= blen[(size_t)b];
+			}
+			else
+				continue;
+			size_t	 k = 0;
+			uint32_t bb= 0;
+			uint8_t	 st= 0;
+			if ((!recordstato(q, n, k, t.npezzi, pezziprima, true, bb, st)) || (k != n) || (bb != b))
+			{
+				motivo= "the state in the archive is cut or not good";
+				pfrag.clear();
+				pp.clear();
+				return false;
+			}
+		}
+		pglobale	= globale;
+		globalenuovo= nuovo;
+		quandoprima = quando;
+		basequando	= t.quando;
+		ndeltaprima = ndelta;
+		basenuova	= !cinque; /// FD18: FDWIM004, another globale: a new base FDWIM005
+		basenpezzi	= t.npezzi;
+		baseoff.swap(boff);
+		baselen.swap(blen);
+		basebytes.swap(io_base);
+		return true;
+	}
+	bool caricaprima()
+	{
+		primavolta	 = true;
+		statoarchivio= false;
+		origine		 = "";
+		if (g_wimprimaok) /// FD18: the archive has the state of this image: that one or none (never the old file beside it)
+		{
+			const bool ok= leggistato(g_wimprima, g_wimdelta, g_wimdeltaok); /// FD19: with the changes since the base
+			const bool condelta= g_wimdeltaok;
+			std::vector<uint8_t>().swap(g_wimprima);
+			std::vector<uint8_t>().swap(g_wimdelta);
+			g_wimprimaok= false;
+			g_wimdeltaok= false;
+			primavolta	= !ok;
+			if (ok)
+			{
+				statoarchivio= true;
+				origine		 = g_wimprimanome + " in the archive";
+				if (condelta)
+				{
+					char riga[200];
+					snprintf(riga, sizeof(riga), " (its base of %s, %s blocks changed since then in %sd)", wim_data(basequando).c_str(), migliaia(ndeltaprima), g_wimprimanome.c_str());
+					origine+= riga;
+				}
+			}
+			else
+			{
+				pcrc.clear();
+				pfh.clear();
+				pprimo.clear();
+				pquanti.clear();
+				pfrag.clear();
+				pp.clear();
+				ppbase.clear();
+				std::vector<uint8_t>().swap(basebytes);
+				baseoff.clear();
+				baselen.clear();
+			}
+			return ok;
+		}
+		origine= file + " (beside the archive, the old way: read once, the next state goes in the archive)";
+		FILE *f	  = _wfopen(utow(file.c_str()).c_str(), L"rb");
+		if (!f)
+		{
+			motivo= "not in the archive, no old " + file; /// FD18b
+			return false;
+		}
+		/// FDWIM001 (FD2): signatures and hashes. FDWIM002 (FD3): the fragments of every block too. FDWIM003 (FD4): and
+		/// the pieces of the blocks with metadata
+		char magic[8]= {0};
+		bool ok		 = (fread(magic, 8, 1, f) == 1) && ((memcmp(magic, "FDWIM001", 8) == 0) || (memcmp(magic, "FDWIM002", 8) == 0) || (memcmp(magic, "FDWIM003", 8) == 0));
+		const bool tre= ok && (memcmp(magic, "FDWIM003", 8) == 0);
+		const bool due= ok && ((memcmp(magic, "FDWIM002", 8) == 0) || tre);
+		franzwimtesta3 t;
+		memset(&t, 0, sizeof(t));
+		if (ok)
+		{
+			rewind(f); /// (fseeko is the one of the HANDLE, on Windows)
+			if (tre)
+				ok= (fread(&t, sizeof(t), 1, f) == 1);
+			else if (due)
+			{
+				franzwimtesta2 t2;
+				ok= (fread(&t2, sizeof(t2), 1, f) == 1);
+				memcpy(t.magic, t2.magic, 8);
+				t.seriale  = t2.seriale;
+				t.ncl	   = t2.ncl;
+				t.partstart= t2.partstart;
+				t.nblocchi = t2.nblocchi;
+				t.quando   = t2.quando;
+				t.voci	   = t2.voci;
+				t.nfrag	   = t2.nfrag;
+				t.cl	   = t2.cl;
+				t.blocco   = t2.blocco;
+			}
+			else
+			{
+				franzwimtesta t1;
+				ok= (fread(&t1, sizeof(t1), 1, f) == 1);
+				memcpy(t.magic, t1.magic, 8);
+				t.seriale  = t1.seriale;
+				t.ncl	   = t1.ncl;
+				t.partstart= t1.partstart;
+				t.nblocchi = t1.nblocchi;
+				t.quando   = t1.quando;
+				t.voci	   = t1.voci;
+				t.cl	   = t1.cl;
+				t.blocco   = t1.blocco;
+			}
+		}
+		if (!ok)
+			motivo= file + " is not a -wim state";
+		else if ((t.seriale != seriale) || (t.ncl != ncl) || (t.cl != cl) || (t.partstart != partstart) || (t.blocco != blocco) || (t.nblocchi != nblocchi))
+		{
+			ok	  = false;
+			motivo= file + " is of another volume (or of another size)";
+		}
+		if (ok)
+		{
+			pfirma.assign(nblocchi, 0);
+			phash.assign(nblocchi, 0);
+			pstato.assign(nblocchi, 0);
+			pcrc.assign(nblocchi, 0);
+			pfh.assign(nblocchi, 0);
+			pprimo.assign(nblocchi, 0);
+			pquanti.assign(nblocchi, 0);
+			ppbase.assign(nblocchi, WIM_NOPEZZI);
+			pp.clear();
+			/// the pieces of before are used only if they are the same pieces of now
+			const bool pezziprima= tre && pezziok && (t.pezzo == WIM_PEZZO) && (t.npezzi == npezzi);
+			for (uint64_t i= 0; ok && (i < t.voci); i++)
+			{
+				franzwimvoce3 v;
+				memset(&v, 0, sizeof(v));
+				v.pbase= WIM_NOPEZZI;
+				if (tre)
+					ok= (fread(&v, sizeof(v), 1, f) == 1);
+				else if (due)
+				{
+					franzwimvoce2 v2;
+					ok		= (fread(&v2, sizeof(v2), 1, f) == 1);
+					v.blocco= v2.blocco;
+					v.stato = v2.stato;
+					v.firma = v2.firma;
+					v.hash	= v2.hash;
+					v.fh	= v2.fh;
+					v.crc	= v2.crc;
+					v.quanti= v2.quanti;
+					v.primo = v2.primo;
+				}
+				else
+				{
+					franzwimvoce v1;
+					ok		= (fread(&v1, sizeof(v1), 1, f) == 1);
+					v.blocco= v1.blocco;
+					v.stato = v1.stato & WIM_META;
+					v.firma = v1.firma;
+					v.hash	= v1.hash;
+				}
+				if (!ok)
+				{
+					motivo= file + " is cut";
+					break;
+				}
+				if (v.blocco < nblocchi)
+				{
+					pfirma[v.blocco] = v.firma;
+					phash[v.blocco]	 = v.hash;
+					pstato[v.blocco] = (uint8_t)((v.stato & (WIM_META | WIM_RIUSO | WIM_NOHASH)) | WIM_PRESENTE);
+					pcrc[v.blocco]	 = v.crc;
+					pfh[v.blocco]	 = v.fh;
+					pprimo[v.blocco] = v.primo;
+					pquanti[v.blocco]= v.quanti;
+					if (pezziprima && (v.pbase != WIM_NOPEZZI) && ((uint64_t)v.pbase + npezzi <= t.npz))
+						ppbase[v.blocco]= v.pbase;
+				}
+			}
+			if (ok && tre && (t.npz > 0))
+			{
+				if (t.npz > ((uint64_t)1 << 32))
+					ok= false;
+				else
+				{
+					pp.resize((size_t)t.npz);
+					ok= (fread(&pp[0], sizeof(franzwimpezzo), (size_t)t.npz, f) == (size_t)t.npz);
+				}
+				if (!ok)
+					motivo= file + " is cut (pieces)";
+			}
+			if (ok && due && (t.nfrag > 0))
+			{
+				if (t.nfrag > ((uint64_t)1 << 32))
+					ok= false;
+				else
+				{
+					pfrag.resize((size_t)t.nfrag);
+					ok= (fread(&pfrag[0], sizeof(uint32_t), (size_t)t.nfrag, f) == (size_t)t.nfrag);
+				}
+				if (!ok)
+					motivo= file + " is cut (fragments)";
+			}
+			if (ok)
+			{
+				for (uint64_t b= 0; b < nblocchi; b++) /// a list that goes out of pfrag: not to be used
+					if ((pstato[b] & WIM_RIUSO) && (pprimo[b] + pquanti[b] > pfrag.size()))
+						pstato[b]&= (uint8_t)~WIM_RIUSO;
+				for (size_t i= 0; i < pp.size(); i++)
+					if ((pp[i].stato & WIM_RIUSO) && (pp[i].primo + pp[i].quanti > pfrag.size()))
+						pp[i].stato&= ~(uint32_t)WIM_RIUSO;
+			}
+			quandoprima= t.quando;
+		}
+		fclose(f);
+		primavolta= !ok;
+		if (!ok)
+		{
+			pcrc.clear();
+			pfh.clear();
+			pprimo.clear();
+			pquanti.clear();
+			pfrag.clear();
+			pp.clear();
+			ppbase.clear();
+		}
+		return ok;
+	}
+	/// FD3: the zones zeroed in the image (swapfile, stores of VSS, -not...) are part of what a block is: if
+	/// they change, the block is not the same one, even with the same owners
+	void firmaesclusi(const std::vector<clusterrange> *i_esclusi)
+	{
+		if (!i_esclusi)
+			return;
+		for (size_t i= 0; i < i_esclusi->size(); i++)
+		{
+			const uint64_t c0= (*i_esclusi)[i].start_cluster, c1= (*i_esclusi)[i].end_cluster;
+			if (c1 < c0)
+				continue;
+			const uint64_t b0= (partstart + c0 * cl) / blocco;
+			const uint64_t b1= (partstart + (c1 + 1) * cl - 1) / blocco;
+			for (uint64_t b= b0; (b <= b1) && (b < nblocchi); b++)
+			{
+				const uint64_t inizio= ((b * blocco > partstart) ? (b * blocco - partstart) / cl : 0);
+				const uint64_t fine	 = ((b + 1) * blocco - partstart) / cl; /// excluded
+				uint64_t	   s[4]	 = {0xE5C1u, b, (c0 > inizio) ? c0 : inizio, (c1 + 1 < fine) ? c1 + 1 : fine};
+				firma[b]+= wim_hash(s, sizeof(s));
+			}
+			if (pezziok) /// FD4: the pieces too
+			{
+				const uint64_t p0= (partstart + c0 * cl) / WIM_PEZZO;
+				const uint64_t p1= (partstart + (c1 + 1) * cl - 1) / WIM_PEZZO;
+				for (uint64_t pv= p0; (pv <= p1) && (pv < firmap.size()); pv++)
+				{
+					const uint64_t inizio= ((pv * WIM_PEZZO > partstart) ? (pv * WIM_PEZZO - partstart) / cl : 0);
+					const uint64_t fine	 = ((pv + 1) * WIM_PEZZO - partstart) / cl;
+					uint64_t	   s[4]	 = {0xE5C2u, pv, (c0 > inizio) ? c0 : inizio, (c1 + 1 < fine) ? c1 + 1 : fine};
+					firmap[(size_t)pv]+= wim_hash(s, sizeof(s));
+				}
+			}
+		}
+	}
+	/// FD3: the fragments of before, block by block, against the archive as it is now (ht of add): the
+	/// numbers must be there, sum to one element of the stream, and have the same SHA-1 as when they were
+	/// written. An archive rolled back, cut, or another one: nothing matches, and the block is read
+	void validariuso(const std::vector<HT> &i_ht)
+	{
+		riusabile.assign(nblocchi, 0);
+		nriusabili	 = 0;
+		nnonriusabili= 0;
+		apezzi.assign(nblocchi, 0); /// FD15: the blocks in pieces (with metadata, in pieces before, changed)
+		if (attivo)
+			for (uint64_t b= 0; b < nblocchi; b++)
+			{
+				bool a= (stato[b] & WIM_META) != 0;
+				if ((!a) && (!primavolta) && (b < pstato.size()))
+				{
+					if ((b < ppbase.size()) && (ppbase[b] != WIM_NOPEZZI))
+						a= true;
+					else if ((pstato[b] & WIM_PRESENTE) && ((pstato[b] & WIM_META) || (firma[b] != pfirma[b])))
+						a= true;
+				}
+				apezzi[b]= a ? 1 : 0;
+			}
+		if (!attivo || primavolta)
+			return;
+		if (statoarchivio) /// FD18: the fragments it names must be the ones of this archive (XXH64 of their SHA-1, in order)
+		{
+			XXH64_state_t g;
+			XXH64_reset(&g, 0);
+			bool buono= true;
+			if (globalenuovo) /// FD19 (FDWIM005, FDWIMD01): by block, its number, how many fragments, their SHA-1
+			{
+				for (uint64_t b= 0; buono && (b < pquanti.size()) && (b < pprimo.size()); b++)
+					if (pquanti[(size_t)b] > 0)
+					{
+						const uint32_t bb= (uint32_t)b, q= pquanti[(size_t)b];
+						XXH64_update(&g, &bb, 4);
+						XXH64_update(&g, &q, 4);
+						for (uint32_t k= 0; buono && (k < q); k++)
+						{
+							const size_t   w = (size_t)(pprimo[(size_t)b] + k);
+							const uint32_t id= (w < pfrag.size()) ? pfrag[w] : 0;
+							if ((id == 0) || (id >= i_ht.size()))
+								buono= false;
+							else
+								XXH64_update(&g, i_ht[id].sha1, 20);
+						}
+					}
+			}
+			else /// FD18 (FDWIM004): their SHA-1 in order
+				for (size_t k= 0; buono && (k < pfrag.size()); k++)
+				{
+					const uint32_t id= pfrag[k];
+					if ((id == 0) || (id >= i_ht.size()))
+						buono= false;
+					else
+						XXH64_update(&g, i_ht[id].sha1, 20);
+				}
+			if ((!buono) || (XXH64_digest(&g) != pglobale))
+			{
+				myprintf("44059$ wim: %c: the state in the archive does not match the fragments of the archive (repacked?): everything is read\n", lettera);
+				for (uint64_t b= 0; b < pstato.size(); b++)
+					pstato[b]&= (uint8_t)~WIM_RIUSO;
+				for (size_t q= 0; q < pp.size(); q++)
+					pp[q].stato&= ~(uint32_t)WIM_RIUSO;
+			}
+			else /// the sums of the fragments, as the old states had them: the checks below are the same for both
+			{
+				for (uint64_t b= 0; b < nblocchi; b++)
+					if ((pstato[b] & WIM_RIUSO) && (pprimo[b] + pquanti[b] <= pfrag.size()))
+					{
+						XXH64_state_t x;
+						XXH64_reset(&x, 0);
+						for (uint32_t k= 0; k < pquanti[b]; k++)
+							XXH64_update(&x, i_ht[pfrag[(size_t)(pprimo[b] + k)]].sha1, 20);
+						pfh[b]= XXH64_digest(&x);
+					}
+				for (size_t q= 0; q < pp.size(); q++)
+					if ((pp[q].stato & WIM_RIUSO) && (pp[q].primo + pp[q].quanti <= pfrag.size()))
+					{
+						XXH64_state_t x;
+						XXH64_reset(&x, 0);
+						for (uint32_t k= 0; k < pp[q].quanti; k++)
+							XXH64_update(&x, i_ht[pfrag[(size_t)(pp[q].primo + k)]].sha1, 20);
+						pp[q].fh= XXH64_digest(&x);
+					}
+			}
+		}
+		const int64_t elemento= (int64_t)blocco + 512;
+		for (uint64_t b= 0; b < nblocchi; b++)
+		{
+			if (!(pstato[b] & WIM_RIUSO))
+				continue;
+			bool		  buono= (pquanti[b] > 0);
+			int64_t		  somma= 0;
+			XXH64_state_t xs;
+			XXH64_reset(&xs, 0);
+			for (uint32_t k= 0; buono && (k < pquanti[b]); k++)
+			{
+				const uint32_t id= pfrag[(size_t)(pprimo[b] + k)];
+				if ((id == 0) || (id >= i_ht.size()) || (i_ht[id].usize <= 0))
+					buono= false;
+				else
+				{
+					somma+= i_ht[id].usize;
+					XXH64_update(&xs, i_ht[id].sha1, 20);
+				}
+			}
+			buono= buono && (somma == elemento) && (XXH64_digest(&xs) == pfh[b]);
+			if (buono)
+			{
+				riusabile[b]= 1;
+				nriusabili++;
+			}
+			else
+				nnonriusabili++;
+		}
+		/// FD4: the pieces of before, the same way (each one its own length)
+		riusabilep.assign(pp.size(), 0);
+		npzriusabili= 0;
+		for (uint64_t b= 0; b < nblocchi; b++)
+		{
+			if ((b >= ppbase.size()) || (ppbase[b] == WIM_NOPEZZI))
+				continue;
+			for (uint32_t p= 0; p < npezzi; p++)
+			{
+				const size_t		 i = (size_t)ppbase[b] + p;
+				const franzwimpezzo &pz= pp[i];
+				if (!(pz.stato & WIM_RIUSO) || (pz.quanti == 0))
+					continue;
+				bool		  buono= true;
+				int64_t		  somma= 0;
+				XXH64_state_t xs;
+				XXH64_reset(&xs, 0);
+				for (uint32_t k= 0; buono && (k < pz.quanti); k++)
+				{
+					const uint32_t id= pfrag[(size_t)(pz.primo + k)];
+					if ((id == 0) || (id >= i_ht.size()) || (i_ht[id].usize <= 0))
+						buono= false;
+					else
+					{
+						somma+= i_ht[id].usize;
+						XXH64_update(&xs, i_ht[id].sha1, 20);
+					}
+				}
+				if (buono && (somma == (int64_t)pezzolung(p)) && (XXH64_digest(&xs) == pz.fh))
+				{
+					riusabilep[i]= 1;
+					npzriusabili++;
+				}
+			}
+		}
+	}
+	/// FD4: this block is cut in pieces (now it has metadata). With the stream by elements only
+	bool pezzi(uint64_t b) const { return saltoattivo && pezziok && (b < nblocchi) && ((stato[b] & WIM_META) || ((b < apezzi.size()) && apezzi[b])); } /// FD15
+	/// FD4: the pieces of this block that are not read: no metadata in them, same signature, their fragments of before
+	uint32_t maschera(uint64_t b) const
+	{
+		if ((!pezzi(b)) || (b >= ppbase.size()) || (ppbase[b] == WIM_NOPEZZI) || (!(pstato[b] & WIM_PRESENTE)))
+			return 0;
+		uint32_t m= 0;
+		for (uint32_t p= 0; p < npezzi; p++)
+		{
+			const size_t i = (size_t)ppbase[b] + p;
+			const size_t pv= (size_t)(b * npezzi + p);
+			if (riusabilep[i] && (!metap[pv]) && (!(pp[i].stato & WIM_META)) && (firmap[pv] == pp[i].firma))
+				m|= (1u << p);
+			else if (riusabilep[i] && mftuguale(pv, pp[i].hash)) /// FD11: the $MFT, the same content (read in the pass)
+				m|= (1u << p);
+		}
+		return m;
+	}
+	/// FD4, by the reader: a block in pieces, i_maschera the ones not read (with -wimcheck read anyway, and compared).
+	/// FD5: gives the pieces skipped at the end: with -wimcheck one DIFFERENT is taken from the data just read
+	uint32_t blocco_letto_pezzi(uint64_t b, const char *i_dati, uint32_t i_maschera, bool i_letti, double i_tempo)
+	{
+		if ((!attivo) || (b >= nblocchi))
+			return i_maschera;
+		if (curbase[(size_t)b] == WIM_NOPEZZI)
+		{
+			curbase[(size_t)b]= (uint32_t)curhashp.size();
+			curhashp.resize(curhashp.size() + npezzi, 0);
+			curcrcp.resize(curcrcp.size() + npezzi, 0);
+		}
+		const size_t base= curbase[(size_t)b];
+		maschere[(size_t)b]= i_maschera;
+		/// FD15: a block in pieces with metadata (1), or with no metadata: changed (2), or the same signature (4)
+		const int kk= (stato[b] & WIM_META) ? 1 : (((!primavolta) && (pstato[b] & WIM_PRESENTE) && !(pstato[b] & WIM_META) && (firma[b] == pfirma[b])) ? 4 : 2);
+		if (kk != 1)
+		{
+			if (i_maschera)
+				nbpezzicamb++;
+			else if ((b >= ppbase.size()) || (ppbase[b] == WIM_NOPEZZI))
+				nbnuovipezzi++; /// cut in pieces for the first time
+		}
+		if (i_maschera == 0)
+			blocco_letto(b, i_dati, blocco, i_tempo); /// all of it read: the block as always
+		else
+		{
+			letto[b]= 1;
+			n[kk]++;
+			tempo[kk]+= i_tempo;
+		}
+		for (uint32_t p= 0; p < npezzi; p++)
+		{
+			const bool saltato= (i_maschera >> p) & 1;
+			if (!saltato)
+			{
+				curhashp[base + p]= wim_hash(i_dati + (size_t)p * WIM_PEZZO, WIM_PEZZO);
+				contacausa(b * npezzi + p); /// FD11
+				if (i_maschera)
+					byte[kk]+= WIM_PEZZO;
+				continue;
+			}
+			const size_t i= (size_t)ppbase[b] + p;
+			if (i_letti) /// -wimcheck
+			{
+				const uint64_t h= wim_hash(i_dati + (size_t)p * WIM_PEZZO, WIM_PEZZO);
+				if (h != pp[i].hash) /// FD5: this piece from the data just read, not from the fragments of before
+				{
+					sbagliatip++;
+					segnasbagliato(b, 1u << p);
+					i_maschera&= ~(1u << p);
+					curhashp[base + p]= h;
+					byte[kk]+= WIM_PEZZO;
+					continue;
+				}
+				giustip++;
+			}
+			npzsaltati++;
+			bytepzsaltati+= WIM_PEZZO;
+			if (kk != 1) /// FD15: in a block with no metadata
+			{
+				npzsaltaticamb++;
+				bytepzsaltaticamb+= WIM_PEZZO;
+			}
+			if (((size_t)(b * npezzi + p) < causap.size()) && causap[(size_t)(b * npezzi + p)]) /// FD11: metadata skipped = the $MFT by its content
+				npzmft++;
+			curhashp[base + p]= pp[i].hash;
+		}
+		if ((i_maschera == 0) && (maschere[(size_t)b] != 0)) /// all of them read after all (-wimcheck): the block is known
+		{
+			hashora[b]= wim_hash(i_dati, blocco);
+			letto[b]  = 1;
+		}
+		maschere[(size_t)b]= i_maschera;
+		return i_maschera;
+	}
+	uint32_t crcpezzoprima(uint64_t b, uint32_t p) const { return ((b < ppbase.size()) && (ppbase[b] != WIM_NOPEZZI)) ? pp[(size_t)ppbase[b] + p].crc : 0; }
+	void	 crcpezzoletto(uint64_t b, uint32_t p, uint32_t i_crc)
+	{
+		if ((b < curbase.size()) && (curbase[(size_t)b] != WIM_NOPEZZI))
+			curcrcp[(size_t)curbase[(size_t)b] + p]= i_crc;
+	}
+	/// FD4, main thread: the fragments of before of a skipped piece
+	uint32_t riusopezzo(uint64_t b, uint32_t p, std::vector<unsigned> &io_ptr) const
+	{
+		if ((b >= ppbase.size()) || (ppbase[b] == WIM_NOPEZZI))
+			return 0;
+		const size_t i= (size_t)ppbase[b] + p;
+		if (!riusabilep[i])
+			return 0;
+		for (uint32_t k= 0; k < pp[i].quanti; k++)
+			io_ptr.push_back(pfrag[(size_t)(pp[i].primo + k)]);
+		return pp[i].quanti;
+	}
+	/// FD3, by the reader of the stream (before the read): this block is not read, its fragments are the ones of before
+	bool salta(uint64_t b) const
+	{
+		if ((!saltoattivo) || (b >= nblocchi) || (b >= riusabile.size()) || (!riusabile[b]))
+			return false;
+		if (stato[b] & WIM_META)
+			return false;
+		if (!(pstato[b] & WIM_PRESENTE) || (pstato[b] & WIM_META))
+			return false;
+		return firma[b] == pfirma[b];
+	}
+	/// FD3: a skipped block (with -wimcheck its data, read anyway, against the hash of before). FD5: false = -wimcheck
+	/// found it DIFFERENT: the data just read go in the image instead of the fragments of before (a block read)
+	/// FD15: is the block just read (i_hash its XXH64) the same as its fragments of before? 1 yes, 0 no, -1 not known. A
+	/// block read with some pieces skipped has no hash of the whole (WIM_NOHASH): then piece by piece, with the hashes of
+	/// its pieces of before. Before FD15 such a block (with metadata) was never skipped whole, nor checked whole
+	int ugualeprima(uint64_t b, const char *i_dati, uint64_t i_hash) const
+	{
+		if ((b >= pstato.size()) || (b >= phash.size()))
+			return -1;
+		if (!(pstato[b] & WIM_NOHASH))
+			return (i_hash == phash[b]) ? 1 : 0;
+		if ((!pezziok) || (b >= ppbase.size()) || (ppbase[b] == WIM_NOPEZZI))
+			return -1;
+		for (uint32_t p= 0; p < npezzi; p++)
+			if (wim_hash(i_dati + (size_t)p * WIM_PEZZO, WIM_PEZZO) != pp[(size_t)ppbase[b] + p].hash)
+				return 0;
+		return 1;
+	}
+	bool blocco_saltato(uint64_t b, const char *i_dati, size_t i_quanti, double i_tempo)
+	{
+		if ((!attivo) || (b >= nblocchi))
+			return true;
+		if (i_dati)
+		{
+			hashora[b]= wim_hash(i_dati, i_quanti);
+			const int uguale= ugualeprima(b, i_dati, hashora[b]); /// FD15
+			if (uguale != 1) /// not the same, or not known: the data just read go in the image
+			{
+				if (uguale == 0)
+				{
+					sbagliatis++;
+					segnasbagliato(b, pezzidiversi(b));
+				}
+				else
+					nonverificati++;
+				letto[b]= 1;
+				n[2]++;
+				byte[2]+= blocco;
+				tempo[2]+= i_tempo;
+				return false;
+			}
+			giustis++;
+		}
+		n[0]++;
+		byte[0]+= blocco;
+		tempo[0]+= i_tempo;
+		return true;
+	}
+	uint32_t crcprima(uint64_t b) const { return (b < pcrc.size()) ? pcrc[(size_t)b] : 0; }
+	void	 crcletto(uint64_t b, uint32_t i_crc)
+	{
+		if (b < crcora.size())
+			crcora[(size_t)b]= i_crc;
+	}
+	/// FD3, main thread: the fragments of before of a skipped block, at the end of the list of the file
+	uint32_t riuso(uint64_t b, std::vector<unsigned> &io_ptr) const
+	{
+		if ((b >= riusabile.size()) || (!riusabile[b]))
+			return 0;
+		for (uint32_t k= 0; k < pquanti[b]; k++)
+			io_ptr.push_back(pfrag[(size_t)(pprimo[b] + k)]);
+		return pquanti[b];
+	}
+	void elemento(uint64_t b, uint64_t i_inizio, uint32_t i_quanti, const uint32_t *i_pinizio= NULL, const uint32_t *i_pquanti= NULL)
+	{
+		if ((b == 0) || (b >= nblocchi)) /// the first element (the start of the disk) is not of the loop
+			return;
+		elem e;
+		e.blocco= (uint32_t)b;
+		e.inizio= i_inizio;
+		e.quanti= i_quanti;
+		e.pbase = WIM_NOPEZZI;
+		if (i_pinizio && i_pquanti) /// FD4: its pieces, where they are in the list of the element
+		{
+			e.pbase= (uint32_t)elpezzi.size();
+			for (uint32_t p= 0; p < npezzi; p++)
+			{
+				elpz z;
+				z.off	= (uint32_t)(i_pinizio[p] - i_inizio);
+				z.quanti= i_pquanti[p];
+				elpezzi.push_back(z);
+			}
+		}
+		elementi.push_back(e);
+	}
+	void prepara(HANDLE i_h, char i_lettera, uint64_t i_partstart, uint32_t i_blocco, uint64_t i_disksize, const uint8_t *i_bitmap, uint64_t i_ncl, uint32_t i_cl, std::vector<clusterrange> *i_esclusi)
+	{
+		stampa(); /// a report of an image before, not printed yet
+		*this	 = franzwim();
+		controllo= flagwimcheck;
+		h		 = i_h;
+		lettera	 = i_lettera;
+		partstart= i_partstart;
+		blocco	 = i_blocco;
+		ncl		 = i_ncl;
+		cl		 = i_cl;
+		nblocchi = i_disksize / blocco + 1;
+		std::string nome= g_wimarchivio;
+		for (size_t i= 0; i < nome.size(); i++)
+			if ((nome[i] == '?') || (nome[i] == '*'))
+				nome[i]= '_';
+		file= nome + "." + std::string(1, lettera) + ".wim";
+		const double t0= adesso();
+
+		unsigned char *boot= (unsigned char *)VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		if ((!boot) || (!leggi(0, boot, 4096)) || memcmp(boot + 3, "NTFS    ", 8))
+		{
+			if (boot)
+				VirtualFree(boot, 0, MEM_RELEASE);
+			myprintf("44028$ wim: %c: the boot sector is not of an NTFS: -wim off\n", lettera);
+			return;
+		}
+		uint32_t spc= boot[0x0D];
+		if (spc > 0x80)
+			spc= 1u << (256 - spc);
+		const uint32_t miocl  = wim_u16(boot + 0x0B) * spc;
+		const int8_t   cpr	  = (int8_t)boot[0x40];
+		recsize				  = (cpr > 0) ? (uint32_t)cpr * miocl : (1u << (-cpr));
+		seriale				  = wim_u64(boot + 0x48);
+		const uint64_t mftlcn = wim_u64(boot + 0x30);
+		VirtualFree(boot, 0, MEM_RELEASE);
+		if ((miocl != cl) || (recsize < 512) || (recsize > 65536) || (blocco % cl) || (partstart % cl))
+		{
+			myprintf("44028$ wim: %c: cluster %u, record %u, block %u: not as expected, -wim off\n", lettera, miocl, recsize, blocco);
+			return;
+		}
+		if (!caricamft(mftlcn))
+		{
+			myprintf("44028$ wim: %c: %s: -wim off\n", lettera, motivo.c_str());
+			return;
+		}
+		firma.assign(nblocchi, 0);
+		posseduti.assign(nblocchi, 0);
+		stato.assign(nblocchi, 0);
+		/// FD4: pieces of WIM_PEZZO, whole clusters, at most 32 in a block (the mask is an uint32_t)
+		npezzi = blocco / WIM_PEZZO;
+		pezziok= ((blocco % WIM_PEZZO) == 0) && ((WIM_PEZZO % cl) == 0) && (npezzi >= 1) && (npezzi <= 32) && ((partstart % WIM_PEZZO) == 0);
+		if (pezziok)
+		{
+			firmap.assign((size_t)(nblocchi * npezzi), 0);
+			metap.assign((size_t)(nblocchi * npezzi), 0);
+			causap.assign((size_t)(nblocchi * npezzi), 0); /// FD11
+			possedutip.assign((size_t)(nblocchi * npezzi), 0);
+			curbase.assign(nblocchi, WIM_NOPEZZI);
+			maschere.assign(nblocchi, 0);
+		}
+		for (int g= 0; g < 2; g++)
+			granmeta[g].assign((size_t)(nblocchi * (uint64_t)blocco / granulo(g) + 1), 0);
+		hashora.assign(nblocchi, 0);
+		letto.assign(nblocchi, 0);
+		crcora.assign(nblocchi, 0);
+		recstato.assign(nrec, 0);
+		recpadre.assign(nrec, 0xFFFFFFFF);
+		recflag.assign(nrec, 0);
+		recvol.assign(nrec, 0); /// FD5: the files that change with no trace (taken around the shadow copy)
+		recvss.assign(nrec, 0); /// FD9
+		uint64_t nvolatili= 0;
+		for (std::set<uint64_t>::const_iterator it= g_wimvolatili.begin(); it != g_wimvolatili.end(); ++it)
+			if (*it < nrec)
+			{
+				recvol[(size_t)*it]= 1;
+				nvolatili++;
+			}
+		g_wimvolatili.clear(); /// used: an image after this one (ac -all, a volume locked) does not see them
+		faunico fu; /// FD10: one pass (states, parents, and the runs kept)
+		fu.w	 = this;
+		fu.st.w	 = this;
+		fu.troppi= false;
+		attrs.clear();
+		arun.clear();
+		const double tp0= adesso();
+		mftpezzi.clear();
+		hashmft= pezziok; /// FD11: the hashes of the pieces of the $MFT, in the same pass
+		const bool	 passata= scorri(fu);
+		hashmft= false;
+		std::sort(mftpezzi.begin(), mftpezzi.end());
+		tpassata			= adesso() - tp0;
+		if (passata && fu.troppi)
+			motivo= "too many runs in the $MFT";
+		if ((!passata) || fu.troppi)
+		{
+			std::vector<attrrun>().swap(attrs);
+			std::vector<pezzo>().swap(arun);
+			myprintf("44028$ wim: %c: %s: -wim off\n", lettera, motivo.c_str());
+			return;
+		}
+		/// system: records < 24 and everything under $Extend (record 11)
+		std::vector<uint8_t> fatto(nrec, 0); /// 1 not system, 2 system
+		for (uint64_t r= 0; r < nrec; r++)
+		{
+			if (!(recflag[r] & 1) || fatto[r])
+				continue;
+			std::vector<uint64_t> catena;
+			uint64_t			  x	   = r;
+			uint8_t				  esito= 1;
+			for (int giri= 0; giri < 64; giri++)
+			{
+				if (x < 24)
+				{
+					esito= (x == 5) ? 1 : 2; /// the root is not system, $Extend (11) and the others are
+					break;
+				}
+				if (fatto[x])
+				{
+					esito= fatto[x];
+					break;
+				}
+				catena.push_back(x);
+				const uint32_t p= recpadre[x];
+				if ((p == 0xFFFFFFFF) || (p >= nrec) || (p == x))
+					break;
+				x= p;
+			}
+			if (r < 24)
+				esito= 2;
+			for (size_t i= 0; i < catena.size(); i++)
+				fatto[catena[i]]= esito;
+			fatto[r]= esito;
+		}
+		for (uint64_t r= 0; r < nrec; r++)
+			if (fatto[r] == 2)
+				recflag[r]|= 4;
+		const double tr0= adesso(); /// FD10: the runs kept in the pass (the second pass of FD9)
+		lavoraruns();
+		truns= adesso() - tr0;
+		tmft = adesso() - t0;
+		/// FD9: the stores of the shadow copies by the $MFT of the copy: zeros in the image, as the swap files. FD1 took
+		/// them by opening them, and a store it could not open was read (and volsnap writes it with no trace)
+		if (i_esclusi && (!esclusivss.empty()))
+		{
+			uint64_t ncl= 0, nfile= 0;
+			for (size_t i= 0; i < esclusivss.size(); i++)
+				ncl+= esclusivss[i].end_cluster - esclusivss[i].start_cluster + 1;
+			for (size_t r= 0; r < recvss.size(); r++)
+				nfile+= recvss[r];
+			i_esclusi->insert(i_esclusi->end(), esclusivss.begin(), esclusivss.end());
+			if (flagverbose) /// FD20
+				myprintf("44042: wim: %c: stores of the shadow copies (by the $MFT of the copy): %s files, %s zeros in the image\n", lettera, migliaia(nfile), tohuman(ncl * (uint64_t)cl));
+		}
+		firmaesclusi(i_esclusi);
+		/// used clusters of nobody (or counted twice): the block is read always
+		std::vector<uint32_t> usati(nblocchi, 0);
+		std::vector<uint16_t> usatip(pezziok ? possedutip.size() : 0, 0);
+		for (uint64_t c= 0; c < ncl; c++)
+		{
+			if (i_bitmap[c / 8] == 0)
+			{
+				c+= 7 - (c % 8);
+				continue;
+			}
+			if ((i_bitmap[c / 8] >> (c % 8)) & 1)
+			{
+				const uint64_t b= (partstart + c * cl) / blocco;
+				if (b < nblocchi)
+					usati[b]++;
+				const uint64_t pv= (partstart + c * cl) / WIM_PEZZO;
+				if (pv < usatip.size())
+					usatip[(size_t)pv]++;
+			}
+		}
+		for (size_t pv= 0; pv < usatip.size(); pv++) /// FD4: a piece with used clusters of nobody: metadata, always read
+			if (usatip[pv] != possedutip[pv])
+			{
+				metap[pv]= 1;
+				causap[pv]|= WIM_C_NESSUNO; /// FD11
+			}
+		for (uint64_t b= 0; b < nblocchi; b++)
+		{
+			if (usati[b] != posseduti[b])
+			{
+				if (!(stato[b] & WIM_META))
+					senzapadrone++;
+				stato[b]|= WIM_META;
+				if (usati[b] > posseduti[b])
+					clnessuno+= usati[b] - posseduti[b];
+				segnagranuli(b * (uint64_t)blocco, (b + 1) * (uint64_t)blocco); /// where in the block: not known
+			}
+			if (stato[b] & WIM_META)
+				metablocchi++;
+		}
+		tfirme= adesso() - t0 - tmft;
+		const double tc0= adesso(); /// FD6
+		caricaprima();
+		tcarica= adesso() - tc0;
+		if (flagverbose) /// FD20: the details of -wim with -verbose
+		{
+			myprintf("44017: wim: %c: $MFT %s (%s records) and the signatures of %s blocks in %.2f s (%s blocks with metadata, %s of them for clusters of nobody)\n", lettera, tohuman(mftbytes), migliaia(nrec), migliaia2(nblocchi), tmft + tfirme, migliaia3(metablocchi), migliaia4(senzapadrone));
+			myprintf("44030: wim: %c: the blocks with metadata are %s, the metadata in them %s (%s of it clusters of nobody)\n", lettera, tohuman(metablocchi * (uint64_t)blocco), tohuman2((clmeta + clnessuno) * (uint64_t)cl), tohuman3(clnessuno * (uint64_t)cl));
+			myprintf("44031: wim: %c: the metadata in pieces of 256 KB: %s (%s); of 64 KB: %s (%s); of 2 MB: %s\n", lettera, migliaia(contagranuli(0)), tohuman(contagranuli(0) * granulo(0)), migliaia2(contagranuli(1)), tohuman2(contagranuli(1) * granulo(1)), migliaia3(metablocchi));
+			myprintf("44038: wim: %c: files that change with no trace in the $MFT, always read: %s (%s): hives and logs %s, ETW %s, open for writing %s; processes not seen %s, handles given up %s\n", lettera, migliaia(nvolatili), tohuman(clvolatili * (uint64_t)cl), migliaia2(g_wimvolconti[0]), migliaia3(g_wimvolconti[1]), migliaia4(g_wimvolconti[2]), migliaia5(g_wimvolconti[3]), migliaia6(g_wimvolconti[4]));
+		}
+		if (primavolta)
+			myprintf("44018: wim: no state before (%s): this run puts it in the archive, the next one compares\n", motivo.c_str());
+		else
+		{
+			char	  quando[64]= "?";
+			time_t	  tt		= (time_t)quandoprima;
+			struct tm *lt		= localtime(&tt);
+			if (lt)
+				strftime(quando, sizeof(quando), "%Y-%m-%d %H:%M:%S", lt);
+			myprintf("44019: wim: state before: %s (%s)\n", origine.c_str(), quando);
+		}
+		attivo	 = true;
+		tprepfine= wim_ora(); /// FD6
+	}
+	/// a block as it goes in the image
+	void blocco_letto(uint64_t b, const char *i_dati, size_t i_quanti, double i_tempo)
+	{
+		if ((!attivo) || (b >= nblocchi))
+			return;
+		const uint64_t hh= wim_hash(i_dati, i_quanti);
+		hashora[b]		 = hh;
+		letto[b]		 = 1;
+		int k;
+		if (stato[b] & WIM_META)
+			k= 1;
+		else if (primavolta || !(pstato[b] & WIM_PRESENTE))
+			k= 3;
+		else if ((pstato[b] & WIM_META) || (firma[b] != pfirma[b]))
+			k= 2;
+		else
+			k= 4; /// FD3: the same signature, but read (no fragments of before to use, or the skip is off)
+		n[k]++;
+		byte[k]+= i_quanti;
+		tempo[k]+= i_tempo;
+		if (k == 4)
+		{
+			const int uguale= ugualeprima(b, i_dati, hh); /// FD15
+			if (uguale < 0)
+				ignoti4++;
+			else if (uguale == 1)
+				giusti++;
+			else
+				segnasbagliato(b, pezzidiversi(b));
+		}
+		if ((k == 2) && (ugualeprima(b, i_dati, hh) == 1)) /// FD15
+			allarmi++;
+	}
+	std::vector<uint32_t> diffmask; /// by wrong block (as sbagliati): its pieces different, 0 not known
+	void contacausa(uint64_t i_pv) /// FD11: a piece read, by its first cause
+	{
+		const uint8_t c= (i_pv < causap.size()) ? causap[(size_t)i_pv] : 0;
+		int	  k= 6;
+		if (c & WIM_C_MFT)
+			k= 0;
+		else if (c & WIM_C_SISTEMA)
+			k= 1;
+		else if (c & WIM_C_SEMPRE)
+			k= 2;
+		else if (c & WIM_C_ATTRIBUTI)
+			k= 3;
+		else if (c & WIM_C_NESSUNO)
+			k= 4;
+		else if (c & WIM_C_ALTRO)
+			k= 5;
+		bytecausa[k]+= WIM_PEZZO;
+	}
+	uint32_t pezzidiversi(uint64_t) const { return 0; } /// FD18: no <state>p: the pieces of a whole block are not known
+	void segnasbagliato(uint64_t b, uint32_t i_pezzi)
+	{
+		sbagliati.push_back((uint32_t)b);
+		diffmask.push_back(i_pezzi);
+	}
+	struct fanomi
+	{
+		franzwim							   *w;
+		std::vector<std::string>			   *nomi;
+		std::vector<std::vector<uint64_t> >   *padroni; /// by wrong block
+		std::vector<uint32_t>				   *attributi; /// FD9: by record
+		std::vector<uint32_t>				   *tag;		  /// FD9: by record (reparse point, 0 none)
+		void								   operator()(uint64_t r, unsigned char *rec)
+		{
+			const uint64_t base= wim_u64(rec + 0x20) & 0xFFFFFFFFFFFFULL;
+			const uint64_t chi = base ? base : r;
+			if (chi >= nomi->size())
+				return;
+			for (uint32_t a= wim_u16(rec + 0x14); a + 16 <= w->recsize;)
+			{
+				const uint32_t t= wim_u32(rec + a), len= wim_u32(rec + a + 4);
+				if ((t == 0xFFFFFFFF) || (len < 16) || (a + len > w->recsize))
+					break;
+				if ((t == 0x30) && !rec[a + 8] && (*nomi)[chi].empty())
+				{
+					const unsigned char *v= rec + a + wim_u16(rec + a + 0x14);
+					const int			 q= v[0x40];
+					if (v + 0x42 + q * 2 <= rec + w->recsize)
+					{
+						std::wstring ws((const wchar_t *)(v + 0x42), q);
+						const int	 k= WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), q, NULL, 0, NULL, NULL);
+						std::string	 s(k, 0);
+						if (k > 0)
+							WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), q, &s[0], k, NULL, NULL);
+						(*nomi)[chi]= s;
+					}
+				}
+				/// FD9: the attributes ($STANDARD_INFORMATION) and the tag of the reparse point, of the base record
+				if ((t == 0x10) && !rec[a + 8] && (chi == r) && (chi < attributi->size()))
+				{
+					const unsigned char *v= rec + a + wim_u16(rec + a + 0x14);
+					if (v + 0x24 <= rec + w->recsize)
+						(*attributi)[chi]= wim_u32(v + 0x20);
+				}
+				if ((t == 0xC0) && !rec[a + 8] && (chi < tag->size()))
+				{
+					const unsigned char *v= rec + a + wim_u16(rec + a + 0x14);
+					if (v + 4 <= rec + w->recsize)
+						(*tag)[chi]= wim_u32(v);
+				}
+				if (rec[a + 8])
+				{
+					std::vector<pezzo> runs;
+					runlist(rec + a + wim_u16(rec + a + 0x20), rec + a + len, wim_u64(rec + a + 0x10), runs);
+					for (size_t i= 0; i < runs.size(); i++)
+					{
+						if (runs[i].lcn < 0)
+							continue;
+						for (size_t j= 0; j < w->sbagliati.size(); j++)
+						{
+							const uint64_t b	  = w->sbagliati[j];
+							const uint32_t m	  = (j < w->diffmask.size()) ? w->diffmask[j] : 0;
+							const uint64_t inizio = (uint64_t)runs[i].lcn, fine= inizio + runs[i].len;
+							bool		   dentro= false;
+							/// FD9: the pieces found different, if known (else the whole block)
+							for (uint32_t p= 0; (p < (m ? w->npezzi : 1)) && (!dentro); p++)
+							{
+								if (m && !((m >> p) & 1))
+									continue;
+								const uint64_t da= m ? b * w->blocco + (uint64_t)p * WIM_PEZZO : b * w->blocco;
+								const uint64_t a2= m ? da + WIM_PEZZO : (b + 1) * w->blocco;
+								const uint64_t c0= (da > w->partstart) ? (da - w->partstart) / w->cl : 0;
+								const uint64_t c1= (a2 > w->partstart) ? (a2 - w->partstart) / w->cl : 0;
+								dentro			 = (inizio < c1) && (fine > c0);
+							}
+							if (dentro)
+								if (std::find((*padroni)[j].begin(), (*padroni)[j].end(), chi) == (*padroni)[j].end())
+									(*padroni)[j].push_back(chi);
+						}
+					}
+				}
+				a+= len;
+			}
+		}
+	};
+	std::string percorso(uint64_t r, const std::vector<std::string> &i_nomi) const
+	{
+		std::string via= (r < i_nomi.size()) ? i_nomi[r] : "?";
+		uint64_t	p  = (r < recpadre.size()) ? recpadre[r] : 0xFFFFFFFF;
+		for (int giri= 0; (giri < 40) && (p != 0xFFFFFFFF) && (p != 5) && (p < i_nomi.size()) && (p != r); giri++)
+		{
+			via= i_nomi[p] + "\\" + via;
+			p  = recpadre[p];
+		}
+		return via;
+	}
+	/// the end of the image: if it was right, and the state for the next run. Printed by stampa(), after
+	/// the final map of the dashboard (FD2b). The names of the wrong blocks now: the handle of the copy
+	/// may be closed when stampa() runs
+	void fine()
+	{
+		if (!attivo)
+			return;
+		attivo= false;
+		chisbagliati.clear();
+		if ((!primavolta) && (!sbagliati.empty()))
+		{
+			if (sbagliati.size() > 40)
+				sbagliati.resize(40);
+			diffmask.resize(sbagliati.size(), 0);
+			std::vector<std::string>			nomi(nrec);
+			std::vector<std::vector<uint64_t> > padroni(sbagliati.size());
+			std::vector<uint32_t>				attributi(nrec, 0), tag(nrec, 0);
+			fanomi								fn;
+			fn.w		= this;
+			fn.nomi		= &nomi;
+			fn.padroni	= &padroni;
+			fn.attributi= &attributi;
+			fn.tag		= &tag;
+			if (scorri(fn))
+				for (size_t j= 0; j < sbagliati.size(); j++)
+				{
+					/// FD9: which pieces of 64 KB were different (if known), then the files there, with attributes
+					std::string chi= "pieces ";
+					if (diffmask[j] == 0)
+						chi+= "not known";
+					else
+						for (uint32_t p= 0, primo= 1; p < npezzi; p++)
+							if ((diffmask[j] >> p) & 1)
+							{
+								chi+= (primo ? "" : ",") + std::to_string(p);
+								primo= 0;
+							}
+					chi+= ": ";
+					for (size_t k= 0; (k < padroni[j].size()) && (k < 12); k++)
+					{
+						const uint64_t r= padroni[j][k];
+						char		   numero[96];
+						snprintf(numero, sizeof(numero), "%llu ", (unsigned long long)r);
+						chi+= (k ? " | " : "") + std::string(numero) + percorso(r, nomi);
+						snprintf(numero, sizeof(numero), " [attributes %08X", (r < attributi.size()) ? attributi[(size_t)r] : 0);
+						chi+= numero;
+						if ((r < tag.size()) && tag[(size_t)r])
+						{
+							snprintf(numero, sizeof(numero), ", reparse %08X", tag[(size_t)r]);
+							chi+= numero;
+						}
+						if ((r < recvol.size()) && recvol[(size_t)r])
+							chi+= ", always read";
+						chi+= "]";
+					}
+					if (padroni[j].size() > 12)
+						chi+= " | ...";
+					chisbagliati.push_back(chi);
+				}
+		}
+		dastampare= true;
+	}
+	/// FD3: the state for the next run, when the file of the image is complete in add (its list of fragments,
+	/// with the SHA-1 of every fragment in ht). With the elements of the stream (FD3): every block with its
+	/// fragments, if they are exactly one element. Without (the plain loop): signatures and hashes only, as FD2.
+	/// If the version is not written after this, the next run finds fragments that are not in the archive
+	/// (validariuso) and reads those blocks
+	void chiudi(const std::vector<unsigned> &i_ptr, const std::vector<HT> &i_ht)
+	{
+		if ((!dastampare) || statoscritto)
+			return;
+		statoscritto		  = true;
+		const double tch0= adesso(); /// FD6
+		const int64_t elemento= (int64_t)blocco + 512;
+		std::vector<franzwimvoce3> voci;
+		std::vector<franzwimpezzo> pezzi3;
+		std::vector<uint32_t>	   frag;
+		/// the SHA-1 of the fragments of a stretch of the list: sum of their sizes and XXH64, false if one is not good
+		struct conto
+		{
+			static bool fai(const std::vector<unsigned> &i_ptr, const std::vector<HT> &i_ht, uint64_t i_da, uint32_t i_quanti, int64_t &o_somma, uint64_t &o_fh)
+			{
+				o_somma= 0;
+				o_fh   = 0;
+				if ((i_quanti == 0) || (i_da + i_quanti > i_ptr.size()))
+					return false;
+				XXH64_state_t xs;
+				XXH64_reset(&xs, 0);
+				for (uint32_t k= 0; k < i_quanti; k++)
+				{
+					const unsigned id= i_ptr[(size_t)(i_da + k)];
+					if ((id == 0) || (id >= i_ht.size()) || (i_ht[id].usize <= 0))
+						return false;
+					o_somma+= i_ht[id].usize;
+					XXH64_update(&xs, i_ht[id].sha1, 20);
+				}
+				o_fh= XXH64_digest(&xs);
+				return true;
+			}
+		};
+		if (!elementi.empty())
+		{
+			voci.reserve(elementi.size());
+			for (size_t i= 0; i < elementi.size(); i++)
+			{
+				const elem	  &e= elementi[i];
+				const uint64_t b= e.blocco;
+				franzwimvoce3  v;
+				memset(&v, 0, sizeof(v));
+				v.blocco= e.blocco;
+				v.stato = stato[b] & WIM_META;
+				v.firma = firma[b];
+				v.pbase = WIM_NOPEZZI;
+				const uint32_t m= (b < maschere.size()) ? maschere[(size_t)b] : 0;
+				if (letto[b])
+				{
+					v.hash= hashora[b];
+					v.crc = crcora[b];
+					if (m) /// pieces of it not read: its hash is not known
+						v.stato|= WIM_NOHASH;
+				}
+				else /// skipped: what its fragments of before are
+				{
+					v.hash= phash[b];
+					v.crc = pcrc[b];
+					v.stato|= (pstato[b] & WIM_NOHASH);
+				}
+				int64_t	 somma= 0;
+				uint64_t fh	  = 0;
+				if (conto::fai(i_ptr, i_ht, e.inizio, e.quanti, somma, fh) && (somma == elemento))
+				{
+					v.stato|= WIM_RIUSO;
+					v.fh	= fh;
+					v.primo = frag.size();
+					v.quanti= e.quanti;
+					for (uint32_t k= 0; k < e.quanti; k++)
+						frag.push_back((uint32_t)i_ptr[(size_t)(e.inizio + k)]);
+				}
+				/// FD4: its pieces, each one a stretch of the list of the element
+				if ((e.pbase != WIM_NOPEZZI) && (b < curbase.size()) && (curbase[(size_t)b] != WIM_NOPEZZI))
+				{
+					v.pbase= (uint32_t)pezzi3.size();
+					for (uint32_t p= 0; p < npezzi; p++)
+					{
+						const elpz	  &z = elpezzi[(size_t)e.pbase + p];
+						const size_t   pv= (size_t)(b * npezzi + p);
+						franzwimpezzo pz;
+						memset(&pz, 0, sizeof(pz));
+						pz.stato= metap[pv] ? WIM_META : 0;
+						pz.firma= firmap[pv];
+						if ((m >> p) & 1) /// skipped: of before
+						{
+							pz.hash= pp[(size_t)ppbase[b] + p].hash;
+							pz.crc = pp[(size_t)ppbase[b] + p].crc;
+						}
+						else
+						{
+							pz.hash= curhashp[(size_t)curbase[(size_t)b] + p];
+							pz.crc = curcrcp[(size_t)curbase[(size_t)b] + p];
+						}
+						int64_t	 ps= 0;
+						uint64_t pf= 0;
+						if ((v.stato & WIM_RIUSO) && conto::fai(i_ptr, i_ht, e.inizio + z.off, z.quanti, ps, pf) && (ps == (int64_t)pezzolung(p)))
+						{
+							pz.stato|= WIM_RIUSO;
+							pz.fh	 = pf;
+						}
+						pz.primo = v.primo + z.off; /// inside the list of the block, just written (FD18: RIUSO or not)
+						pz.quanti= z.quanti;
+						pezzi3.push_back(pz);
+					}
+				}
+				else if ((!letto[b]) && (v.stato & WIM_RIUSO) && pezziok && (b < ppbase.size()) && (ppbase[b] != WIM_NOPEZZI) && (b < pprimo.size()))
+				{
+					/// FD15: skipped whole, in pieces before: its pieces of before, in the list of the element just written (the same list,
+					/// the fragments of before in the same order), each one checked again (sum of the sizes, SHA-1 of its fragments)
+					v.pbase= (uint32_t)pezzi3.size();
+					nbriportati++;
+					for (uint32_t p= 0; p < npezzi; p++)
+					{
+						const franzwimpezzo &o = pp[(size_t)ppbase[b] + p];
+						const size_t		 pv= (size_t)(b * npezzi + p);
+						franzwimpezzo		 pz;
+						memset(&pz, 0, sizeof(pz));
+						pz.stato= metap[pv] ? WIM_META : 0;
+						pz.firma= firmap[pv];
+						pz.hash = o.hash;
+						pz.crc  = o.crc;
+						if ((o.stato & WIM_RIUSO) && (o.primo >= pprimo[b]) && (o.primo - pprimo[b] + o.quanti <= e.quanti))
+						{
+							const uint64_t off= o.primo - pprimo[b];
+							int64_t		   ps = 0;
+							uint64_t	   pf = 0;
+							if (conto::fai(i_ptr, i_ht, e.inizio + off, o.quanti, ps, pf) && (ps == (int64_t)pezzolung(p)) && (pf == o.fh))
+							{
+								pz.stato|= WIM_RIUSO;
+								pz.fh	 = pf;
+								pz.primo = v.primo + off;
+								pz.quanti= o.quanti;
+							}
+						}
+						pezzi3.push_back(pz);
+					}
+				}
+				voci.push_back(v);
+			}
+		}
+		else
+			for (uint64_t b= 0; b < nblocchi; b++)
+				if (letto[b])
+				{
+					franzwimvoce3 v;
+					memset(&v, 0, sizeof(v));
+					v.blocco= (uint32_t)b;
+					v.stato = stato[b] & WIM_META;
+					v.firma = firma[b];
+					v.hash	= hashora[b];
+					v.pbase = WIM_NOPEZZI;
+					voci.push_back(v);
+				}
+		/// FD18-FD19: the state for the archive. Its records (see franzwimtesta4) in the order of the blocks: the base
+		/// (image_X.wim, FDWIM005) and the changes since it (image_X.wimd, FDWIMD01). A base read from the archive is written
+		/// again as it is (the same bytes: dedup, it costs nothing), the changes with the records not the same as its own;
+		/// when they are more than 1/8 of it, a new base (and no changes)
+		struct perblocco
+		{
+			const std::vector<franzwimvoce3> *v;
+			bool							   operator()(size_t a, size_t b) const
+			{
+				return (*v)[a].blocco < (*v)[b].blocco;
+			}
+		};
+		std::vector<size_t> ordine(voci.size());
+		for (size_t i= 0; i < voci.size(); i++)
+			ordine[i]= i;
+		perblocco pb;
+		pb.v= &voci;
+		std::stable_sort(ordine.begin(), ordine.end(), pb);
+		std::vector<uint8_t> tutti; /// the records of now, one after the other
+		std::vector<size_t>	 roff(ordine.size(), 0), rlen(ordine.size(), 0);
+		XXH64_state_t		 g;
+		XXH64_reset(&g, 0);
+		uint64_t nf= 0;
+		for (size_t w= 0; w < ordine.size(); w++)
+		{
+			const franzwimvoce3 &v	 = voci[ordine[w]];
+			const bool			 riuso= (v.stato & WIM_RIUSO) != 0;
+			bool				 conpezzi= riuso && (v.pbase != WIM_NOPEZZI) && ((size_t)v.pbase + npezzi <= pezzi3.size());
+			if (conpezzi) /// its pieces must cover the list of the block, in order: else the block goes whole
+			{
+				uint64_t atteso= v.primo;
+				for (uint32_t q= 0; conpezzi && (q < npezzi); q++)
+				{
+					const franzwimpezzo &z= pezzi3[(size_t)v.pbase + q];
+					if ((z.quanti == 0) || (z.primo != atteso))
+						conpezzi= false;
+					atteso+= z.quanti;
+				}
+				if (atteso != v.primo + v.quanti)
+					conpezzi= false;
+			}
+			const uint8_t st= (uint8_t)((v.stato & (WIM_META | WIM_RIUSO | WIM_NOHASH)) | (conpezzi ? WIM_CONPEZZI : 0));
+			roff[w]= tutti.size();
+			wim_metti(tutti, v.blocco);
+			wim_metti(tutti, st);
+			wim_metti(tutti, v.firma);
+			wim_metti(tutti, v.hash);
+			wim_metti(tutti, v.crc);
+			const uint32_t quanti= riuso ? v.quanti : 0;
+			wim_varint(tutti, quanti);
+			if (quanti > 0) /// FD19: globale by block, its number and how many
+			{
+				const uint32_t bb= v.blocco;
+				XXH64_update(&g, &bb, 4);
+				XXH64_update(&g, &quanti, 4);
+			}
+			int64_t prima= 0;
+			for (uint32_t k= 0; k < quanti; k++)
+			{
+				const uint32_t id	= frag[(size_t)(v.primo + k)];
+				const int64_t  delta= (int64_t)id - prima;
+				wim_varint(tutti, ((uint64_t)delta << 1) ^ (uint64_t)(delta >> 63));
+				prima= id;
+				XXH64_update(&g, i_ht[id].sha1, 20);
+				nf++;
+			}
+			if (conpezzi)
+				for (uint32_t q= 0; q < npezzi; q++)
+				{
+					const franzwimpezzo &z = pezzi3[(size_t)v.pbase + q];
+					const uint8_t		 zs= (uint8_t)(z.stato & (WIM_META | WIM_RIUSO));
+					wim_metti(tutti, zs);
+					wim_metti(tutti, z.crc);
+					wim_metti(tutti, z.firma);
+					wim_metti(tutti, z.hash);
+					wim_varint(tutti, z.quanti);
+				}
+			rlen[w]= tutti.size() - roff[w];
+		}
+		const uint64_t globale= XXH64_digest(&g);
+		const uint64_t quando = (uint64_t)time(NULL);
+		/// the changes since the base read, if it is a FDWIM005 of these pieces
+		std::vector<uint8_t> cambi;
+		uint64_t			 ncambi= 0;
+		basetenuta			 = (!basebytes.empty()) && (!basenuova) && (basenpezzi == npezzi) && (baseoff.size() == nblocchi) && (baselen.size() == nblocchi) && (basebytes.size() > sizeof(franzwimtesta4));
+		if (basetenuta)
+		{
+			size_t w= 0;
+			for (uint64_t b= 0; b < nblocchi; b++)
+			{
+				while ((w < ordine.size()) && (voci[ordine[w]].blocco < b))
+					w++;
+				if ((w < ordine.size()) && (voci[ordine[w]].blocco == b))
+				{
+					const bool uguale= (baselen[(size_t)b] == rlen[w]) && (memcmp(&basebytes[baseoff[(size_t)b]], &tutti[roff[w]], rlen[w]) == 0);
+					if (!uguale)
+					{
+						cambi.insert(cambi.end(), tutti.begin() + roff[w], tutti.begin() + roff[w] + rlen[w]);
+						ncambi++;
+					}
+					w++;
+				}
+				else if (baselen[(size_t)b] != 0) /// in the base, with no record now
+				{
+					const uint32_t bb = (uint32_t)b;
+					const uint8_t  via= WIM_VIA;
+					wim_metti(cambi, bb);
+					wim_metti(cambi, via);
+					ncambi++;
+				}
+			}
+			if (cambi.size() > (basebytes.size() - sizeof(franzwimtesta4)) / 8)
+				basetenuta= false;
+		}
+		if (basetenuta)
+			statobytes.swap(basebytes); /// the same bytes as the base read
+		else
+		{
+			cambi.clear();
+			ncambi= 0;
+			franzwimtesta4 t;
+			memset(&t, 0, sizeof(t));
+			memcpy(t.magic, "FDWIM005", 8);
+			t.seriale  = seriale;
+			t.ncl	   = ncl;
+			t.partstart= partstart;
+			t.nblocchi = nblocchi;
+			t.quando   = quando;
+			t.voci	   = voci.size();
+			t.nfrag	   = nf;
+			t.globale  = globale;
+			t.contenuto= wim_hash(tutti.empty() ? (const void *)&t : (const void *)&tutti[0], tutti.size());
+			t.cl	   = cl;
+			t.blocco   = blocco;
+			t.pezzo	   = WIM_PEZZO;
+			t.npezzi   = npezzi;
+			statobytes.assign((const uint8_t *)&t, (const uint8_t *)&t + sizeof(t));
+			statobytes.insert(statobytes.end(), tutti.begin(), tutti.end());
+		}
+		std::vector<uint8_t>().swap(basebytes);
+		franzwimdelta x;
+		memset(&x, 0, sizeof(x));
+		memcpy(x.magic, "FDWIMD01", 8);
+		x.base	   = wim_hash(&statobytes[0], statobytes.size());
+		x.seriale  = seriale;
+		x.nblocchi = nblocchi;
+		x.quando   = quando;
+		x.voci	   = ncambi;
+		x.nfrag	   = nf;
+		x.globale  = globale;
+		x.contenuto= wim_hash(cambi.empty() ? (const void *)&x : (const void *)&cambi[0], cambi.size());
+		x.npezzi   = npezzi;
+		deltabytes.assign((const uint8_t *)&x, (const uint8_t *)&x + sizeof(x));
+		deltabytes.insert(deltabytes.end(), cambi.begin(), cambi.end());
+		cambiscritti= ncambi;
+		scritto	   = true;
+		vociscritte= voci.size();
+		vociriuso  = 0;
+		for (size_t i= 0; i < voci.size(); i++)
+			if (voci[i].stato & WIM_RIUSO)
+				vociriuso++;
+		pezziscritti= 0;
+		for (size_t i= 0; i < pezzi3.size(); i++)
+			if (pezzi3[i].stato & WIM_RIUSO)
+				pezziscritti++;
+		tchiudi= adesso() - tch0; /// FD6
+	}
+	/// FD2b: what fine() found (once). After the final map of the dashboard (and chiudi)
+	void stampa()
+	{
+		if (!dastampare)
+			return;
+		dastampare			   = false;
+		const uint64_t letti   = n[1] + n[2] + n[3] + n[4];
+		const uint64_t bletti  = byte[1] + byte[2] + byte[3] + byte[4];
+		const uint64_t tutti   = n[0] + letti;
+		const uint64_t sbagliate= n[4] - giusti - ignoti4; /// sbagliati has only the first 40; FD15: not the ones not known
+		const double   tlett   = tempo[1] + tempo[2] + tempo[3] + tempo[4];
+		if (primavolta)
+			myprintf("44020: wim: %c: %s blocks read (%s) in %.1f s, their state is the base of the next run\n", lettera, migliaia(tutti), tohuman(bletti), tlett);
+		else
+		{
+			myprintf("44020: wim: %c: %s blocks: SKIPPED %s (%s), read %s (%s) in %.1f s\n", lettera, migliaia(tutti), migliaia2(n[0]), tohuman(byte[0]), migliaia3(letti), tohuman2(bletti), tlett);
+			if (flagverbose) /// FD20
+				myprintf("44023: wim: read = metadata %s (%s) + changed %s (%s) + new %s (%s) + same signature %s (%s)\n", migliaia(n[1]), tohuman(byte[1]), migliaia2(n[2]), tohuman2(byte[2]), migliaia3(n[3]), tohuman3(byte[3]), migliaia4(n[4]), tohuman4(byte[4]));
+			if (pezziok && flagverbose) /// FD20
+			{
+				myprintf("44035: wim: in the %s blocks in pieces read (%s with metadata, %s with no metadata), pieces of 64 KB SKIPPED %s (%s) of %s with their fragments of before\n", migliaia(n[1] + nbpezzicamb), migliaia2(n[1]), migliaia3(nbpezzicamb), migliaia4(npzsaltati), tohuman(bytepzsaltati), migliaia5(npzriusabili));
+				myprintf("44057: wim: blocks with no metadata in pieces (they changed before): pieces SKIPPED %s (%s); blocks cut in pieces for the first time (read whole) %s; blocks in pieces skipped whole that kept their pieces %s\n", migliaia(npzsaltaticamb), tohuman(bytepzsaltaticamb), migliaia2(nbnuovipezzi), migliaia3(nbriportati));
+			}
+			if (controllo && (npzsaltati + sbagliatip > 0))
+			{
+				if (sbagliatip == 0)
+					myprintf("44037: wim: -wimcheck OK: the %s pieces SKIPPED, read anyway, are the same as their fragments of before (hash)\n", migliaia(npzsaltati));
+				else
+				{
+					color_red();
+					myprintf("44037! wim: -wimcheck KO: of %s pieces to skip, %s were DIFFERENT from their fragments of before: taken from the disk now (this version is right, the ones before that skipped them are NOT)\n", migliaia(npzsaltati + sbagliatip), migliaia2(sbagliatip));
+					color_restore();
+				}
+			}
+			if (n[4] > 0)
+			{
+				if (flagverbose) /// FD20
+					myprintf("44021: wim: the %s blocks with the same signature were read (no fragments of before for them): %.1f s\n", migliaia(n[4]), tempo[4]);
+				if (sbagliate == 0)
+				{
+					if (flagverbose) /// FD20
+						myprintf("44022: wim: CHECK OK: the %s blocks with the same signature are the same as before (hash), every one\n", migliaia(n[4]));
+				}
+				else
+				{
+					color_red();
+					myprintf("44022! wim: CHECK KO: of the %s blocks with the same signature, %s are the same and %s are DIFFERENT (skipping them would have been WRONG)\n", migliaia(n[4]), migliaia2(giusti), migliaia3(sbagliate));
+					color_restore();
+				}
+			}
+			if (controllo && (n[0] + sbagliatis > 0))
+			{
+				if (sbagliatis == 0)
+					myprintf("44033: wim: -wimcheck OK: the %s blocks SKIPPED, read anyway (%.1f s), are the same as their fragments of before (hash)\n", migliaia(n[0]), tempo[0]);
+				else
+				{
+					color_red();
+					myprintf("44033! wim: -wimcheck KO: of %s blocks to skip, %s were DIFFERENT from their fragments of before: taken from the disk now (this version is right, the ones before that skipped them are NOT)\n", migliaia(n[0] + sbagliatis), migliaia2(sbagliatis));
+					color_restore();
+				}
+			}
+			if ((nonverificati + ignoti4 > 0) && (flagverbose || controllo)) /// FD15, FD20 (44058 was taken)
+				myprintf("44064: wim: %s blocks to skip, read by -wimcheck, and %s blocks with the same signature could not be checked (no hash of before, no pieces): the data just read went in the image\n", migliaia(nonverificati), migliaia2(ignoti4));
+			if (flagverbose) /// FD20
+				myprintf("44024: wim: %s blocks with a new signature had the same content (read again for nothing)\n", migliaia(allarmi));
+			if (chisbagliati.size() == sbagliati.size())
+				for (size_t j= 0; j < sbagliati.size(); j++)
+					myprintf("44029! wim: block %s (volume offset %s): %s\n", migliaia(sbagliati[j]), migliaia2(sbagliati[j] * (uint64_t)blocco - partstart), chisbagliati[j].c_str());
+		}
+		/// FD6: where the time went, up to here (the archive is written after this)
+		if ((tflussofine > 0) && flagverbose) /// FD20
+		{
+			const double vss  = (g_wimvssfine > g_wimvssinizio) ? g_wimvssfine - g_wimvssinizio - g_wimtscan : 0;
+			const double prima= (tflussoinizio > tprepfine) ? tflussoinizio - tprepfine - tvalida : 0;
+			myprintf("44039: wim: times: %.1f s before the copy, VSS %.1f s, files that change %.1f s, $MFT and signatures %.1f s, state read %.1f s and checked %.1f s, before the stream %.1f s, stream %.1f s (reads %.1f s, CRC %.1f s; the main thread waited the reader %.1f s), state written %.1f s: %.1f s from the start\n",
+					 g_wimvssinizio, vss, g_wimtscan, tmft + tfirme, tcarica, tvalida, prima, tflussofine - tflussoinizio, tletture, tcalcoli, tattesa, tchiudi, wim_ora());
+		}
+		/// FD10: the one pass on the $MFT, and the reads ahead
+		if (pezziok && (!primavolta) && flagverbose) /// FD20
+		{
+			static const char *nomi[7]= {"$MFT", "other system files", "always read", "indexes and other attributes", "clusters of nobody", "others", "no metadata (changed, new)"};
+			std::string riga;
+			for (int i= 0; i < 7; i++)
+				riga+= std::string(i ? ", " : "") + nomi[i] + " " + tohuman(bytecausa[i]);
+			myprintf("44048: wim: %c: the pieces read in the blocks with metadata: %s; pieces of the $MFT SKIPPED by their content %s (%s) of %s known\n", lettera, riga.c_str(), migliaia(npzmft), tohuman(npzmft * (uint64_t)WIM_PEZZO), migliaia2(mftpezzi.size()));
+		}
+		if ((nattr > 0) && flagverbose) /// FD20
+			myprintf("44045: wim: $MFT in one pass %.1f s (%s attributes not resident, %s runs, %s kept), then their runs %.1f s\n", tpassata, migliaia(nattr), migliaia2(nrun), tohuman(nattr * sizeof(attrrun) + nrun * sizeof(pezzo)), truns);
+		if ((avthread > 0) && flagverbose) /// FD20
+			myprintf("44043: wim: reads ahead: %s blocks (%s reads, %s) by %d threads up to %d blocks ahead, waiting for the disk %.1f s; %s blocks the old way%s (the first: %lld; the partition ends in block %lld); a thread was reading %.1f s of %.1f s\n", migliaia(avpresi), migliaia2(avletture), tohuman(avbyte), avthread, (int)WIM_AVANTI_SLOT, avattesa, migliaia3(avmancati), avspento ? " (then OFF: the plan was different)" : "", (long long)avprimomancato, (long long)avultimo, avoccupato, avdurata);
+		if (avcontrollati > 0)
+		{
+			if (avdiversi == 0)
+				myprintf("44046: wim: -wimcheck OK: the %s blocks read ahead are the same as read again the old way (%s of them different only where the image has zeros: free clusters or zones excluded, not kept by the copy)\n", migliaia(avcontrollati), migliaia2(avsoloazzerati));
+			else
+			{
+				color_red();
+				myprintf("44046! wim: -wimcheck KO: of %s blocks read ahead, %s were DIFFERENT from the same blocks read again the old way (this version took them the old way: it is right)\n", migliaia(avcontrollati), migliaia2(avdiversi));
+				for (size_t i= 0; i < avko.size(); i++)
+					myprintf("44047! wim: read ahead DIFFERENT: %s\n", avko[i].c_str());
+				color_restore();
+			}
+		}
+		if (!statoscritto)
+			myprintf("44026$ wim: no state for the next run (the image did not get to its end in add)\n");
+		else if (scritto)
+		{
+			if (basetenuta) /// FD19
+				myprintf("44025: wim: the state for the next run goes in the archive with this version: image_%c.wim, its base of %s as it was (%s: nothing new for the archive), and image_%c.wimd %s (%s blocks changed since that base)\n", lettera, wim_data(basequando).c_str(), tohuman(statobytes.size()), lettera, tohuman2(deltabytes.size()), migliaia(cambiscritti));
+			else
+				myprintf("44025: wim: the state for the next run goes in the archive with this version: image_%c.wim, a new base %s, and image_%c.wimd with no changes\n", lettera, tohuman(statobytes.size()), lettera);
+			if (flagverbose) /// FD20
+				myprintf("44063: wim: the state: %s blocks, %s of them with their fragments; %s pieces of 64 KB\n", migliaia(vociscritte), migliaia2(vociriuso), migliaia3(pezziscritti));
+		}
+		else
+			myprintf("44026$ wim: no state for the next run\n");
+	}
+};
+static franzwim g_wim;
+
+/// 65.21 -wim FD1: the names of the stores of the shadow copies, "System Volume Information\<name>", in io_files.
+/// System Volume Information is of SYSTEM only: listed through a handle with the backup semantics
+static void fd_areevss(const char *i_base, std::vector<std::string> &io_files)
+{
+	HANDLE token;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+	{
+		TOKEN_PRIVILEGES tp;
+		tp.PrivilegeCount			= 1;
+		tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+		if (LookupPrivilegeValueA(NULL, "SeBackupPrivilege", &tp.Privileges[0].Luid))
+			AdjustTokenPrivileges(token, FALSE, &tp, 0, NULL, NULL);
+		CloseHandle(token);
+	}
+	char cartella[1100];
+	snprintf(cartella, sizeof(cartella), "%s\\System Volume Information", i_base);
+	wchar_t wcartella[1100];
+	MultiByteToWideChar(CP_ACP, 0, cartella, -1, wcartella, 1100);
+	HANDLE h= CreateFileW(wcartella, FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+						  OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		myprintf("44016$ wim: cannot list %s (error %lu): the stores of the shadow copies stay in the image\n", cartella,
+				 (unsigned long)GetLastError());
+		return;
+	}
+	const std::wstring		 coda= L"{3808876b-c176-4e48-b7ae-04046e6cc752}";
+	std::vector<uint64_t>	 spazio(65536 / 8);
+	FILE_INFO_BY_HANDLE_CLASS classe= FileFullDirectoryRestartInfo;
+	int						 trovati= 0;
+	while (GetFileInformationByHandleEx(h, classe, &spazio[0], (DWORD)(spazio.size() * 8)))
+	{
+		classe						 = FileFullDirectoryInfo;
+		const unsigned char *p		 = (const unsigned char *)&spazio[0];
+		for (;;)
+		{
+			const FILE_FULL_DIR_INFO *f= (const FILE_FULL_DIR_INFO *)p;
+			const std::wstring		  nome(f->FileName, f->FileNameLength / sizeof(wchar_t));
+			if ((!(f->FileAttributes & FILE_ATTRIBUTE_DIRECTORY)) && (nome.size() > coda.size()))
+			{
+				const std::wstring fine= nome.substr(nome.size() - coda.size());
+				if (_wcsicmp(fine.c_str(), coda.c_str()) == 0)
+				{
+					std::string ascii;
+					for (size_t i= 0; i < nome.size(); i++)
+						ascii+= (char)((nome[i] < 128) ? nome[i] : '_');
+					io_files.push_back("System Volume Information\\" + ascii);
+					trovati++;
+				}
+			}
+			if (f->NextEntryOffset == 0)
+				break;
+			p+= f->NextEntryOffset;
+		}
+	}
+	CloseHandle(h);
+	if (flagverbose) /// FD20
+		myprintf("44014: wim: %d stores of the shadow copies (System Volume Information) left out of the image\n", trovati);
+}
+
 // enumeration of excluded file clusters
 int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 {
@@ -141196,6 +144473,20 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 	}
 	else if (flagverbose)
 		myprintf("44013: -nofrugal: the swap files (pagefile, swapfile, hiberfil) are in the image too\n");
+	/// 65.21 -wim FD1: the stores of the shadow copies (System Volume Information\{...}{3808876b-...}): what VSS
+	/// keeps of the blocks changed after a copy. In the copy that the image reads they keep changing (the
+	/// copy-on-write of the backup itself): measured on the W11, 315 of the 328 MB changed in one idle minute.
+	/// Zeroed as the pagefile; a Windows restored from the image throws away the shadow copies it finds broken.
+	/// Only with -wim: without it the image is the one of 65.21e
+	if (flagwim && (!flagnofrugal) && (m_fstype == FRANZIMAGER_FS_NTFS))
+	{
+		char base[1024];
+		if (m_usingvss && !m_vsspath.empty())
+			snprintf(base, sizeof(base), "%s", m_vsspath.c_str());
+		else
+			snprintf(base, sizeof(base), "%c:", i_driveletter);
+		fd_areevss(base, excludedfiles);
+	}
 	int64_t excludedspace= 0;
 
 	for (size_t i= 0; i < excludedfiles.size(); i++)
@@ -142325,6 +145616,16 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 		return false;
 	}
 
+	/// 65.21 -wim: the signatures of the blocks, from the $MFT of a copy that cannot change
+	g_wim.attivo= false;
+	if (flagwim)
+	{
+		if ((m_fstype == FRANZIMAGER_FS_NTFS) && (!m_flagfull) && (m_usingvss || m_bloccato) && m_volumebitmap)
+			g_wim.prepara(m_hsourcedrive, m_driveletter, m_partitionstart, m_blocksize, m_disksize, m_volumebitmap, m_totalclusters, m_clustersize, &m_excludedclusters);
+		else
+			myprintf("44027$ wim: %c: -wim wants an NTFS read from a shadow copy (or locked): off for it\n", m_driveletter);
+	}
+
 	m_initialized= true;
 
 	if (flagdebug)
@@ -142343,6 +145644,501 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 }
 
 // main method: process vhd
+/*
+	65.21 -wim FD7: the reads of a block of the image at the same time. With -wim the reads are small (the pieces of
+	64 KB of the blocks with metadata) and one after the other: on the shadow copy of an NVMe ~0.5 GB/s. Here 4
+	threads, with a handle each of the shadow copy, read the stretches of a block (in pieces of 512 KB at most)
+	together. If one read does not go, the block is read again the old way (img_leggi: errors, zeros, rescue)
+*/
+struct wim_compito
+{
+	uint64_t dove; /// on the volume
+	char	*buf;
+	DWORD	 quanti;
+};
+struct wim_lettore
+{
+	HANDLE					 h, via, fatto, th;
+	std::vector<wim_compito> lavori;
+	volatile LONG			 fine;
+	bool					 ok;
+};
+struct wim_squadra
+{
+	wim_lettore l[4];
+	int			quanti;
+};
+static DWORD WINAPI wim_lettorethread(LPVOID i_arg)
+{
+	wim_lettore *l= (wim_lettore *)i_arg;
+	while (true)
+	{
+		WaitForSingleObject(l->via, INFINITE);
+		if (l->fine)
+			break;
+		bool ok= true;
+		for (size_t i= 0; ok && (i < l->lavori.size()); i++)
+		{
+			const wim_compito &c= l->lavori[i];
+			LARGE_INTEGER	   p;
+			p.QuadPart= (LONGLONG)c.dove;
+			DWORD letti= 0;
+			ok		   = SetFilePointerEx(l->h, p, NULL, FILE_BEGIN) && ReadFile(l->h, c.buf, c.quanti, &letti, NULL) && (letti == c.quanti);
+		}
+		l->ok= ok;
+		SetEvent(l->fatto);
+	}
+	return 0;
+}
+static void *wim_squadraapri(const std::string &i_percorso)
+{
+	wim_squadra *s= new wim_squadra;
+	s->quanti	  = 0;
+	for (int i= 0; i < 4; i++)
+	{
+		wim_lettore &l= s->l[s->quanti];
+		l.h			  = CreateFileA(i_percorso.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (l.h == INVALID_HANDLE_VALUE)
+			break;
+		l.via  = CreateEvent(NULL, FALSE, FALSE, NULL);
+		l.fatto= CreateEvent(NULL, FALSE, FALSE, NULL);
+		l.fine = 0;
+		l.ok   = true;
+		l.th   = CreateThread(NULL, 0, wim_lettorethread, &l, 0, NULL);
+		if (!l.th)
+		{
+			CloseHandle(l.h);
+			CloseHandle(l.via);
+			CloseHandle(l.fatto);
+			break;
+		}
+		s->quanti++;
+	}
+	if (s->quanti == 0)
+	{
+		delete s;
+		return NULL;
+	}
+	return s;
+}
+static void wim_squadrachiudi(void *i_squadra)
+{
+	wim_squadra *s= (wim_squadra *)i_squadra;
+	if (!s)
+		return;
+	for (int i= 0; i < s->quanti; i++)
+	{
+		s->l[i].fine= 1;
+		SetEvent(s->l[i].via);
+		WaitForSingleObject(s->l[i].th, 10000);
+		CloseHandle(s->l[i].th);
+		CloseHandle(s->l[i].h);
+		CloseHandle(s->l[i].via);
+		CloseHandle(s->l[i].fatto);
+	}
+	delete s;
+}
+/// the stretches, in pieces of 512 KB at most, among the threads; false = a read did not go
+static bool wim_squadraleggi(void *i_squadra, const std::vector<wim_compito> &i_tratti)
+{
+	wim_squadra *s= (wim_squadra *)i_squadra;
+	if ((!s) || (s->quanti == 0))
+		return false;
+	for (int i= 0; i < s->quanti; i++)
+		s->l[i].lavori.clear();
+	int k= 0;
+	for (size_t i= 0; i < i_tratti.size(); i++)
+		for (uint64_t fatto= 0; fatto < i_tratti[i].quanti;)
+		{
+			const uint64_t resta= i_tratti[i].quanti - fatto;
+			wim_compito	   c;
+			c.dove	= i_tratti[i].dove + fatto;
+			c.buf	= i_tratti[i].buf + fatto;
+			c.quanti= (DWORD)((resta > 524288) ? 524288 : resta);
+			s->l[k].lavori.push_back(c);
+			k= (k + 1) % s->quanti;
+			fatto+= c.quanti;
+		}
+	HANDLE ev[4];
+	int	   n= 0;
+	for (int i= 0; i < s->quanti; i++)
+		if (!s->l[i].lavori.empty())
+		{
+			SetEvent(s->l[i].via);
+			ev[n++]= s->l[i].fatto;
+		}
+	if (n > 0)
+		WaitForMultipleObjects((DWORD)n, ev, TRUE, INFINITE);
+	for (int i= 0; i < s->quanti; i++)
+		if ((!s->l[i].lavori.empty()) && (!s->l[i].ok))
+			return false;
+	return true;
+}
+
+/*
+	65.21 -wim FD10: the reads of the blocks that come next, before elaboravhd asks for them. FD7 read the stretches of
+	ONE block together, then stopped: the CRC-32, the hashes, the copy of that block, and only then the next one. Which
+	blocks are read, and which pieces of them, is known before the stream (bitmap, zones excluded, signatures, pieces):
+	here up to WIM_AVANTI_SLOT blocks ahead, cut in reads of 512 KB at most, read by WIM_AVANTI_THREAD threads with a
+	handle each of the shadow copy. elaboravhd takes its block when its turn comes: the same block with the same pieces,
+	else the reads ahead go off (and the block is read the old way). A read that does not go: that block is read again
+	the old way (img_leggi: errors, zeros, rescue)
+*/
+struct wim_avantilavoro
+{
+	int		 slot;
+	uint64_t dove; /// on the volume
+	uint32_t off;  /// in the block
+	DWORD	 quanti;
+};
+struct wim_avantislot
+{
+	char	*buf;
+	uint64_t offset;	 /// of the block, in the virtual disk
+	uint32_t nonleggere; /// its pieces not read
+	DWORD	 bytes;
+	int		 pendenti; /// reads not done yet (under cs)
+	bool	 ok;	   /// (under cs)
+};
+struct wim_avanti;
+struct wim_avantiarg
+{
+	wim_avanti *a;
+	int			i;
+};
+struct wim_avanti
+{
+	HANDLE						 h[WIM_AVANTI_THREAD], th[WIM_AVANTI_THREAD];
+	wim_avantiarg				 arg[WIM_AVANTI_THREAD];
+	int							 nthread;
+	CRITICAL_SECTION			 cs;
+	CONDITION_VARIABLE			 cvlavoro, cvfatto;
+	std::deque<wim_avantilavoro> coda; /// (under cs)
+	bool						 fine;	 /// (under cs)
+	wim_avantislot				 slot[WIM_AVANTI_SLOT];
+	int							 testa, quanti; /// the oldest slot, the slots in use (elaboravhd only)
+	uint64_t					 cursore;		/// the next block to look at (offset in the virtual disk)
+	bool						 spento;		/// the plan went different from elaboravhd: no more
+	uint64_t					 presi, mancati, nletture, bletture;
+	int64_t					 primomancato; /// the first block the old way (-1 none)
+	double						 attesa; /// elaboravhd waited for the disk
+	double						 occupato, inizio; /// FD11: the threads inside a read (sum, under cs), from when
+};
+static DWORD WINAPI wim_avantithread(LPVOID i_arg)
+{
+	wim_avantiarg *g= (wim_avantiarg *)i_arg;
+	wim_avanti	  *a= g->a;
+	const HANDLE   h= a->h[g->i];
+	EnterCriticalSection(&a->cs);
+	while (true)
+	{
+		while (a->coda.empty() && (!a->fine))
+			SleepConditionVariableCS(&a->cvlavoro, &a->cs, INFINITE);
+		if (a->fine)
+			break;
+		const wim_avantilavoro l= a->coda.front();
+		a->coda.pop_front();
+		char *buf= a->slot[l.slot].buf + l.off;
+		LeaveCriticalSection(&a->cs);
+		LARGE_INTEGER p;
+		p.QuadPart= (LONGLONG)l.dove;
+		DWORD	   letti= 0;
+		const double t0	= franzwim::adesso(); /// FD11
+		const bool ok	= SetFilePointerEx(h, p, NULL, FILE_BEGIN) && ReadFile(h, buf, l.quanti, &letti, NULL) && (letti == l.quanti);
+		const double dt	= franzwim::adesso() - t0;
+		EnterCriticalSection(&a->cs);
+		a->occupato+= dt;
+		wim_avantislot &s= a->slot[l.slot];
+		if (!ok)
+			s.ok= false;
+		if (--s.pendenti <= 0)
+			WakeAllConditionVariable(&a->cvfatto);
+	}
+	LeaveCriticalSection(&a->cs);
+	return 0;
+}
+static void wim_avantilibera(wim_avanti *a)
+{
+	if (!a)
+		return;
+	if (a->nthread > 0)
+	{
+		EnterCriticalSection(&a->cs);
+		a->fine= true;
+		a->coda.clear();
+		WakeAllConditionVariable(&a->cvlavoro);
+		LeaveCriticalSection(&a->cs);
+		for (int i= 0; i < a->nthread; i++) /// INFINITE: a thread inside a read writes into its slot
+		{
+			WaitForSingleObject(a->th[i], INFINITE);
+			CloseHandle(a->th[i]);
+			CloseHandle(a->h[i]);
+		}
+	}
+	DeleteCriticalSection(&a->cs);
+	for (int k= 0; k < WIM_AVANTI_SLOT; k++)
+		if (a->slot[k].buf)
+			VirtualFree(a->slot[k].buf, 0, MEM_RELEASE);
+	delete a;
+}
+static wim_avanti *wim_avantiapri(const std::string &i_percorso, uint64_t i_blocco, uint64_t i_cursore)
+{
+	wim_avanti *a= new wim_avanti;
+	a->nthread	 = 0;
+	a->fine		 = false;
+	a->testa	 = 0;
+	a->quanti	 = 0;
+	a->cursore	 = i_cursore;
+	a->spento	 = false;
+	a->presi	 = 0;
+	a->mancati	 = 0;
+	a->nletture	 = 0;
+	a->bletture	 = 0;
+	a->attesa	 = 0;
+	a->primomancato= -1;
+	a->occupato	 = 0;
+	a->inizio	 = franzwim::adesso();
+	InitializeCriticalSection(&a->cs);
+	InitializeConditionVariable(&a->cvlavoro);
+	InitializeConditionVariable(&a->cvfatto);
+	bool memoria= true;
+	for (int k= 0; k < WIM_AVANTI_SLOT; k++)
+	{
+		a->slot[k].buf		 = (char *)VirtualAlloc(NULL, (SIZE_T)i_blocco, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		a->slot[k].offset	 = 0;
+		a->slot[k].nonleggere= 0;
+		a->slot[k].bytes	 = 0;
+		a->slot[k].pendenti	 = 0;
+		a->slot[k].ok		 = true;
+		if (!a->slot[k].buf)
+			memoria= false;
+	}
+	if (memoria)
+		for (int i= 0; i < WIM_AVANTI_THREAD; i++)
+		{
+			const int n= a->nthread;
+			a->h[n]	   = CreateFileA(i_percorso.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+			if (a->h[n] == INVALID_HANDLE_VALUE)
+				break;
+			a->arg[n].a= a;
+			a->arg[n].i= n;
+			a->th[n]   = CreateThread(NULL, 0, wim_avantithread, &a->arg[n], 0, NULL);
+			if (!a->th[n])
+			{
+				CloseHandle(a->h[n]);
+				break;
+			}
+			a->nthread++;
+		}
+	if (a->nthread == 0)
+	{
+		wim_avantilibera(a);
+		return NULL;
+	}
+	return a;
+}
+/// 65.21 -wim FD10: what elaboravhd does with the block at i_offset: true = it reads it (o_nonleggere: its pieces not
+/// read, o_bytes: how much). The same tests of elaboravhd, in the same order: the plan of the reads ahead
+bool franzimager::wim_daleggere(uint64_t i_offset, uint32_t &o_nonleggere, DWORD &o_bytes) const
+{
+	o_nonleggere= 0;
+	o_bytes		= 0;
+	if ((i_offset < m_partitionstart) || (i_offset >= m_partitionstart + m_partitionsize))
+		return false;
+	const uint64_t partitionoffset= i_offset - m_partitionstart;
+	const uint64_t startcluster	  = partitionoffset / m_clustersize;
+	uint64_t	   endcluster	  = (partitionoffset + m_blocksize - 1) / m_clustersize;
+	if (endcluster >= m_totalclusters)
+		endcluster= m_totalclusters - 1;
+	bool usato= false;
+	if (m_volumebitmap)
+		for (uint64_t c= startcluster; (c <= endcluster) && (!usato); ++c)
+		{
+			if (((c & 7) == 0) && (c + 7 <= endcluster) && (m_volumebitmap[c / 8] == 0)) /// 8 free clusters at once
+			{
+				c+= 7;
+				continue;
+			}
+			usato= ((m_volumebitmap[c / 8] >> (c % 8)) & 1) != 0;
+		}
+	if (!usato)
+		return false;
+	bool	 escluso= false;
+	uint64_t nescl	= 0;
+	for (size_t i= 0; i < m_excludedclusters.size(); ++i)
+	{
+		const clusterrange &range= m_excludedclusters[i];
+		if ((startcluster <= range.end_cluster) && (endcluster >= range.start_cluster))
+		{
+			escluso			   = true;
+			const uint64_t da  = (startcluster > range.start_cluster) ? startcluster : range.start_cluster;
+			const uint64_t a   = (endcluster < range.end_cluster) ? endcluster : range.end_cluster;
+			nescl+= (a - da + 1);
+		}
+	}
+	if (escluso && (nescl >= endcluster - startcluster + 1))
+		return false;
+	const uint64_t b= i_offset / m_blocksize;
+	if (g_wim.attivo && g_wim.salta(b)) /// with -wimcheck too: the plan of a run without it (see elaboravhd)
+		return false;
+	o_nonleggere= (g_wim.attivo && g_wim.pezzi(b)) ? g_wim.maschera(b) : 0;
+	uint64_t q		= m_blocksize;
+	if (i_offset + m_blocksize > m_disksize)
+		q= m_disksize - i_offset;
+	o_bytes= (DWORD)q;
+	return true;
+}
+/// FD10: the slots free get the next blocks to read, and their reads go in the queue
+void franzimager::wim_avantiriempi()
+{
+	wim_avanti *a= (wim_avanti *)m_wimavanti;
+	if ((!a) || a->spento)
+		return;
+	while ((a->quanti < WIM_AVANTI_SLOT) && (a->cursore < m_disksize))
+	{
+		const uint64_t off= a->cursore;
+		a->cursore+= m_blocksize;
+		uint32_t nonleggere= 0;
+		DWORD	 bytes	   = 0;
+		if (!wim_daleggere(off, nonleggere, bytes))
+			continue;
+		const int		k= (a->testa + a->quanti) % WIM_AVANTI_SLOT;
+		wim_avantislot &s= a->slot[k];
+		s.offset		 = off;
+		s.nonleggere	 = nonleggere;
+		s.bytes			 = bytes;
+		/// the stretches: the pieces to read, or all of it (as elaboravhd), then in reads of 512 KB at most
+		std::vector<wim_avantilavoro> lavori;
+		const uint64_t				  partoff= off - m_partitionstart;
+		const uint32_t				  np	 = nonleggere ? g_wim.npezzi : 1;
+		for (uint32_t p= 0; p < np;)
+		{
+			if ((nonleggere >> p) & 1)
+			{
+				p++;
+				continue;
+			}
+			uint32_t q= p;
+			while ((q < np) && !((nonleggere >> q) & 1))
+				q++;
+			const uint64_t da= nonleggere ? (uint64_t)p * WIM_PEZZO : 0;
+			uint64_t	   fi= nonleggere ? (uint64_t)q * WIM_PEZZO : bytes;
+			if (fi > bytes)
+				fi= bytes;
+			for (uint64_t x= da; x < fi;)
+			{
+				const uint64_t	 resta= fi - x;
+				wim_avantilavoro l;
+				l.slot	= k;
+				l.dove	= partoff + x;
+				l.off	= (uint32_t)x;
+				l.quanti= (DWORD)((resta > 524288) ? 524288 : resta);
+				lavori.push_back(l);
+				a->bletture+= l.quanti;
+				x+= l.quanti;
+			}
+			p= q;
+		}
+		EnterCriticalSection(&a->cs);
+		s.ok	  = true;
+		s.pendenti= (int)lavori.size();
+		for (size_t i= 0; i < lavori.size(); i++)
+			a->coda.push_back(lavori[i]);
+		if (!lavori.empty())
+			WakeAllConditionVariable(&a->cvlavoro);
+		LeaveCriticalSection(&a->cs);
+		a->nletture+= lavori.size();
+		a->quanti++;
+	}
+}
+/// FD10: the block at i_offset, read ahead: NULL = not there (read it the old way). Given back by wim_avantirilascia
+char *franzimager::wim_avantiprendi(uint64_t i_offset, uint32_t i_nonleggere, DWORD i_bytes)
+{
+	wim_avanti *a= (wim_avanti *)m_wimavanti;
+	if ((!a) || a->spento)
+		return NULL;
+	wim_avantiriempi();
+	const wim_avantislot &s= a->slot[a->testa];
+	if ((a->quanti == 0) || (s.offset != i_offset) || (s.nonleggere != i_nonleggere) || (s.bytes != i_bytes))
+	{
+		if (flagdebug)
+			myprintf("44044$ wim: reads ahead off: block at %s, %s planned (%u slots)\n", migliaia(i_offset), migliaia2(s.offset), (unsigned)a->quanti);
+		a->spento= true; /// the reads in the queue are not needed any more (the threads stop at wim_avantichiudi)
+		a->mancati++;
+		if (a->primomancato < 0)
+			a->primomancato= (int64_t)(i_offset / m_blocksize);
+		EnterCriticalSection(&a->cs);
+		a->coda.clear();
+		LeaveCriticalSection(&a->cs);
+		return NULL;
+	}
+	const double t0= franzwim::adesso();
+	EnterCriticalSection(&a->cs);
+	while (s.pendenti > 0)
+		SleepConditionVariableCS(&a->cvfatto, &a->cs, INFINITE);
+	const bool ok= s.ok;
+	LeaveCriticalSection(&a->cs);
+	a->attesa+= franzwim::adesso() - t0;
+	if (!ok) /// a read did not go: this block the old way
+	{
+		a->mancati++;
+		if (a->primomancato < 0)
+			a->primomancato= (int64_t)(i_offset / m_blocksize);
+		a->testa= (a->testa + 1) % WIM_AVANTI_SLOT;
+		a->quanti--;
+		return NULL;
+	}
+	return s.buf;
+}
+void franzimager::wim_avantirilascia()
+{
+	wim_avanti *a= (wim_avanti *)m_wimavanti;
+	if ((!a) || (a->quanti == 0))
+		return;
+	a->presi++;
+	a->testa= (a->testa + 1) % WIM_AVANTI_SLOT;
+	a->quanti--;
+	wim_avantiriempi();
+}
+void franzimager::wim_avantichiudi()
+{
+	wim_avanti *a= (wim_avanti *)m_wimavanti;
+	m_wimavanti		  = NULL;
+	m_wimavantiprovato= false;
+	if (!a)
+		return;
+	g_wim.avthread = a->nthread;
+	g_wim.avpresi  = a->presi;
+	g_wim.avmancati= a->mancati;
+	g_wim.avletture= a->nletture;
+	g_wim.avbyte   = a->bletture;
+	g_wim.avattesa = a->attesa;
+	g_wim.avspento = a->spento;
+	g_wim.avprimomancato= a->primomancato;
+	g_wim.avoccupato	= (a->nthread > 0) ? a->occupato / a->nthread : 0;
+	g_wim.avdurata	= franzwim::adesso() - a->inizio;
+	g_wim.avultimo	   = (m_blocksize > 0) ? (int64_t)((m_partitionstart + m_partitionsize - 1) / m_blocksize) : -1;
+	wim_avantilibera(a);
+}
+
+/// 65.21 -wim FD10: the first byte different of two blocks, in the pieces read (i_maschera: the ones not read); -1 none
+static int64_t wim_primodiverso(const char *i_a, const char *i_b, uint32_t i_maschera, uint32_t i_npezzi, uint64_t i_bytes)
+{
+	for (uint32_t p= 0; p < (i_maschera ? i_npezzi : 1); p++)
+	{
+		if ((i_maschera >> p) & 1)
+			continue;
+		const uint64_t da= i_maschera ? (uint64_t)p * WIM_PEZZO : 0;
+		uint64_t	   fi= i_maschera ? (uint64_t)(p + 1) * WIM_PEZZO : i_bytes;
+		if (fi > i_bytes)
+			fi= i_bytes;
+		if ((da < fi) && (memcmp(i_a + da, i_b + da, (size_t)(fi - da)) != 0))
+			for (uint64_t k= da; k < fi; k++)
+				if (i_a[k] != i_b[k])
+					return (int64_t)k;
+	}
+	return -1;
+}
 int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 {
 	// contatori debug statici per tracciare i blocchi
@@ -142361,6 +146157,8 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 		s_initialized = true;
 	}
 	
+	m_wimpezzi	 = false; /// 65.21 -wim FD4: set again for every block (see below)
+	m_wimmaschera= 0;
 	// checks exact buffer size
 	if (i_buffersize != FRANZIMAGER_BUFFER_SIZE)
 	{
@@ -142461,12 +146259,136 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 			continue;
 		}
 
+		/// 65.21 -wim FD3: a block with the same signature and its fragments of before in the archive: not read.
+		/// It is in the image all the same (BAT, map of the blocks): the stream gives FRANZIMAGER_SALTATO, and
+		/// add puts those fragments in its place. With -wimcheck it is read anyway, and compared, not used
+		const bool wimsalto= g_wim.attivo && g_wim.salta(m_currentoffset / m_blocksize);
+		if (wimsalto && (!g_wim.controllo))
+		{
+			g_wim.blocco_saltato(m_currentoffset / m_blocksize, NULL, 0, 0);
+			const size_t   saltointero= FRANZIMAGER_SECTOR_SIZE + (size_t)m_blocksize;
+			const uint32_t saltoidx	  = (uint32_t)(m_currentoffset / m_blocksize);
+			m_ultimoblocco			  = saltoidx;
+			if (be32toh(m_bat[saltoidx]) == 0xFFFFFFFF)
+			{
+				m_bat[saltoidx]= htobe32((uint32_t)(m_currentdataoffset / FRANZIMAGER_SECTOR_SIZE));
+				m_currentdataoffset+= saltointero;
+				m_blockswritten++;
+				m_totalbytes+= saltointero;
+				m_blockmap.push_back(saltoidx);
+				s_blocksWritten++;
+			}
+			m_currentoffset+= m_blocksize;
+			s_blocksProcessed++;
+			return FRANZIMAGER_SALTATO;
+		}
+
 		uint64_t bytestoread= m_blocksize;
 		if (m_currentoffset + m_blocksize > m_disksize)
 			bytestoread= m_disksize - m_currentoffset;
 
 		/// the read goes on: what cannot be read stays zeros, counted (a giant READ ERROR at the end)
-		DWORD bytesread= img_leggi(m_hsourcedrive, partitionoffset, m_buffer + FRANZIMAGER_SECTOR_SIZE, (DWORD)bytestoread, m_bytespersector, (int64_t)partitionoffset, (int64_t)m_partitionsize);
+		const double wimt0	 = g_wim.attivo ? franzwim::adesso() : 0; /// 65.21 -wim
+		/// 65.21 -wim FD4: a block with metadata, in pieces: the pieces with their fragments of before are not read
+		/// (with -wimcheck they are, and compared). What is not read is never used: those pieces are skipped
+		bool		   wimletto	  = false; /// FD5: a skipped block read by -wimcheck and found DIFFERENT
+		const bool	   wimpezzi	  = g_wim.attivo && g_wim.pezzi(m_currentoffset / m_blocksize);
+		const uint32_t wimmaschera= wimpezzi ? g_wim.maschera(m_currentoffset / m_blocksize) : 0;
+		m_wimpezzi				  = wimpezzi;
+		m_wimmaschera			  = wimmaschera;
+		DWORD bytesread			  = 0;
+		/// 65.21 -wim FD10: the block read ahead (wim_avanti), worked where it is: dati. Else the reads of FD7, in m_buffer.
+		/// The reads ahead follow the plan of a run WITHOUT -wimcheck (skipped blocks out, the pieces not read as always).
+		/// With -wimcheck the block is read whole here, the old way, as always: the stretches read ahead (ancora) are
+		/// compared with it. The copy does not change: a difference is a fault of the reads ahead (the old way wins)
+		char *dati	 = m_buffer + FRANZIMAGER_SECTOR_SIZE;
+		char *ancora = NULL;
+		bool  avanti = false;
+		bool  insieme= false;
+		if (g_wim.attivo && m_usingvss && (!flagrescue) && (!wimsalto))
+		{
+			if ((!m_wimavanti) && (!m_wimavantiprovato))
+			{
+				m_wimavantiprovato= true;
+				m_wimavanti		  = wim_avantiapri(m_vsspath, m_blocksize, m_currentoffset);
+			}
+			char *pronto= wim_avantiprendi(m_currentoffset, wimmaschera, (DWORD)bytestoread);
+			if (pronto && g_wim.controllo)
+				ancora= pronto;
+			else if (pronto)
+			{
+				dati   = pronto;
+				avanti = true;
+				insieme= true;
+			}
+		}
+		/// 65.21 -wim FD7: the stretches of this block (the pieces to read, or all of it), read together by the
+		/// threads of the shadow copy. A read that does not go: all of them again, the old way
+		std::vector<wim_compito> tratti;
+		if (avanti)
+			;
+		else if (wimmaschera && (!g_wim.controllo))
+		{
+			for (uint32_t p= 0; p < g_wim.npezzi;)
+			{
+				if ((wimmaschera >> p) & 1)
+				{
+					p++;
+					continue;
+				}
+				uint32_t q= p;
+				while ((q < g_wim.npezzi) && !((wimmaschera >> q) & 1))
+					q++;
+				const uint64_t da= (uint64_t)p * WIM_PEZZO;
+				uint64_t	   a = (uint64_t)q * WIM_PEZZO;
+				if (a > bytestoread)
+					a= bytestoread;
+				if (da < a)
+				{
+					wim_compito c;
+					c.dove	= partitionoffset + da;
+					c.buf	= m_buffer + FRANZIMAGER_SECTOR_SIZE + da;
+					c.quanti= (DWORD)(a - da);
+					tratti.push_back(c);
+				}
+				p= q;
+			}
+		}
+		else
+		{
+			wim_compito c;
+			c.dove	= partitionoffset;
+			c.buf	= m_buffer + FRANZIMAGER_SECTOR_SIZE;
+			c.quanti= (DWORD)bytestoread;
+			tratti.push_back(c);
+		}
+		if ((!avanti) && g_wim.attivo && m_usingvss && (!flagrescue))
+		{
+			if ((!m_wimsquadra) && (!m_wimsquadraprovata))
+			{
+				m_wimsquadraprovata= true;
+				m_wimsquadra	   = wim_squadraapri(m_vsspath);
+			}
+			insieme= wim_squadraleggi(m_wimsquadra, tratti);
+		}
+		if (insieme)
+			bytesread= (DWORD)bytestoread;
+		else if (wimmaschera && (!g_wim.controllo))
+		{
+			for (size_t i= 0; i < tratti.size(); i++)
+			{
+				const DWORD avuti= img_leggi(m_hsourcedrive, tratti[i].dove, tratti[i].buf, tratti[i].quanti, m_bytespersector, (int64_t)tratti[i].dove, (int64_t)m_partitionsize);
+				if (avuti < tratti[i].quanti)
+					memset(tratti[i].buf + avuti, 0, (size_t)(tratti[i].quanti - avuti));
+			}
+			bytesread= (DWORD)bytestoread;
+		}
+		else
+			bytesread= img_leggi(m_hsourcedrive, partitionoffset, m_buffer + FRANZIMAGER_SECTOR_SIZE, (DWORD)bytestoread, m_bytespersector, (int64_t)partitionoffset, (int64_t)m_partitionsize);
+		/// 65.21 -wim FD10, -wimcheck: the stretches read ahead against the block read whole, the old way. Here as read
+		/// (grezzo), then as they go in the image (below): the free clusters and the zones excluded are zeros there
+		const int64_t grezzo= (ancora && (bytesread == (DWORD)bytestoread)) ? wim_primodiverso(ancora, m_buffer + FRANZIMAGER_SECTOR_SIZE, wimmaschera, g_wim.npezzi, bytestoread) : -1;
+		const double wimt	 = g_wim.attivo ? franzwim::adesso() - wimt0 : 0;
 
 		// clear excluded clusters
 		if (blockisexcluded)
@@ -142491,20 +146413,68 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 
 					if (bytestozero > 0)
 					{
-						memset(m_buffer + FRANZIMAGER_SECTOR_SIZE + firstclusteroffsetinblock, 0x00, bytestozero);
+						memset(dati + firstclusteroffsetinblock, 0x00, bytestozero);
 					}
 				}
 			}
 		}
 
-		(void)azzeraliberi(m_buffer + FRANZIMAGER_SECTOR_SIZE, partitionoffset, bytesread); /// 65.8z8: the thin image
+		(void)azzeraliberi(dati, partitionoffset, bytesread); /// 65.8z8: the thin image
 
 		/// A block of a dynamic VHD is always whole in the file: the BAT says only where it
 		/// starts. What was not read (the end of the disk, or of what the volume lets read) is
 		/// zeros. A short last block ran into the footer: Windows refused the file as corrupted
 		if (bytesread < m_blocksize)
-			memset(m_buffer + FRANZIMAGER_SECTOR_SIZE + bytesread, 0, (size_t)(m_blocksize - bytesread));
+			memset(dati + bytesread, 0, (size_t)(m_blocksize - bytesread));
 		const size_t bloccointero= FRANZIMAGER_SECTOR_SIZE + (size_t)m_blocksize;
+		/// 65.21 -wim FD10, -wimcheck: the block read ahead with the same zeros, against the one of the old way (dati).
+		/// The copy does not keep what was free when it was taken, nor the paging files (volsnap does not copy them before a
+		/// write): read twice, those clusters can differ, and in the image they are zeros. Anything else is a fault
+		if (ancora)
+		{
+			if (bytesread == (DWORD)bytestoread)
+			{
+				if (blockisexcluded)
+					for (size_t i= 0; i < m_excludedclusters.size(); ++i)
+					{
+						const uint64_t da= (startcluster > m_excludedclusters[i].start_cluster) ? startcluster : m_excludedclusters[i].start_cluster;
+						const uint64_t a = (endcluster < m_excludedclusters[i].end_cluster) ? endcluster : m_excludedclusters[i].end_cluster;
+						if (da > a)
+							continue;
+						const uint64_t primo= (da - startcluster) * m_clustersize;
+						uint64_t	   quanti= (a - da + 1) * m_clustersize;
+						if (primo >= bytesread)
+							continue;
+						if (primo + quanti > bytesread)
+							quanti= bytesread - primo;
+						memset(ancora + primo, 0, (size_t)quanti);
+					}
+				const uint64_t liberi= m_liberiazzerati; /// counted once (the block of the old way)
+				(void)azzeraliberi(ancora, partitionoffset, bytesread);
+				m_liberiazzerati= liberi;
+				const int64_t k= wim_primodiverso(ancora, dati, wimmaschera, g_wim.npezzi, bytestoread);
+				g_wim.avcontrollati++;
+				if (k >= 0)
+				{
+					g_wim.avdiversi++;
+					if (g_wim.avko.size() < 10)
+					{
+						const uint64_t c= (partitionoffset + (uint64_t)k) / m_clustersize;
+						bool	   escl= false;
+						for (size_t i= 0; i < m_excludedclusters.size(); ++i)
+							if ((c >= m_excludedclusters[i].start_cluster) && (c <= m_excludedclusters[i].end_cluster))
+								escl= true;
+						const bool usato= m_volumebitmap && (c < m_totalclusters) && ((m_volumebitmap[c / 8] >> (c % 8)) & 1);
+						char	   riga[256];
+						snprintf(riga, sizeof(riga), "block %s, byte %s of it (piece %u, mask %08X), cluster %s %s%s", migliaia(m_currentoffset / m_blocksize), migliaia2((uint64_t)k), (unsigned)((uint64_t)k / WIM_PEZZO), (unsigned)wimmaschera, migliaia3(c), usato ? "used" : "free", escl ? ", excluded" : "");
+						g_wim.avko.push_back(riga);
+					}
+				}
+				else if (grezzo >= 0)
+					g_wim.avsoloazzerati++;
+			}
+			wim_avantirilascia();
+		}
 
 		/// the sector bitmap: one bit for every sector of 512 bytes of the virtual disk (never
 		/// the sector of the source, 4096 on a 4Kn disk), all of them in the block
@@ -142512,8 +146482,25 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 		memset(sectorbitmap, 0, FRANZIMAGER_SECTOR_SIZE);
 		memset(sectorbitmap, 0xFF, (size_t)(m_blocksize / FRANZIMAGER_SECTOR_SIZE / 8));
 
+		if (g_wim.attivo) /// 65.21 -wim: the block as it goes in the image (FD3 -wimcheck: a skipped one, compared)
+		{
+			if (wimsalto) /// FD5: -wimcheck, DIFFERENT: these data go in the image (wimletto)
+				wimletto= !g_wim.blocco_saltato(m_currentoffset / m_blocksize, dati, (size_t)m_blocksize, wimt);
+			else if (wimpezzi)
+				m_wimmaschera= g_wim.blocco_letto_pezzi(m_currentoffset / m_blocksize, dati, wimmaschera, (wimmaschera != 0) && g_wim.controllo, wimt);
+			else
+				g_wim.blocco_letto(m_currentoffset / m_blocksize, dati, (size_t)m_blocksize, wimt);
+		}
+
 		// copia in buffer output
-		memcpy(o_buffer, m_buffer, bloccointero);
+		if (avanti) /// 65.21 -wim FD10: the bitmap, then the block from its slot (given back: its next reads go)
+		{
+			memcpy(o_buffer, m_buffer, FRANZIMAGER_SECTOR_SIZE);
+			memcpy(o_buffer + FRANZIMAGER_SECTOR_SIZE, dati, (size_t)m_blocksize);
+			wim_avantirilascia();
+		}
+		else
+			memcpy(o_buffer, m_buffer, bloccointero);
 
 		// update bat
 		uint32_t blockidx= (uint32_t)(m_currentoffset / m_blocksize);
@@ -142539,7 +146526,7 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 
 		m_currentoffset+= m_blocksize;
 		s_blocksProcessed++;
-		return (int)bloccointero;
+		return (wimsalto && (!wimletto)) ? FRANZIMAGER_SALTATO : (int)bloccointero; /// -wimcheck: read, but skipped all the same (if the same)
 	}
 
 	// end read - print debug summary
@@ -142553,7 +146540,8 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 		
 	}
 	s_initialized= false; /// the next image starts from zero (it was only with -verbose or -debug)
-	
+	g_wim.fine();		  /// 65.21 -wim: what it would have done, and the state for the next run
+
 	return -1; // end reading
 }
 
@@ -142613,6 +146601,10 @@ bool franzimager::chiudivhd()
 	// chiudi handle disco
 	CloseHandle(m_hsourcedrive);
 	m_hsourcedrive= INVALID_HANDLE_VALUE;
+	wim_avantichiudi();				 /// 65.21 -wim FD10: its threads, their handles, the slots (and the numbers for stampa)
+	wim_squadrachiudi(m_wimsquadra); /// 65.21 -wim FD7: its threads and their handles
+	m_wimsquadraprovata= false;
+	m_wimsquadra= NULL;
 
 	// DO NOT deallocate bitmap and bat here, needed for salvameta
 	// will be deallocated in destructor o dopo salvameta
@@ -145206,12 +149198,6 @@ static std::wstring fixLongPath(const std::wstring& path)
     return L"\\\\?\\" + path;
 }
 
-#ifdef DLL
-static bool EnablePrivilege(LPCWSTR privilegeName)
-{
-	return false;
-}
-#else
 // Helper: Enable a privilege in the current process token
 static bool EnablePrivilege(LPCWSTR privilegeName)
 {
@@ -145237,19 +149223,12 @@ static bool EnablePrivilege(LPCWSTR privilegeName)
     
     return ok && (err != ERROR_NOT_ALL_ASSIGNED);
 }
-#endif
 
 // Contatore file/cartelle schedulati per cancellazione al prossimo riavvio.
 // Resettato all'inizio di deleteExcludedFiles, letto alla fine per il riepilogo.
 static int64_t s_rebootScheduled = 0;
 
 // Helper: Tenta di forzare Ownership (Admin) e Full Control
-#ifdef DLL
-static bool forceFilePermissions(const std::wstring& path)
-{
-	return false;
-}
-#else
 static bool forceFilePermissions(const std::wstring& path)
 {
     /// NOTA CRITICA: SetNamedSecurityInfoW NON supporta il prefisso
@@ -145308,7 +149287,6 @@ static bool forceFilePermissions(const std::wstring& path)
     FreeSid(pSidAdmins);
     return result;
 }
-#endif
 // Aggressive deletion of a single FILE
 static bool deleteFileAggressive(const std::wstring& i_filepath)
 {
@@ -147284,9 +151262,7 @@ class franzVSS
 	}
 };
 
-#ifndef DLL 
 franzVSS g_myvss;
-#endif
 
 
 class franzraw
@@ -148090,6 +152066,9 @@ class Jidac
 	string				 imager_meta;
 	string				 imager_excluded;
 	string				 imager_zeroed;
+	string				 imager_wim; /// 65.21 -wim FD18: the state of -wim, a file of the image (image_X.wim)
+	string				 imager_wimd; /// 65.21 -wim FD19: the changes since that base (image_X.wimd)
+	void					 wim_caricastato(char i_lettera); /// 65.21 -wim FD18
 	std::vector<uint8_t> imager_themetafile;
 	std::vector<uint8_t> imager_excludedarray;
 	std::vector<uint8_t> imager_zeroedarray;
@@ -148578,7 +152557,7 @@ class Jidac
 		unsigned char *i_buffer,
 		size_t		   i_buffersize);
 	int		checksha1collision(DTMap &i_dtmap, bool i_decodefranzblock);
-	void	updatehash(DTMap::iterator *i_p, char *i_buf, int i_buflen);
+	void	updatehash(DTMap::iterator *i_p, char *i_buf, int i_buflen, uint32_t *o_crcpezzo= NULL, bool i_solocrc= false);
 	int64_t get_dt(int *errors, const char *arc);
 	int		dump();
 
@@ -153872,9 +157851,9 @@ int Jidac::zfsbackup()
 {
 	// Initial validation
 	if (!g_ifexist.empty())
-		if (!direxists(g_ifexist))
+		if (!ifexist_presente(g_ifexist))
 		{
-			myprintf("54729! Abort because -ifexist <<%Z>>\n", g_ifexist.c_str());
+			myprintf("54729! Abort because -ifexist <<%Z>> is not there (no file, no folder)\n", g_ifexist.c_str());
 			return 2;
 		}
 
@@ -157183,7 +161162,14 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
         if (secondi != ultimi_secondi)
         {
             ultimi_secondi = secondi;
-            if (flagpakka)
+            if (flagjson) /// 65.21b
+            {
+                if (flagpakka)
+                    json_prog("prg", i_percentuale, td, ts, (int)eta);
+                else
+                    json_prog("ext", percentuale, td, ts, (int)eta, i_percentuale);
+            }
+            else if (flagpakka)
                 printf("@SPK@PRG@%d@%lld@%lld@%d\n",
                        i_percentuale, (long long)td, (long long)ts, (int)eta);
             else
@@ -157545,6 +161531,12 @@ static const franz_helpriga g_helprighetutte[]=
 	HRIGA(9, "@date", 'a', "-dateto   Y", "datetime<=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405|Y is the end of its period: -dateto 2022 => up to 2022-12-31 23:59:59|Local time, as the dates shown (with -utc: UTC)"),
 	HIT(9, 0x49FFF944, "data e ora<=Y OK 2022, 202210, 2022-12-25,|2002-12-25_03:04:05, 20121225030405|Y e' la fine del suo periodo: -dateto 2022 => fino al 2022-12-31 23:59:59|Ora locale, come le date mostrate (con -utc: UTC)"),
 	HRU(9, 0x49FFF944, "дата/время<=Y OK 2022, 202210, 2022-12-25,|2002-12-25_03:04:05, 20121225030405|Y - конец своего периода: -dateto 2022 => до 2022-12-31 23:59:59|Местное время, как в показанных датах (с -utc: UTC)"),
+	HRIGA(1976, "@date", 'a', "-mindate X", "Same as -datefrom X (like -minsize)"),
+	HIT(1976, 0x815154EA, "Uguale a -datefrom X (come -minsize)"),
+	HRU(1976, 0x815154EA, "То же, что -datefrom X (как -minsize)"),
+	HRIGA(1977, "@date", 'a', "-maxdate Y", "Same as -dateto Y (like -maxsize)"),
+	HIT(1977, 0xEFA5907E, "Uguale a -dateto Y (come -maxsize)"),
+	HRU(1977, 0xEFA5907E, "То же, что -dateto Y (как -maxsize)"),
 	/// @size
 	HRIGA(10, "@size", 'a', "-maxsize X", "Filter on filesize. Use K, M, G, T and KB,MB,GB,TB"),
 	HIT(10, 0x4096AFC7, "Filtro sulla dimensione dei file.|  Usare K, M, G, T e KB,MB,GB,TB"),
@@ -158960,6 +162952,9 @@ static const franz_helpriga g_helprighetutte[]=
 	HU(405, "pause", "-n X", "Wait X seconds, then proceed"),
 	HIT(405, 0x685BC52C, "Aspetta X secondi, poi prosegue"),
 	HRU(405, 0x685BC52C, "Ждать X секунд, затем продолжить"),
+	HU(1982, "pause", "-timer X", "As -n X"),
+	HIT(1982, 0xC6BC9E68, "Come -n X"),
+	HRU(1982, 0xC6BC9E68, "То же, что -n X"),
 	HU(406, "pause", "-pakka", "Write less"),
 	HIT(406, 0xF862C6ED, "Scrive meno"),
 	HRU(406, 0xF862C6ED, "Писать меньше"),
@@ -158994,6 +162989,20 @@ static const franz_helpriga g_helprighetutte[]=
 	HBREVE(416, "pause", "Pause script until timeout or keypress"),
 	HIT(416, 0x5352EDDE, "Ferma lo script fino al timeout o a un tasto"),
 	HRU(416, 0x5352EDDE, "Приостановить скрипт до тайм-аута или нажатия клавиши"),
+	/// version (65.21f)
+	HU(1965, "version", "CMD version", "How this zpaqfranz was built, what is inside, where it runs|Also as the first argument: zpaqfranz -v, zpaqfranz --version"),
+	HIT(1965, 0x9989BAD7, "Come e' compilato questo zpaqfranz, cosa contiene, dove gira|Anche come primo argomento: zpaqfranz -v, zpaqfranz --version"),
+	HRU(1965, 0x9989BAD7, "Как собран этот zpaqfranz, что в нём есть, где он работает|Также первым аргументом: zpaqfranz -v, zpaqfranz --version"),
+	HESEMPI("version", 'b'),
+	HE(1966, "version", "What is this zpaqfranz", "version"),
+	HIT(1966, 0xDBEDDCCC, "Che zpaqfranz e' questo"),
+	HRU(1966, 0xDBEDDCCC, "Что это за zpaqfranz"),
+	HE(1967, "version", "The same", "-v"),
+	HIT(1967, 0xC50C5A62, "Lo stesso"),
+	HRU(1967, 0xC50C5A62, "То же самое"),
+	HBREVE(1968, "version", "How it was built, where it runs"),
+	HIT(1968, 0x1C95D84B, "Come e' compilato, dove gira"),
+	HRU(1968, 0x1C95D84B, "Как собран, где работает"),
 	/// setpassword
 	HU(417, "setpassword", "CMD password", "Change/remove password of single archive (no multipart)|The source is not touched: the output is a new archive"),
 	HIT(417, 0xC2FCF6B4, "Cambia/toglie la password di un|singolo archivio (non multiparte)|La sorgente non viene toccata:|l'output e' un nuovo archivio"),
@@ -159463,6 +163472,13 @@ static const franz_helpriga g_helprighetutte[]=
 	HU(521, "a", "-nofrugal", "-image: the swap files too"),
 	HIT(521, 0x7BA8EA84, "-image: anche i file di swap"),
 	HRU(521, 0x7BA8EA84, "-image: также файлы подкачки"),
+	/// 65.21 (FD20)
+	HU(1971, "a", "-wim", "-image of NTFS (Windows): the blocks of 2 MB that did not change since the last|  run are NOT read: their fragments of before go in the image (much faster)|  What changed: from the $MFT of the shadow copy; the files that change with no|  trace (hives, logs, ETW, open for writing) and the metadata are always read|  The state for the next run is a file of the image (image_X.wim, image_X.wimd):|  -until N uses the one of version N; the first run, or after a repack, reads all|  The stores of the shadow copies (System Volume Information) are left out"),
+	HIT(1971, 0x2CBAE4EE, "-image di NTFS (Windows): i blocchi da 2 MB che non sono cambiati dall'ultimo|  giro NON vengono letti: nell'immagine vanno i loro frammenti di prima (molto|  piu' veloce). Cosa e' cambiato: dalla $MFT della copia shadow; i file che|  cambiano senza traccia (hive, log, ETW, aperti in scrittura) e i metadati|  si leggono sempre. Lo stato per il giro dopo e' un file dell'immagine|  (image_X.wim, image_X.wimd): -until N usa quello della versione N; il primo|  giro, o dopo un repack, legge tutto. Gli archivi delle copie shadow|  (System Volume Information) restano fuori"),
+	HRU(1971, 0x2CBAE4EE, "-image для NTFS (Windows): блоки по 2 MB, не изменившиеся с прошлого запуска,|  НЕ читаются: в образ идут их прежние фрагменты (намного быстрее). Что|  изменилось: по $MFT теневой копии; файлы, меняющиеся без следа (кусты|  реестра, журналы, ETW, открытые на запись), и метаданные читаются всегда|  Состояние для следующего запуска - файл образа (image_X.wim, image_X.wimd):|  -until N берёт состояние версии N; первый запуск или после repack - всё|  читается. Хранилища теневых копий (System Volume Information) не берутся"),
+	HU(1972, "a", "-wimcheck", "With -wim: the blocks to skip are read anyway, and compared with their fragments|  of before (a check, as slow as without -wim). A different one is taken from the|  disk: this version is right (said in red: the versions before it are not)"),
+	HIT(1972, 0x9B6FEBF9, "Con -wim: i blocchi da saltare vengono letti lo stesso, e confrontati coi loro|  frammenti di prima (un controllo, lento come senza -wim). Uno diverso viene|  preso dal disco: questa versione e' giusta (detto in rosso: quelle prima no)"),
+	HRU(1972, 0x9B6FEBF9, "С -wim: блоки, которые надо пропустить, всё равно читаются и сравниваются с|  прежними фрагментами (проверка, так же медленно, как без -wim). Отличающийся|  берётся с диска: эта версия верна (сообщается красным: предыдущие - нет)"),
 #else
 	HU(522, "a", "-image", "Create a raw image of a drive/partition (root rights required)"),
 	HIT(522, 0xB1211023, "Crea un'immagine raw di un'unita'/partizione|  (servono i diritti di root)"),
@@ -159501,9 +163517,12 @@ static const franz_helpriga g_helprighetutte[]=
 	HU(532, "a", "-pause", "Wait for key press after run"),
 	HIT(532, 0xAC657CD0, "Aspetta un tasto alla fine"),
 	HRU(532, 0xAC657CD0, "Ждать нажатия клавиши в конце"),
-	HU(533, "a", "-ifexist X", "Abort if X folder does not exist"),
-	HIT(533, 0x5D1D1A67, "Esce se la cartella X non esiste"),
-	HRU(533, 0x5D1D1A67, "Прервать, если папки X не существует"),
+	HU(1981, "a", "-timer X", "Seconds of -pause, default 10 (0: no pause)|also the elevated window (administrator rights)"),
+	HIT(1981, 0x782A6D3B, "Secondi di -pause, default 10 (0: nessuna pausa)|anche la finestra elevata (diritti di amministratore)"),
+	HRU(1981, 0x782A6D3B, "Секунды -pause, по умолчанию 10 (0: без паузы)|также окно с правами администратора"),
+	HU(533, "a", "-ifexist X", "Abort if X (a file or a folder) does not exist"),
+	HIT(533, 0x81F0907F, "Esce se X (un file o una cartella) non esiste"),
+	HRU(533, 0x81F0907F, "Прервать, если X (файла или папки) не существует"),
 #if defined(_WIN32)
 	HU(534, "a", "-thunderbird", "Take appdata local\\roaming thunderbird"),
 	HIT(534, 0x5E0C4474, "Prende appdata local\\roaming di thunderbird"),
@@ -160106,6 +164125,9 @@ losetup -d /dev/loop0
 	HU(698, "pakka", "-out", "thefile  Write output on thefile"),
 	HIT(698, 0x192CB522, "thefile  Scrive l'output su thefile"),
 	HRU(698, 0x192CB522, "thefile  Записать вывод в thefile"),
+	HU(1963, "pakka", "-json", "Output for programs (catpaq): a JSON object per line|(start, msg with its code, prog, end with the exit code)"),
+	HIT(1963, 0xD00DD06C, "Output per programmi (catpaq): un oggetto JSON per riga|(start, msg col suo codice, prog, end col codice d'uscita)"),
+	HRU(1963, 0xD00DD06C, "Вывод для программ (catpaq): один объект JSON на строку|(start, msg с кодом, prog, end с кодом выхода)"),
 	HU(699, "pakka", "-catpaqmode", "Generate catpaq output"),
 	HIT(699, 0x6B9AE691, "Genera l'output per catpaq"),
 	HRU(699, 0x6B9AE691, "Создать вывод для catpaq"),
@@ -160372,6 +164394,9 @@ losetup -d /dev/loop0
 	HIT(1958, 0xD92F14BD, "Dentro questo utente del PC (un solo utente nell'archivio):|percorsi di prefs.js e profiles.ini corretti (.bak)"),
 	HRU(1958, 0xD92F14BD, "В этого пользователя ПК (в архиве один пользователь):|пути в prefs.js и profiles.ini исправляются (.bak)"),
 #endif // corresponds to #if (#if defined(_WIN32))
+	HU(1964, "x", "-listfrom thefile", "The names from thefile (UTF-8, one per line), not from the command line|name<TAB>destination: that name goes there (its -to)"),
+	HIT(1964, 0x6BC71427, "I nomi da thefile (UTF-8, uno per riga), non dal comando|nome<TAB>destinazione: quel nome va li' (il suo -to)"),
+	HRU(1964, 0x6BC71427, "Имена из thefile (UTF-8, по одному в строке), не из команды|имя<TAB>назначение: это имя идёт туда (его -to)"),
 	HU(763, "x", "-checksum", "force a full hash-code verify (if added with -checksum)"),
 	HIT(763, 0xA36D81E1, "forza una verifica completa degli|  hash (se aggiunti con -checksum)"),
 	HRU(763, 0xA36D81E1, "принудительная полная проверка хешей|  (если добавлено с -checksum)"),
@@ -160438,6 +164463,8 @@ losetup -d /dev/loop0
 	HIT(783, 0x00C21588, "Lettura casuale (meglio SSD), scrittura|  sequenziale; cache di default 1GB (-ramsize X)"),
 	HRU(783, 0x00C21588, "Случайное чтение (лучше SSD), последовательная|  запись; кеш по умолчанию 1GB (-ramsize X)"),
 	HINCLUDI("x", 'u', "@range", 'b'),
+	HINCLUDI("x", 'u', "@date", 'b'), /// 65.21j: -datefrom -dateto -mindate -maxdate filter x too
+	HINCLUDI("x", 'u', "@size", 'b'), /// 65.21k: -minsize -maxsize too (not with -image: see 779)
 #ifdef unix
 	HU(784, "x", "-tar", "Give back *nix metadata (owner by name, mode, times), symlinks, hard links, FIFO, devices"),
 	HIT(784, 0xC7B3C58B, "Rida' i metadati *nix (proprietario per nome, permessi,|  tempi), symlink, hard link, FIFO, dispositivi"),
@@ -160596,6 +164623,12 @@ losetup -d /dev/loop0
 	HE(826, "x", "Restore in place, delete nothing", "x z:\\1.zpaq -force -backupdir z:\\archiv -extras"),
 	HIT(826, 0x1F477269, "Ripristino sul posto, senza cancellare nulla"),
 	HRU(826, 0x1F477269, "Восстановление на месте, ничего не удаляя"),
+	HE(1979, "x", "Only the files changed in 2025", "x z:\\1.zpaq -to z:\\y2025 -mindate 2025 -maxdate 2025"),
+	HIT(1979, 0xDDB8AAC1, "Solo i file modificati nel 2025"),
+	HRU(1979, 0xDDB8AAC1, "Только файлы, изменённые в 2025"),
+	HE(1980, "x", "Only the files up to 10 MB", "x z:\\1.zpaq -to z:\\small -maxsize 10m"),
+	HIT(1980, 0xF59818FD, "Solo i file fino a 10 MB"),
+	HRU(1980, 0xF59818FD, "Только файлы до 10 MB"),
 #if defined(_WIN32)
 	HE(1961, "x", "Thunderbird email back, nothing overwritten", "x z:\\copia.zpaq -thunderbird"),
 	HIT(1961, 0x61D23B5B, "Rimette la posta Thunderbird, senza sovrascrivere"),
@@ -160881,6 +164914,13 @@ losetup -d /dev/loop0
 	HU(911, "ac", "X:", "Windows PE only (booted from a stick): the Windows to save, if there is|more than one. Else it is found by itself (a volume with \\Windows\\System32|\\config\\SYSTEM, not the X: of the PE): not running, no shadow copy needed|If that volume has no letter (a GPT disk can come so) it gets the first free one|Elsewhere a drive given is ignored: ac saves the disk of the Windows running"), /// 65.14j, 65.14k
 	HIT(911, 0x5B311D03, "Solo Windows PE (avviato da una chiavetta): il Windows da salvare, se ce n'e'|piu' di uno. Altrimenti lo trova da solo (un volume con \\Windows\\System32|\\config\\SYSTEM, non la X: del PE): spento, non serve la copia shadow|Se quel volume non ha lettera (un disco GPT|puo' arrivare cosi') prende la prima libera|Altrove un'unita' data viene ignorata: ac|salva il disco del Windows in esecuzione"),
 	HRU(911, 0x5B311D03, "Только Windows PE (загрузка с флешки): Windows, который сохранять, если их|несколько. Иначе находится сам (том с \\Windows\\System32|\\config\\SYSTEM, не X: от PE): не запущен, теневая копия не нужна|Если у тома нет буквы (на GPT-диске так бывает), он получает первую свободную|В других случаях заданный диск игнорируется:|ac сохраняет диск работающего Windows"),
+	/// 65.21 (FD20)
+	HU(1973, "ac", "-wim", "Every NTFS image as with a -image -wim (see h a): the blocks that did not|change since the last run are not read. The state is in the archive (-until N:|the one of version N); after a repack everything is read again, once"),
+	HIT(1973, 0x32E23731, "Ogni immagine NTFS come con un -image -wim (vedi h a): i blocchi che non|sono cambiati dall'ultimo giro non vengono letti. Lo stato e' nell'archivio|(-until N: quello della versione N); dopo un repack si rilegge tutto una volta"),
+	HRU(1973, 0x32E23731, "Каждый образ NTFS как при -image -wim (см. h a): блоки, не изменившиеся с|прошлого запуска, не читаются. Состояние хранится в архиве (-until N:|состояние версии N); после repack всё читается заново, один раз"),
+	HU(1974, "ac", "-wimcheck", "With -wim: the skipped blocks are read anyway, and compared (see h a)"),
+	HIT(1974, 0xE6108AAE, "Con -wim: i blocchi saltati vengono letti lo stesso, e|confrontati (vedi h a)"),
+	HRU(1974, 0xE6108AAE, "С -wim: пропущенные блоки всё равно читаются и сравниваются (см. h a)"),
 	HU(912, "ac", "***", "The restore: the xc command (the whole disk), image (one partition alone)"),
 	HIT(912, 0x040FA260, "Il ripristino: il comando xc (tutto il|  disco), image (una partizione da sola)"),
 	HRU(912, 0x040FA260, "Восстановление: команда xc (весь диск), image (отдельный раздел)"),
@@ -160888,6 +164928,9 @@ losetup -d /dev/loop0
 	HE(913, "ac", "The disk of Windows", "ac z:\\pc.zpaq"),
 	HIT(913, 0x16AD4EDF, "Il disco di Windows"),
 	HRU(913, 0x16AD4EDF, "Диск Windows"),
+	HE(1975, "ac", "Faster: skip what did not change", "ac z:\\pc.zpaq -wim"), /// 65.21 (FD20)
+	HIT(1975, 0xFC8FADD3, "Piu' veloce: salta l'invariato"),
+	HRU(1975, 0xFC8FADD3, "Быстрее: без неизменённого"),
 	HE(914, "ac", "Dry run: what would be taken", "ac \"\""),
 	HIT(914, 0x185B5FD0, "Prova a secco: cosa verrebbe preso"),
 	HRU(914, 0x185B5FD0, "Пробный прогон: что было бы взято"),
@@ -162819,6 +166862,7 @@ losetup -d /dev/loop0
 	HU(1443, "dir", "-summary", "In /tree mode, show folder sizes"),
 	HIT(1443, 0x57E711AF, "In modalita' /tree, mostra la dimensione delle cartelle"),
 	HRU(1443, 0x57E711AF, "В режиме /tree показывать размеры папок"),
+	HINCLUDI("dir", 'u', "@date", 'b'), /// 65.21i: the filters on the date (-datefrom -dateto -mindate -maxdate)
 	HINCLUDI("dir", 'u', "@size", 'b'),
 	HU(1444, "dir", "-nodir", "Shows only files"),
 	HIT(1444, 0xA98DD342, "Mostra solo i file"),
@@ -162860,6 +166904,9 @@ losetup -d /dev/loop0
 	HE(1456, "dir", "Show newer files", "dir c:\\backup\\*.zpaq /s -datefrom 2025 -nodir"),
 	HIT(1456, 0x8D9B9DE6, "Mostra i file piu' nuovi"),
 	HRU(1456, 0x8D9B9DE6, "Показать новые файлы"),
+	HE(1978, "dir", "Files of 2025 from 1 GB up", "dir c:\\data /s -mindate 2025 -maxdate 2025 -minsize 1g"),
+	HIT(1978, 0xF0CF7601, "I file del 2025 da 1 GB in su"),
+	HRU(1978, 0xF0CF7601, "Файлы 2025 года от 1 GB"),
 	HE(1457, "dir", "Show files older than 30 days", "dir c:\\temp /s /age+30"),
 	HIT(1457, 0x02D20AB6, "Mostra i file piu' vecchi di 30 giorni"),
 	HRU(1457, 0x02D20AB6, "Показать файлы старше 30 дней"),
@@ -163290,9 +167337,6 @@ losetup -d /dev/loop0
 	HIT(1581, 0xD3BAFFAC, "Switch da esperti (nerd)"),
 	HRU(1581, 0xD3BAFFAC, "Ключи для экспертов (нёрдов)"),
 	/// 65.14l @frasi: the texts written by code (usage, h, h h, the categories...), found by their English (help_t)
-	HTESTO(1582, "@frasi", 'a', 0, "DLL archiver"),
-	HIT(1582, 0xF595E729, "Archiviatore DLL"),
-	HRU(1582, 0xF595E729, "DLL-архиватор"),
 	HTESTO(1583, "@frasi", 'a', 0, "Top tier archiver w/dedup"),
 	HIT(1583, 0x2A3E7746, "Archiviatore di prima classe con deduplica"),
 	HRU(1583, 0x2A3E7746, "Первоклассный архиватор с дедупликацией"),
@@ -164000,6 +168044,13 @@ losetup -d /dev/loop0
 	HTESTO(1787, "@flag", 'a', 0, "Only do test"),
 	HIT(1787, 0x1354E828, "Fa solo il test"),
 	HRU(1787, 0x1354E828, "Только проверка"),
+	/// 65.21 (FD20): -wim, -wimcheck
+	HTESTO(1969, "@flag", 'a', 0, "Image of NTFS: the blocks that did not change are not read (-image, ac)"),
+	HIT(1969, 0x44CF6436, "Immagine NTFS: i blocchi non cambiati non vengono letti (-image, ac)"),
+	HRU(1969, 0x44CF6436, "Образ NTFS: неизменившиеся блоки не читаются (-image, ac)"),
+	HTESTO(1970, "@flag", 'a', 0, "With -wim: the skipped blocks are read anyway, and compared"),
+	HIT(1970, 0x405F2E8D, "Con -wim: i blocchi saltati vengono letti lo stesso, e confrontati"),
+	HRU(1970, 0x405F2E8D, "С -wim: пропущенные блоки всё равно читаются и сравниваются"),
 };
 static const size_t g_helptutte= sizeof(g_helprighetutte) / sizeof(g_helprighetutte[0]);
 #ifndef NOFRANZEN /// 65.18k: the open build has Franzen too (franzsodium, built in): the whole help
@@ -164215,6 +168266,7 @@ static const franz_helpcomando g_helpcomandi[]=
 	{"gui", "tui", "Info/list", 3},
 	{"mc", "mc", "File     ", 6}, /// 65.10a
 	{"pakka", "pakka", "Info/list", 3},
+	{"version", "version", "Info/list", 3}, /// 65.21f
 #if defined(_WIN32)
 	{"drive", "drive", "Info/list", 3},
 #endif // corresponds to #if (#if defined(_WIN32))
@@ -165403,9 +169455,6 @@ void Jidac::load_help_map()
 
 void Jidac::usage(bool i_flagdie= true)
 {
-#ifdef DLL
-	const char *base="DLL archiver";
-#else
 	const char *base=
 #if defined(BUILD_FEDORA)
 		"Archiver w/dedup, no encryption"; /// 65.20b: no AES, no Franzen, no TLS
@@ -165413,7 +169462,6 @@ void Jidac::usage(bool i_flagdie= true)
 		"Top tier archiver w/dedup";
 #else
 		"Secure archiver w/dedup";
-#endif
 #endif
 	/// 65.14l: the texts in the language of the help (help_t), the labels as wide as before (help_colonna)
 	const char *hw= ihavehw() ? " & HW SHA1/2" : "";
@@ -166574,7 +170622,8 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 				///format_datetime
 
 				/// 65.13h: -dateto is the END of its period (it was the start: -datefrom 2017 -dateto 2017 found nothing)
-				int64_t newdate=encodestringdate(mytimestamp,i_string!="-dateto");
+				/// 65.21i: -maxdate too (the same as -dateto)
+				int64_t newdate=encodestringdate(mytimestamp,(i_string!="-dateto") && (i_string!="-maxdate"));
 				if (newdate!=-1)
 				{
 					
@@ -167028,6 +171077,7 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagpakka,			"-pakka",				"New output style",										"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output style",										"");
 	g_programflags.add(&flagcatpaqmode,		"-catpaqmode",			"CATPAQ mode",										"");
+	g_programflags.add(&flagjson,			"-json",				"Output for programs: a JSON object per line",			"");
 	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid 'something'",											"");
 	///g_programflags.add(&flagpaq,			"-paq",					"Enable paq-levels",											"");
 	g_programflags.add(&flagcollision,		"-collision",			"Collision check",											"");
@@ -167118,6 +171168,8 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
 	g_programflags.add(&flagnosanitize,		"-nosanitize",			"Do NOT fix Windows-invalid filenames",				"x;");
 	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS: used clusters (-image), scan from the $MFT",	"");
+	g_programflags.add(&flagwim,			"-wim",					"Image of NTFS: the blocks that did not change are not read (-image, ac)",	"");
+	g_programflags.add(&flagwimcheck,		"-wimcheck",			"With -wim: the skipped blocks are read anyway, and compared",	"");
 	g_programflags.add(&flagnontfs,			"-nontfs",				"Never scan from the $MFT by itself",				"");
 	g_programflags.add(&flagvhd,			"-vhd",					"NTFS image to VHD file",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
@@ -167706,7 +171758,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("52511: zpaq v7.15 journaling archiver, compiled Aug 17 2016\n");
 	else
 	{
-		if ((!flagpakka) && (!flagstdout) && (!flagterse))
+		if ((!flagpakka) && (!flagstdout) && (!flagterse) && (!flagjson)) /// 65.21b: -json, "start" says it
 		{
 			char buffer[300];
 			if (iswindowsxp())
@@ -167957,6 +172009,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if ((opt=="benchmark") || (opt=="b"))		command='b';
 		else if ((opt=="autotest"))						command='8';
 		else if ((opt=="pause")) 						command='0';
+		else if ((opt=="version") || (((opt=="-v") || (opt=="--version")) && (i==1))) command=8; /// 65.21f: how it was built, where it runs
 		else if (cli_filesandcommand(opt,"d",			'd',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"dir",			'2',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"tree",		2,argc,argv,&i));
@@ -168389,6 +172442,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getuint	(opt,"-dirlength",	false,	"",								argc,argv,&i,dirlength,			&dirlength));
 		else if (cli_getuint	(opt,"-n",			false,	"",								argc,argv,&i,menoenne,			&menoenne));
 		else if (cli_getuint	(opt,"-limit",		false,	"",								argc,argv,&i,menoenne,			&menoenne));
+		else if (cli_getint		(opt,"-timer",		false,	"",								argc,argv,&i,10,				&g_timer));
 		/// 65.11g: -nuke [NN] (f, Windows): a number is mandatory, so presence and value are kept apart
 		else if (opt=="-nuke")
 		{
@@ -168416,6 +172470,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getstring	(opt,"-fuseopt",	false,	"",								argc,argv,&i,"",				&g_fuseopt));
 		else if (cli_getstring	(opt,"-backend",	false,	"",								argc,argv,&i,"auto",			&g_mountbackend));
 #endif ///NOSFTPEND
+		else if (cli_getstring	(opt,"-listfrom",	false,	"",								argc,argv,&i,"",				&g_listfrom)); /// 65.21e
 		else if (cli_getstring	(opt,"-csv",		false,	"-tab",							argc,argv,&i,"",				&g_csvstring));
 		else if (cli_getstring	(opt,"-csvhf",		false,	"",								argc,argv,&i,"",				&g_csvhf));
 		else if (cli_getstring	(opt,"-bin",		false,	"",								argc,argv,&i,"",				&g_bin));
@@ -168545,6 +172600,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getdate	(opt,"-touch",												argc,argv,&i,					&g_touch));
 		else if (cli_getdate	(opt,"-datefrom",											argc,argv,&i,					&g_datefrom));
 		else if (cli_getdate	(opt,"-dateto",												argc,argv,&i,					&g_dateto));
+		else if (cli_getdate	(opt,"-mindate",												argc,argv,&i,					&g_datefrom)); /// 65.21i: as -minsize
+		else if (cli_getdate	(opt,"-maxdate",												argc,argv,&i,					&g_dateto));	 /// 65.21i: as -maxsize
 		else if (cli_getarray	(opt,"-not",												argc,argv,&i,					&notfiles,		&nottype));
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32 /// 65.14d: the SFX module is Windows only
@@ -168829,6 +172886,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 /*
 	Check from "weird" parameters
 */
+	/// 65.21n: -timer X. In pause it is -n X (and wins over it); elsewhere the seconds of -pause, and -n is
+	/// left alone (lines, names, files: l -n 100 -pause waits 10 seconds, not 100)
+	if ((command=='0') && (g_timer>=0))
+		menoenne=(unsigned int)g_timer;
 	if (g_keyfile!="")
 	{
 		if (g_password==NULL)
@@ -169037,6 +173098,81 @@ int Jidac::loadparameters(int argc, const char** argv)
 				myprintf("00570: franz:zfs snapshot mark to  |%s|\n",newmark.c_str());
 			snapmark=newmark;
 		}
+	}
+	/*
+		65.21e: -listfrom thefile, the names (and where they go) from a file and not from the command line: catpaq
+		extracts hundreds of files chosen by hand, and Windows stops a command line at 32.767 characters. UTF-8,
+		one per line, "name" or "name<TAB>destination", all the lines the same way. A destination is the -to of
+		its name (as x a b -to c d: a goes to c, b to d), so with them nothing else on the command line, neither
+		names nor -to: they would pair with the wrong ones. Empty lines are skipped; an empty list is refused (x
+		with no names extracts everything). The names go where the ones of the command line go, and get the
+		same treatment after (the "" ones too: 66841 below)
+	*/
+	if (g_listfrom!="")
+	{
+		FILE* lista=freadopen(g_listfrom.c_str());
+		if (lista==NULL)
+		{
+			myprintf("66938! -listfrom <<%Z>> cannot be read: nothing done\n",g_listfrom.c_str());
+			return 2;
+		}
+		vector<string>	nomi;
+		vector<string>	mete;
+		int64_t			conmeta		=0;
+		int64_t			senzameta	=0;
+		string			riga;
+		bool			inizio		=true;
+		while (true)
+		{
+			const int c=getc(lista);
+			if ((c!=EOF) && (c!='\n'))
+			{
+				riga+=(char)c;
+				continue;
+			}
+			if ((riga.size()>0) && (riga[riga.size()-1]=='\r'))
+				riga.resize(riga.size()-1);
+			if (inizio && (riga.size()>=3) && ((unsigned char)riga[0]==0xEF) && ((unsigned char)riga[1]==0xBB) && ((unsigned char)riga[2]==0xBF))
+				riga.erase(0,3); /// the BOM some editors put in front
+			inizio=false;
+			if (riga!="")
+			{
+				const size_t tab=riga.find('\t');
+				if (tab==string::npos)
+				{
+					nomi.push_back(riga);
+					senzameta++;
+				}
+				else
+				{
+					nomi.push_back(riga.substr(0,tab));
+					mete.push_back(riga.substr(tab+1));
+					conmeta++;
+				}
+			}
+			riga="";
+			if (c==EOF)
+				break;
+		}
+		fclose(lista);
+		if ((conmeta>0) && (senzameta>0))
+		{
+			myprintf("66939! -listfrom <<%Z>>: %s lines with a destination (a TAB) and %s without: all the same way. Nothing done\n",g_listfrom.c_str(),migliaia(conmeta),migliaia2(senzameta));
+			return 2;
+		}
+		if (nomi.size()==0)
+		{
+			myprintf("66940! -listfrom <<%Z>> has no names (it would be every file): nothing done\n",g_listfrom.c_str());
+			return 2;
+		}
+		if ((conmeta>0) && ((files.size()>0) || (tofiles.size()>0)))
+		{
+			myprintf("66941! -listfrom <<%Z>> has the destinations: no other names and no -to on the command line (they would pair with the wrong ones). Nothing done\n",g_listfrom.c_str());
+			return 2;
+		}
+		files.insert(files.end(),nomi.begin(),nomi.end());
+		tofiles.insert(tofiles.end(),mete.begin(),mete.end());
+		myprintf("66942: -listfrom <<%Z>>: %s names%s\n",g_listfrom.c_str(),migliaia(nomi.size()),(conmeta>0) ? ", each one with its destination" : "");
 	}
 	/// 65.20k: an empty argument ("", an empty variable in a script) as a file or a folder: refused here, once, for
 	/// every command. "" + "/" is the root: d "" deduplicated the whole disk, sum "" read it all (65.20h).
@@ -169668,8 +173804,13 @@ public:
 			// sends 0/0 and only the percentage and the eta travel.
 			const long long td= total_>0 ? (long long)pos_   : 0;
 			const long long ts= total_>0 ? (long long)total_ : 0;
+			if (flagjson) /// 65.21b
+				json_prog("ext", p, td, ts, (int)eta);
+			else
+			{
 			printf("@SPK@EXT@%d@%lld@%lld@%d@%d\n", p, td, ts, (int)eta, 0);
 			fflush(stdout);
+			}
 			return;
 		}
 		if (isAnyOutputRedirected())
@@ -173276,6 +177417,7 @@ int Jidac::mount()
 	return rc;
 }
 #endif // ZPAQMOUNT ///NOSFTPEND
+int versione_estesa(const string &i_exe); /// 65.21f: the command version (further down)
 int Jidac::doCommand()
 {
 	/// 65.13e: -debug4 is the deterministic encryption: the same input gives the same bytes (AES salt of zeros,
@@ -173592,6 +177734,7 @@ int Jidac::doCommand()
 	else if (command=='Z') return backup();
 	else if (command=='.') return pakkalist();
 
+	else if (command==8)   return versione_estesa(fullzpaqexename); /// 65.21f
 	else if (command=='b') return benchmark();
 	else if (command=='c') return dircompare(false,false);
 	else if (command=='d') return deduplicate();
@@ -175992,6 +180135,10 @@ void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool 
 #else // Windows: expand wildcards in filename
 
 #ifdef _WIN32
+	/// 65.21l: "a x.zpaq ." archived nothing on Windows ("QUIT: ... zero", rc 0): FindFirstFile(".") gives the entry
+	/// "." itself, and it is skipped. "." is "./" (as "./" already was, and as on *nix): the folder, its names ./x
+	if ((filename == ".") || (filename == ".."))
+		filename+= "/";
 	/// 65.9c: -ntfs without -image, the list from the $MFT read raw: all of it is in ntfs2_scandir()
 	/// 65.9l: by itself too, on whole NTFS partitions (ntfs2_dasolo). With -image never: there -ntfs
 	/// is the image of the used clusters, and nothing is scanned
@@ -176014,11 +180161,18 @@ void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool 
 	if (h == INVALID_HANDLE_VALUE)
 	{
 		const DWORD erroretroppo= GetLastError();
-		if ((utow(t.c_str()).size() >= 248) && (t.substr(0, 4) != "//?/") &&
+		/// 65.21l: issue 363, the length of the FULL name: a relative one (src/...) in a deep current folder is short as
+		/// written, and over the limit for Windows. It was skipped in silence: now said, with its full name
+		if ((t.substr(0, 4) != "//?/") &&
 			((erroretroppo == ERROR_PATH_NOT_FOUND) || (erroretroppo == ERROR_FILENAME_EXCED_RANGE) || (erroretroppo == ERROR_FILE_NOT_FOUND)))
 		{
-			g_scantroppolunghi++;
-			myprintf("66861$ <<%Z>>: path too long (%s characters) without -longpath: skipped\n", t.c_str(), migliaia(utow(t.c_str()).size()));
+			const string tpieno= nome_pienowin(t);
+			const size_t lpieno= utow(tpieno.c_str()).size();
+			if (lpieno >= 248)
+			{
+				g_scantroppolunghi++;
+				myprintf("66861$ <<%Z>>: path too long (%s characters) without -longpath: skipped\n", tpieno.c_str(), migliaia(lpieno));
+			}
 		}
 		SetLastError(erroretroppo);
 	}
@@ -177674,7 +181828,12 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap, libzpaq::StringBuffer &i_sb,
 			//			if (!flagdebug)
 			///			error("Guru-C checking crc32");
 		}
-	if (g_franzotype == FRANZO_CRC_32) /// store only CRC-32
+	bool solocrc= (g_franzotype == FRANZO_CRC_32);
+#ifdef _WIN32
+	if (g_wimsenzahash.count(i_dtmap->first)) /// 65.21 -wim FD3: an image with skipped blocks, see preparahashtobewritten
+		solocrc= true;
+#endif
+	if (solocrc) /// store only CRC-32
 	{
 		char mybuffer[FRANZOFFSETV1]= {0};
 		snprintf(mybuffer + 41, sizeof(mybuffer) - 41, "%08X", writtencrc);
@@ -183154,12 +187313,6 @@ int parsePageFiles(const char *multiSzValue, std::vector<PageFileInfo> &pageFile
 	return pageFiles.size();
 }
 
-#ifdef DLL
-ULONGLONG getwifesize()
-{
-	return 0;
-}
-#else
 	
 ULONGLONG getwifesize()
 {
@@ -183239,7 +187392,6 @@ ULONGLONG getwifesize()
 
 	return commitLimit;
 }
-#endif
 #endif
 
 /*
@@ -183506,6 +187658,563 @@ int64_t getramdisksize()
 #endif								  /// NOSFTPEND
 	return internal_getramdisksize(); /// if you get an error HERE substitute with return 0;
 									  /// return 0;
+}
+/*
+	65.21f: the command version (zpaqfranz -v, zpaqfranz --version as the first argument). What the banner says in one
+	line (zpaqfranz v65.21f-JIT8+M,SFTP,RES-L,HW BLK3,SHA1/2,4,SFX64 55.1,...), a line for each thing: what this
+	program is, how it was built (the -D in effect, after what the source itself turns on and off), what is inside,
+	where it runs. For a person, and for whoever reads a bug report
+*/
+static void versione_titolo(const char *i_titolo)
+{
+	myprintf("\n");
+	color_cyan();
+	myprintf("03930: %s\n", i_titolo);
+	color_restore();
+}
+/// 65.21g: i_colore 1 the value in green, 2 in yellow
+static void versione_riga(const char *i_voce, const string &i_valore, int i_colore= 0)
+{
+	string v= i_valore; /// (the name of the CPU in the registry ends with blanks)
+	while ((v.size() > 0) && ((v[v.size() - 1] == ' ') || (v[v.size() - 1] == '\t')))
+		v.erase(v.size() - 1);
+	myprintf("03931: %-20s ", i_voce);
+	if (i_colore == 1)
+		color_green();
+	else if (i_colore == 2)
+		color_yellow();
+	myprintf("%s\n", v.c_str());
+	if (i_colore)
+		color_restore();
+}
+/// 65.21g: an option of the build: there (yes) in green, not there (no, off, no hardware) in yellow
+static void versione_opzione(const char *i_voce, const string &i_valore, bool i_si)
+{
+	versione_riga(i_voce, i_valore, i_si ? 1 : 2);
+}
+static void versione_sino(const char *i_voce, const string &i_valore)
+{
+	versione_opzione(i_voce, i_valore, i_valore.compare(0, 3, "yes") == 0);
+}
+#ifdef _WIN32
+/// a value of the registry (HKEY_LOCAL_MACHINE) as text, "" none: REG_SZ, or REG_DWORD as a number
+static string versione_registro(const wchar_t *i_chiave, const wchar_t *i_valore)
+{
+	HKEY k;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, i_chiave, 0, KEY_READ | KEY_WOW64_64KEY, &k) != ERROR_SUCCESS)
+		return "";
+	wchar_t buf[512];
+	memset(buf, 0, sizeof(buf));
+	DWORD  tipo= 0;
+	DWORD  n   = sizeof(buf) - sizeof(wchar_t);
+	string r;
+	if (RegQueryValueExW(k, i_valore, NULL, &tipo, (LPBYTE)buf, &n) == ERROR_SUCCESS)
+	{
+		if ((tipo == REG_SZ) || (tipo == REG_EXPAND_SZ))
+			r= wtou(buf);
+		else if ((tipo == REG_DWORD) && (n >= 4))
+		{
+			DWORD d= 0;
+			memcpy(&d, buf, 4);
+			char x[32];
+			snprintf(x, sizeof(x), "%lu", (unsigned long)d);
+			r= x;
+		}
+	}
+	RegCloseKey(k);
+	return r;
+}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+#ifdef __linux__
+/// the rest of the first line of i_file that starts with i_chiave ("" none), without : = " and blanks around
+static string versione_chiave(const char *i_file, const char *i_chiave)
+{
+	FILE *f= fopen(i_file, "r");
+	if (!f)
+		return "";
+	char		 riga[512];
+	string		 r;
+	const size_t lc= strlen(i_chiave);
+	while (fgets(riga, sizeof(riga), f))
+		if (strncmp(riga, i_chiave, lc) == 0)
+		{
+			r= riga + lc;
+			break;
+		}
+	fclose(f);
+	while ((r.size() > 0) && ((r[r.size() - 1] == '\n') || (r[r.size() - 1] == '\r') || (r[r.size() - 1] == '"') || (r[r.size() - 1] == ' ')))
+		r.erase(r.size() - 1);
+	size_t i= 0;
+	while ((i < r.size()) && ((r[i] == ' ') || (r[i] == '\t') || (r[i] == ':') || (r[i] == '=') || (r[i] == '"')))
+		i++;
+	return r.substr(i);
+}
+#endif // corresponds to #ifdef (#ifdef __linux__)
+/// the SHA-256 of a file ("" not readable): the one of the executable says which build it is, to the byte
+static string versione_sha256(const string &i_file)
+{
+	if (i_file == "")
+		return "";
+#ifdef _WIN32
+	FILE *f= _wfopen(utow(i_file.c_str()).c_str(), L"rb");
+#else
+	FILE *f= fopen(i_file.c_str(), "rb");
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	if (!f)
+		return "";
+	libzpaq::SHA256 h;
+	char			buf[65536];
+	size_t			n;
+	while ((n= fread(buf, 1, sizeof(buf), f)) > 0)
+		h.write(buf, (int64_t)n);
+	fclose(f);
+	return binarytohex((const unsigned char *)h.result(), 32);
+}
+int versione_estesa(const string &i_exe)
+{
+	char x[700];
+	///////////////////////////////////////////////////////////////// the program
+	versione_titolo("The program");
+#ifdef ZPAQFULL
+	versione_riga("name", "zpaqfranz (full version)");
+#else
+	versione_riga("name", "zpaqfranz-open (open version)");
+#endif // corresponds to #ifdef (#ifdef ZPAQFULL)
+	versione_riga("version", ZPAQ_VERSION " " ZPAQ_DATE);
+	versione_riga("executable", (i_exe != "") ? i_exe : "not known");
+	const int64_t dimensione= (i_exe != "") ? prendidimensionefile(i_exe.c_str()) : -1;
+	if (dimensione > 0)
+		versione_riga("size", string(migliaia(dimensione)) + " bytes");
+	const string impronta= versione_sha256(i_exe);
+	if (impronta != "")
+		versione_riga("SHA-256", impronta);
+
+	///////////////////////////////////////////////////////////////// how it was built
+	versione_titolo("How it was built");
+	string compilatore= "not known";
+#if defined(__clang__)
+	compilatore= "clang " __clang_version__;
+#elif defined(__GNUC__)
+	compilatore= "gcc " __VERSION__;
+#elif defined(_MSC_VER)
+	snprintf(x, sizeof(x), "Microsoft C++ %d", (int)_MSC_FULL_VER);
+	compilatore= x;
+#endif // corresponds to #if (#if defined(__clang__))
+#if defined(__MINGW64_VERSION_STR)
+	compilatore+= ", MinGW-w64 " __MINGW64_VERSION_STR;
+#endif // corresponds to #if (#if defined(__MINGW64_VERSION_STR))
+#if defined(_WIN32) && defined(__MINGW32__)
+#if defined(_UCRT)
+	compilatore+= ", UCRT";
+#else
+	compilatore+= ", MSVCRT";
+#endif // corresponds to #if (#if defined(_UCRT))
+#endif // corresponds to #if (#if defined(_WIN32) && defined(__MINGW32__))
+#if defined(__GLIBC__)
+	snprintf(x, sizeof(x), ", glibc %d.%d", (int)__GLIBC__, (int)__GLIBC_MINOR__);
+	compilatore+= x;
+#elif defined(__linux__)
+	compilatore+= ", not glibc (musl?)";
+#endif // corresponds to #if (#if defined(__GLIBC__))
+	versione_riga("compiler", compilatore);
+	snprintf(x, sizeof(x), "%ld", (long)__cplusplus);
+	string standard= x;
+	if (__cplusplus >= 202302L)
+		standard+= " (C++23)";
+	else if (__cplusplus >= 202002L)
+		standard+= " (C++20)";
+	else if (__cplusplus >= 201703L)
+		standard+= " (C++17)";
+	else if (__cplusplus >= 201402L)
+		standard+= " (C++14)";
+	else if (__cplusplus >= 201103L)
+		standard+= " (C++11)";
+	else
+		standard+= " (C++98)";
+	versione_riga("C++", standard);
+#if defined(__OPTIMIZE__)
+	versione_opzione("optimized", "yes", true);
+#elif defined(__GNUC__)
+	versione_opzione("optimized", "NO (-O0: slow)", false);
+#endif // corresponds to #if (#if defined(__OPTIMIZE__))
+
+	string sistema= "not known";
+#if defined(_WIN64)
+	sistema= "Windows 64 bit";
+#elif defined(_WIN32)
+	sistema= "Windows 32 bit";
+#elif defined(__ANDROID__)
+	sistema= "Android";
+#elif defined(__linux__)
+	sistema= "Linux";
+#elif defined(__APPLE__)
+	sistema= "macOS";
+#elif defined(__FreeBSD__)
+	sistema= "FreeBSD";
+#elif defined(__OpenBSD__)
+	sistema= "OpenBSD";
+#elif defined(__NetBSD__)
+	sistema= "NetBSD";
+#elif defined(__DragonFly__)
+	sistema= "DragonFly BSD";
+#elif defined(__sun)
+	sistema= "Solaris/illumos";
+#elif defined(__HAIKU__)
+	sistema= "Haiku";
+#endif // corresponds to #if (#if defined(_WIN64))
+#ifdef ESX
+	sistema+= ", for ESXi";
+#endif // corresponds to #ifdef (#ifdef ESX)
+#ifdef NAS
+	sistema+= ", for NAS";
+#endif // corresponds to #ifdef (#ifdef NAS)
+	string cpu= "not known";
+#if defined(__x86_64__) || defined(_M_X64)
+	cpu= "x86-64";
+#elif defined(__i386__) || defined(_M_IX86)
+	cpu= "x86 (32 bit)";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+	cpu= "ARM 64 bit (aarch64)";
+#elif defined(__arm__) || defined(_M_ARM)
+	cpu= "ARM 32 bit";
+#elif defined(__powerpc64__) || defined(__ppc64__)
+	cpu= "PowerPC 64 bit";
+#elif defined(__powerpc__) || defined(__ppc__)
+	cpu= "PowerPC 32 bit";
+#elif defined(__sparc__) || defined(__sparc)
+	cpu= "SPARC";
+#elif defined(__mips__)
+	cpu= "MIPS";
+#elif defined(__riscv)
+	cpu= "RISC-V";
+#elif defined(__s390x__)
+	cpu= "IBM Z (s390x)";
+#elif defined(__loongarch__)
+	cpu= "LoongArch";
+#elif defined(__hppa__)
+	cpu= "PA-RISC";
+#elif defined(__alpha__)
+	cpu= "Alpha";
+#elif defined(__m68k__)
+	cpu= "m68k";
+#endif // corresponds to #if (#if defined(__x86_64__) || defined(_M_X64))
+	snprintf(x, sizeof(x), "%s, %s, %d bit pointers", sistema.c_str(), cpu.c_str(), (int)(sizeof(void *) * 8));
+	versione_riga("for", x);
+	const uint16_t prova= 1;
+	const bool	   piccolo= (*(const unsigned char *)&prova) == 1;
+#ifdef BIG
+	versione_riga("byte order", piccolo ? "big endian (-DBIG), but this CPU is LITTLE endian" : "big endian (-DBIG)", piccolo ? 2 : 0);
+#else
+	versione_riga("byte order", piccolo ? "little endian" : "little endian, but this CPU is BIG endian (-DBIG is missing)", piccolo ? 0 : 2);
+#endif // corresponds to #ifdef (#ifdef BIG)
+#ifdef MALLOC_ALIGN
+	snprintf(x, sizeof(x), "%d bytes (-DALIGNMALLOC)", (int)MALLOC_ALIGN);
+	versione_riga("memory alignment", x);
+#endif // corresponds to #ifdef (#ifdef MALLOC_ALIGN)
+	/// the switches of the build, as they are after the logic of the source (some are turned on or off by it)
+	string d;
+#ifdef ZPAQFULL ///NOSFTPSTART
+	d+= " ZPAQFULL";
+#ifdef SFTP
+	d+= " SFTP";
+#endif
+#ifdef ZPAQMOUNT
+	d+= " ZPAQMOUNT";
+#endif
+#ifdef ZPAQMOUNT_FUSE2
+	d+= " ZPAQMOUNT_FUSE2";
+#endif
+#ifdef ZPAQLIBSODIUM
+	d+= " ZPAQLIBSODIUM";
+#endif
+#endif ///NOSFTPEND
+#ifdef ZPAQZSTD
+	d+= " ZPAQZSTD";
+#endif
+#ifdef HWSHA1
+	d+= " HWSHA1";
+#endif
+#ifdef HWSHA2
+	d+= " HWSHA2";
+#endif
+#ifdef HWBLAKE3
+	d+= " HWBLAKE3";
+#endif
+#ifdef IPV6
+	d+= " IPV6";
+#endif
+#ifdef NOAES
+	d+= " NOAES";
+#endif
+#ifdef NOFRANZEN
+	d+= " NOFRANZEN";
+#endif
+#ifdef NOEMAIL
+	d+= " NOEMAIL";
+#endif
+#ifdef NOUPDATE
+	d+= " NOUPDATE";
+#endif
+#ifdef BUILD_FEDORA
+	d+= " BUILD_FEDORA";
+#endif
+#ifdef NOJIT
+	d+= " NOJIT";
+#endif
+#ifdef ALIGNMALLOC
+	d+= " ALIGNMALLOC";
+#endif
+#ifdef BIG
+	d+= " BIG";
+#endif
+#ifdef ANCIENT
+	d+= " ANCIENT";
+#endif
+#ifdef SOLARIS
+	d+= " SOLARIS";
+#endif
+#ifdef ESX
+	d+= " ESX";
+#endif
+#ifdef NAS
+	d+= " NAS";
+#endif
+#ifdef DEBUG
+	d+= " DEBUG";
+#endif
+	versione_riga("-D in effect", (d != "") ? d.substr(1) : "none");
+
+	///////////////////////////////////////////////////////////////// what is inside
+	versione_titolo("What is inside");
+#if (defined(__amd64__) || defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)) && !defined(NOJIT) && !defined(BIG) && !defined(ESX) && !defined(NAS)
+	versione_opzione("JIT", flagnojit ? "inside, but OFF (-nojit, or the system gave no executable memory): ZPAQL interpreted, slower" : "yes: ZPAQL turned into x86 code, fast", !flagnojit);
+#else
+	versione_opzione("JIT", "no: ZPAQL interpreted (slower; x86 only)", false);
+#endif
+	string zstd= "no (-m8 not available)";
+#ifdef ZPAQZSTD
+	zstd= string("yes, zstd ") + zzstd::ZSTD_versionString() + " (-m8)";
+#endif // corresponds to #ifdef (#ifdef ZPAQZSTD)
+	versione_sino("zstd", zstd);
+	string monta= "no";
+#if defined(_WIN32)
+	monta= "no (a .vhd is mounted by Windows itself)";
+#endif
+#ifdef ZPAQMOUNT ///NOSFTPSTART
+#if defined(_WIN32)
+	monta= "yes, with WinFsp";
+#elif defined(ZPAQMOUNT_FUSE2)
+	monta= "yes, with FUSE 2";
+#else
+	monta= "yes, with FUSE 3";
+#endif
+#endif ///NOSFTPEND
+	versione_sino("mount of archives", monta);
+	string remoto= "no";
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef SFTP
+	remoto= "yes (sftp, ssh, cloud)";
+#ifdef _WIN64
+	if (wehaveresources())
+		remoto+= ", its DLLs inside the executable";
+#endif
+#endif
+#endif ///NOSFTPEND
+	versione_sino("SFTP", remoto);
+	const string sfx= ZSFX_VERSION;
+	versione_sino("SFX module", (sfx != "") ? "yes, " + sfx.substr(0, sfx.size() - 1) : "no");
+#ifdef NOAES
+	versione_sino("encryption -key", "no (-DNOAES)");
+#else
+	versione_sino("encryption -key", "yes (AES-256)");
+#endif
+	string franzen= "no (-DNOFRANZEN)";
+#ifndef NOFRANZEN
+	franzen= "yes, with franzsodium (inside)";
+#endif
+#ifdef ZPAQFULL ///NOSFTPSTART
+#if !defined(NOFRANZEN) && defined(ZPAQLIBSODIUM)
+	franzen+= "; libsodium with -libsodium";
+#endif
+#endif ///NOSFTPEND
+	versione_sino("Franzen", franzen);
+	string aggiorna= "no";
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifndef NOUPDATE
+	aggiorna= "yes (update, upgrade)";
+#endif
+#endif ///NOSFTPEND
+	versione_sino("self update", aggiorna);
+#ifdef NOEMAIL
+	versione_sino("e-mail reports", "no (-DNOEMAIL)");
+#else
+	versione_sino("e-mail reports", "yes (-mailfull, -mailprivacy)");
+#endif
+	string sha  = "no: SHA-1 and SHA-256 in software";
+	bool   shasi= false;
+#if defined(HWSHA1)
+	sha  = "SHA-1 with the instructions of the CPU (-DHWSHA1)";
+	shasi= true;
+#endif
+#if defined(HWSHA2)
+	{
+		uint32_t a= 0, b= 0, c= 0, e= 0;
+		getcpuid(0, 0, a, b, c, e);
+		bool ce= false;
+		if (a >= 7)
+		{
+			getcpuid(7, 0, a, b, c, e);
+			ce= (b & (1UL << 29)) != 0;
+		}
+		sha  = string("SHA-1 and SHA-256 with the instructions of the CPU (-DHWSHA2): this CPU ") + (ce ? "has them" : "does NOT have them, software");
+		shasi= ce;
+	}
+#endif
+	versione_opzione("hardware SHA", sha, shasi);
+	const int corsie= (int)blake3_simd_degree();
+	snprintf(x, sizeof(x), "%s, %d lane%s now (%s)",
+#ifdef HWBLAKE3
+			 "with SIMD (-DHWBLAKE3)",
+#else
+			 "portable",
+#endif
+			 corsie, (corsie == 1) ? "" : "s", (corsie >= 16) ? "AVX-512" : ((corsie >= 8) ? "AVX2" : ((corsie >= 4) ? "SSE4.1, SSE2 or NEON" : "no SIMD")));
+	versione_opzione("BLAKE3", x, corsie > 1);
+#ifdef _WIN32
+	versione_riga("download", "by Windows (URLDownloadToFile)");
+#else
+#ifdef IPV6
+	versione_riga("download", "own http client, IPv4 and IPv6");
+#else
+	versione_riga("download", "own http client, IPv4");
+#endif
+#endif
+
+	///////////////////////////////////////////////////////////////// where it runs
+	versione_titolo("Where it runs");
+#ifdef _WIN32
+	{
+		const wchar_t *chiave  = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+		string		   prodotto= versione_registro(chiave, L"ProductName");
+		const string   build   = versione_registro(chiave, L"CurrentBuildNumber");
+		/// (the registry of a Windows 11 still says "Windows 10": the build tells them apart)
+		if ((prodotto.substr(0, 10) == "Windows 10") && (atoi(build.c_str()) >= 22000))
+			prodotto= "Windows 11" + prodotto.substr(10);
+		string edizione= versione_registro(chiave, L"DisplayVersion");
+		if (edizione == "")
+			edizione= versione_registro(chiave, L"ReleaseId");
+		const string ubr= versione_registro(chiave, L"UBR");
+		snprintf(x, sizeof(x), "%s%s%s (build %s%s%s)%s", (prodotto != "") ? prodotto.c_str() : "Windows", (edizione != "") ? " " : "", edizione.c_str(), build.c_str(), (ubr != "") ? "." : "", ubr.c_str(), iswindowsxp() ? ", Windows XP or 2003" : "");
+		versione_riga("system", x);
+		typedef BOOL(WINAPI * t_wow)(HANDLE, PBOOL);
+		HMODULE k	= GetModuleHandleW(L"kernel32.dll");
+		t_wow	wow = k ? (t_wow)GetProcAddress(k, "IsWow64Process") : NULL;
+		BOOL	in32= FALSE;
+		if (wow)
+			wow(GetCurrentProcess(), &in32);
+		snprintf(x, sizeof(x), "%d bit%s", (int)(sizeof(void *) * 8), in32 ? ", on 64 bit Windows (WOW64)" : "");
+		versione_riga("process", x);
+		versione_riga("administrator", iswindowsxp() ? "not known (Windows XP)" : (isadmin() ? "yes (elevated)" : "no"));
+		versione_riga("CPU", versione_registro(L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", L"ProcessorNameString"));
+	}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+#ifdef unix
+	{
+		struct utsname u;
+		if (uname(&u) == 0)
+		{
+			snprintf(x, sizeof(x), "%s %s %s", u.sysname, u.release, u.machine);
+			versione_riga("system", x);
+		}
+#ifdef __linux__
+		const string distribuzione= versione_chiave("/etc/os-release", "PRETTY_NAME");
+		if (distribuzione != "")
+			versione_riga("distribution", distribuzione);
+#endif
+		snprintf(x, sizeof(x), "%d bit", (int)(sizeof(void *) * 8));
+		versione_riga("process", x);
+		if (geteuid() == 0)
+			versione_riga("administrator", "yes (root)");
+		else
+		{
+			snprintf(x, sizeof(x), "no (uid %d)", (int)geteuid());
+			versione_riga("administrator", x);
+		}
+		string processore;
+#if defined(__linux__)
+		processore= versione_chiave("/proc/cpuinfo", "model name");
+		if (processore == "")
+			processore= versione_chiave("/proc/cpuinfo", "Hardware");
+		if (processore == "")
+			processore= versione_chiave("/proc/cpuinfo", "cpu model");
+		if (processore == "")
+			processore= versione_chiave("/proc/cpuinfo", "Processor");
+#elif defined(__APPLE__)
+		{
+			char   b[256];
+			size_t l= sizeof(b);
+			if (sysctlbyname("machdep.cpu.brand_string", b, &l, NULL, 0) == 0)
+				processore= b;
+		}
+#elif defined(__OpenBSD__)
+		{
+			int	   mib[2]= {CTL_HW, HW_MODEL};
+			char   b[256];
+			size_t l= sizeof(b);
+			if (sysctl(mib, 2, b, &l, NULL, 0) == 0)
+				processore= b;
+		}
+#elif defined(BSD)
+		{
+			char   b[256];
+			size_t l= sizeof(b);
+			if (sysctlbyname("hw.model", b, &l, NULL, 0) == 0)
+				processore= b;
+		}
+#endif
+		if (processore != "")
+			versione_riga("CPU", processore);
+	}
+#endif // corresponds to #ifdef (#ifdef unix)
+	snprintf(x, sizeof(x), "%d (the threads of -t, by default)", numberOfProcessors());
+	versione_riga("cores", x);
+	int64_t totale= 0;
+#if defined(_WIN32)
+	{
+		MEMORYSTATUSEX m;
+		m.dwLength= sizeof(m);
+		if (GlobalMemoryStatusEx(&m))
+			totale= (int64_t)m.ullTotalPhys;
+	}
+#elif defined(__linux__)
+	totale= (int64_t)atoll(versione_chiave("/proc/meminfo", "MemTotal").c_str()) * 1024;
+#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
+	totale= (int64_t)sysconf(_SC_PHYS_PAGES) * (int64_t)sysconf(_SC_PAGESIZE);
+#endif
+	const int64_t libera= getramdisksize();
+	if (totale > 0)
+		snprintf(x, sizeof(x), "%s, free %s", tohuman(totale), tohuman2(libera));
+	else
+		snprintf(x, sizeof(x), "free %s", tohuman(libera));
+	versione_riga("RAM", x);
+#ifdef _WIN32
+	{
+		const UINT pc= GetConsoleOutputCP();
+		snprintf(x, sizeof(x), "code page %u%s", (unsigned)pc, (pc == 65001) ? " (UTF-8)" : "");
+		versione_riga("console", x);
+	}
+#else
+	{
+		const char *lang= getenv("LANG");
+		versione_riga("console", string("LANG=") + ((lang != NULL) ? lang : ""));
+	}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	if ((g_lingua >= 0) && (g_lingua < (int)(sizeof(g_linguaopzioni) / sizeof(g_linguaopzioni[0]))))
+	{
+		snprintf(x, sizeof(x), "%s (%s)", g_linguaopzioni[g_lingua].nome, g_linguaopzioni[g_lingua].opzione);
+		versione_riga("help language", x);
+	}
+	return 0;
 }
 #ifdef _WIN32
 /// PROCESS_MEMORY_COUNTERS_EX, written here: no psapi.h, and K32GetProcessMemoryInfo (Windows 7) taken at run time
@@ -186115,91 +190824,17 @@ void my_handler(int s)
 
 
 /*
-	New DLL-style main
+	The real main, main() only calls it. 65.21a: the DLL (-DDLL) is gone, I decided. It could not run twice in the
+	same process (globals, exit()): a GUI runs zpaqfranz as a program, with its output for machines
 */
 int zpaq_main_internal(int argc, const char **argv);
 #ifndef ANCIENT
 int scegli_riga(int argc, const char **argv, std::vector<std::string> &o_riga); /// 65.9y: with franzscegli, after the TUI
 #endif
 
-#ifdef DLL
-extern "C" BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
-{
-    switch (fdwReason)
-    {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            break;
-        case DLL_PROCESS_DETACH:
-            break;
-    }
-    return TRUE;
-}
-
-extern "C" {
-    // Set callback for stdout output
-    __declspec(dllexport) void Zpaq_SetOutputCallback(OutputCallback callback) {
-        g_outputCallback = callback;
-    }
-    
-    // Set callback for stderr output
-    __declspec(dllexport) void Zpaq_SetErrorCallback(OutputCallback callback) {
-        g_errorCallback = callback;
-    }
-    
-    // Reset callbacks to default (console output)
-    __declspec(dllexport) void Zpaq_ResetCallbacks() {
-        g_outputCallback = nullptr;
-        g_errorCallback = nullptr;
-    }
-    
-    __declspec(dllexport) int Zpaq_RunCommand(const char* lpCmdLine) {
-        
-        // Parsing command line
-        std::vector<std::string> args;
-        std::string current_arg;
-        bool in_quotes = false;
-        const char* p = lpCmdLine;
-        
-        // argv[0] = nome programma
-        args.push_back("zpaqfranz.dll");
-
-        while (*p) {
-            if (*p == '"') {
-                in_quotes = !in_quotes;
-            } else if (*p == ' ' && !in_quotes) {
-                if (!current_arg.empty()) {
-                    args.push_back(current_arg);
-                    current_arg.clear();
-                }
-            } else {
-                current_arg += *p;
-            }
-            p++;
-        }
-        if (!current_arg.empty()) {
-            args.push_back(current_arg);
-        }
-
-        // Crea argv C-style
-        std::vector<const char*> argv_vec;
-        for (const auto& s : args) {
-            argv_vec.push_back(s.c_str());
-        }
-
-        // Esegui
-        try {
-            return zpaq_main_internal(static_cast<int>(argv_vec.size()), argv_vec.data());
-        } catch (...) {
-            return -1;
-        }
-    }
-}
-#endif // DLL
 
 
 /// NO DLL mode
-#ifndef DLL
 
 // Convert argv to UTF-8 and replace \ with /
 #ifdef unix
@@ -186228,7 +190863,6 @@ int main()
     return zpaq_main_internal(argc, &argp[0]);
 }
 #endif // unix
-#endif // ifndef DLL
 
 /// 65.14l: a language by its name: en it ru, english italiano russian..., it_IT.UTF-8 (a locale of *nix). -1: none
 static int lingua_dalnome(const string &i_nome)
@@ -186352,13 +190986,15 @@ int zpaq_main_internal(int argc, const char **argv)
         flagnocolor = true;
 
     g_start = mtime(); // get start time
+    if (argc > 1)
+        g_json_comando = argv[1]; /// 65.21b: the command, for the "start" line of -json
 
 #if (((!defined(NAS)) && (defined(ANCIENT))) || (defined(SOLARIS)))
 #else
     signal(SIGINT, my_handler); // the control-C handler
 #endif
     static bool colorialluscita= false; /// 65.16f: the colors and the cursor of the console as they were, whatever the
-    if (!colorialluscita)               /// exit (once: this runs again in the same process as a DLL)
+    if (!colorialluscita)               /// exit (once)
     {
         colorialluscita= true;
         atexit(colori_alluscita);
@@ -186459,7 +191095,6 @@ int zpaq_main_internal(int argc, const char **argv)
     if (!iniriga.empty())
         lingua_scegli(argc, argv, linguainiargv, false);
 
-#ifndef DLL
     /// 65.12d: an archive (.zpaq, .franzen) in the place of the command is tui on it, and what comes after
     /// goes along as it is: zpaqfranz x.zpaq -all = zpaqfranz tui x.zpaq -all. So a double click on an
     /// archive, when the system opens it with zpaqfranz. On a console only, as the chooser (scegli_riga):
@@ -186479,7 +191114,6 @@ int zpaq_main_internal(int argc, const char **argv)
             argv = &tuiargv[0];
         }
     }
-#endif
 #ifndef ANCIENT
     /// 65.9y: a command that wants an archive, typed without one on a console (zpaqfranz t): the archive
     /// and the switches are chosen on a screen (franzscegli), and the line goes on from here as if it was
@@ -186505,9 +191139,17 @@ int zpaq_main_internal(int argc, const char **argv)
     Jidac jidac;
     pjidac = &jidac;
     int risultatoparametri = jidac.loadparameters(argc, argv);
+    if (flagjson)
+    {
+        flagcatpaqmode = true;  /// 65.21b: -json, no progress lines for a console (catpaqmode does it everywhere)
+        atexit(json_alluscita); /// and the "end" line also after an exit() somewhere else
+    }
 
     if (risultatoparametri > 0)
+    {
+        json_fine(risultatoparametri);
         return risultatoparametri;
+    }
     int errorcode = 0;
     try
     {
@@ -186664,14 +191306,19 @@ int zpaq_main_internal(int argc, const char **argv)
         myprintf("01301: RAM for files' data (approx) ~%18s\n", migliaia(dt_ram + edt_ram));
     }
 
-    if (flagpause)
+    /// 65.21n: -pause lasts 10 seconds, -timer X seconds (-timer 1: it ends after 1 second; -timer 0: no wait).
+    /// The elevated window too (the relaunch for the administrator rights: 00565, 91546, 77115 add -pause), the
+    /// line being the one typed. The countdown says the seconds left (it said 9..0)
+    if (flagpause && (g_timer != 0))
     {
+        const unsigned int secondi = (g_timer > 0) ? (unsigned int)g_timer : 10;
         myprintf("\n");
         int thekey = 0;
         color_cyan();
-        for (int countdown = 9; countdown >= 0 && (!iskeypressed(thekey)); countdown--)
+        for (unsigned int countdown = secondi; countdown > 0 && (!iskeypressed(thekey)); countdown--)
         {
-            myprintf("Press any key to continue (or wait %d)\r", countdown);
+            myprintf("Press any key to continue (or wait %u)    \r", countdown);
+            fflush(stdout);
             sleep(1);
         }
         color_restore();
@@ -186836,6 +191483,7 @@ int zpaq_main_internal(int argc, const char **argv)
     }
 #endif
     color_restore();
+    json_fine(errorcode); /// 65.21b: -json, the "end" line
 #ifdef ZPAQFULL
     if (pjidac != NULL)
         if (flagshutdown)
@@ -186844,11 +191492,6 @@ int zpaq_main_internal(int argc, const char **argv)
 
     return errorcode;
 }
-/*
-BEWARE of exit() and seppuku() in DLL => kills everyone
-Some refactoring needed
-*/
-
 /// 55.10, reworked. Not 255-shrink, no dirnameifalreadyexists
 int Jidac::utf()
 {
@@ -193465,23 +198108,15 @@ myprintf("VEDIAMO: files[0] = %s, folder = %s\n",
                 myblock.isdir = isdirectory(p->first);
                 myblock.flaghashstored = false;
                 
+                /// 65.21i: with a hash (the duplicates) -minsize and -maxsize were checked here again, strict (> and
+                /// <) and -maxsize not at all with -minsize: a file of exactly -minsize or -maxsize bytes was left out
+                /// (dir -xxhash -maxsize 5000 did not show two equal files of 5.000 bytes). The scan has already
+                /// filtered on the size and on the date (-minsize -maxsize -datefrom -dateto, ends included), as for
+                /// the dir with no hash
                 if (flagduplicati)
                 {
                     if (!myblock.isdir)
-                    {
-                        if (minsize)
-                        {
-                            if (myblock.size > minsize)
-                                fileandsize.push_back(myblock);
-                        }
-                        else if (maxsize)
-                        {
-                            if (myblock.size < maxsize)
-                                fileandsize.push_back(myblock);
-                        }
-                        else
-                            fileandsize.push_back(myblock);
-                    }
+                        fileandsize.push_back(myblock);
                 }
                 else
                     fileandsize.push_back(myblock);
@@ -194735,14 +199370,22 @@ std::string devicetoname(const std::string &i_device)
 	return result;
 }
 
-void Jidac::updatehash(DTMap::iterator *i_p, char *i_buf, int i_buflen)
+void Jidac::updatehash(DTMap::iterator *i_p, char *i_buf, int i_buflen, uint32_t *o_crcpezzo, bool i_solocrc)
 {
 	if (i_p == NULL)
 		return;
 	if (i_buf == NULL)
 		return;
 	(*i_p)->second.hashedsize+= i_buflen;
-	(*i_p)->second.file_crc32= crc32_16bytes(i_buf, i_buflen, (*i_p)->second.file_crc32);
+	if (o_crcpezzo) /// 65.21 -wim FD3: the CRC-32 of this piece by itself too, then put after the one of the file
+	{
+		*o_crcpezzo				 = crc32_16bytes(i_buf, i_buflen, 0);
+		(*i_p)->second.file_crc32= wim_crccombina((*i_p)->second.file_crc32, *o_crcpezzo, (size_t)i_buflen);
+		if (i_solocrc) /// skipped elements will come: the hash of the file cannot be taken, CRC-32 only
+			return;
+	}
+	else
+		(*i_p)->second.file_crc32= crc32_16bytes(i_buf, i_buflen, (*i_p)->second.file_crc32);
 	if ((g_franzotype == FRANZO_XXHASH64) || (g_franzotype == FRANZO_XXHASH64B))
 		if ((*i_p)->second.pfile_xxhash64)
 			(*(*i_p)->second.pfile_xxhash64).add(i_buf, i_buflen);
@@ -194900,6 +199543,9 @@ int Jidac::handle_vhd_read(char *buf, int g_ioBUFSIZE,
 		return -1;
 
 	int bytesletti= elaboravhd(buf, g_ioBUFSIZE);
+
+	if (bytesletti == FRANZIMAGER_SALTATO) /// 65.21 -wim FD3: a skipped element (add2, -turbo, -wim only)
+		return FRANZIMAGER_SALTATO;
 
 	if (bytesletti == -2)
 	{
@@ -199931,12 +204577,6 @@ int Jidac::adminrun()
 #endif /// NOSFTPEND
 
 #ifdef _WIN32
-#ifdef DLL
-int Jidac::windowsc()
-{
-	return 0;
-}
-#else
 int Jidac::windowsc()
 {
 #ifdef _WIN32
@@ -200063,7 +204703,6 @@ int Jidac::windowsc()
 	return 2;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
-#endif
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 /*
 	Hashing (multithread) dt and edt
@@ -200752,9 +205391,9 @@ int Jidac::proxvzdump()
 	if (!proxvz_destinazione(files[0], cartella, unico))
 		return 2;
 	if (g_ifexist != "")
-		if (!direxists(g_ifexist))
+		if (!ifexist_presente(g_ifexist))
 		{
-			myprintf("79566! Abort because -ifexist <<%Z>>\n", g_ifexist.c_str());
+			myprintf("79566! Abort because -ifexist <<%Z>> is not there (no file, no folder)\n", g_ifexist.c_str());
 			return 2;
 		}
 	const string	 qemu= "/etc/pve/qemu-server/";
@@ -201182,9 +205821,9 @@ int Jidac::zfsproxbackup()
 	if (!proxvz_destinazione(files[0], cartella, unico))
 		return 2;
 	if (g_ifexist != "")
-		if (!direxists(g_ifexist))
+		if (!ifexist_presente(g_ifexist))
 		{
-			myprintf("79566! Abort because -ifexist <<%Z>>\n", g_ifexist.c_str());
+			myprintf("79566! Abort because -ifexist <<%Z>> is not there (no file, no folder)\n", g_ifexist.c_str());
 			return 2;
 		}
 	const string   qemu= "/etc/pve/qemu-server/";
@@ -206192,6 +210831,10 @@ int Jidac::consolidatebackup()
 	else
 		archive= lonezpaq;
 	command= 'x';
+	g_datefrom= 0; /// 65.21j: x now takes them: the consolidated archive has every file, whatever the date
+	g_dateto  = 0;
+	minsize	  = 0; /// 65.21k: and whatever the size
+	maxsize	  = 0;
 	extract();
 	if (prendidimensionefile(newindexname.c_str()) < 104)
 	{
@@ -210083,16 +214726,8 @@ static void seq_scrivi(bool i_stderr, const char *i_formato, ...)
 {
 	va_list args;
 	va_start(args, i_formato);
-	if (i_stderr)
+	if (i_stderr && (!flagjson)) /// 65.21b: -json, everything is a JSON line on stdout
 		vfprintf(stderr, i_formato, args);
-#ifdef DLL
-	else if (g_outputCallback)
-	{
-		std::string buffer;
-		zpaqfranz_vformat(buffer, i_formato, args, false);
-		g_outputCallback(buffer.c_str());
-	}
-#endif
 	else
 		my_vprintf_refactored(i_formato, args);
 	va_end(args);
@@ -210513,8 +215148,16 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
                             eta = (int)(((double)elapsed * (i_totali - i_lavorati) / i_lavorati) / 1000.0);
                         }
                         
+                        if (flagjson) /// 65.21b. 65.21e: only with a total (list_g_dimensione is of pakka: here 0, so 1)
+                        {
+                            if (list_g_dimensione > 0)
+                                json_prog("dec", percentuale, i_lavorati, i_totali, eta);
+                        }
+                        else
+                        {
                         printf("@DEC@DEC@%d@%lld@%lld@%d\n", percentuale, (long long)i_lavorati, (long long)i_totali, eta);
-                        fflush(stdout); 
+                        fflush(stdout);
+                        }
                         last_dec_percent = percentuale; 
                     }
                 }
@@ -210995,6 +215638,12 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								bool issel= false;
 								if (!i_isinfo)
 									issel= sc_nofiltro ? true : isselected(fn.c_str(), i_renamed, -1); /// -fastadd: the selection after
+								#ifdef _WIN32
+								/// 65.21 -wim FD18: -wim takes the state of the image of before from the archive (image_X.wim, a file of the image):
+								/// add selects by the command line (c:), and the files of an image do not match it
+								if ((!issel) && (!i_isinfo) && flagwim && ((fn.size() == 11) || ((fn.size() == 12) && (fn[11] == 'd'))) && (fn.compare(0, 6, "image_") == 0) && (fn[6] >= 'A') && (fn[6] <= 'Z') && (fn.compare(7, 4, ".wim") == 0)) /// FD19: and .wimd
+									issel= true;
+								#endif
 								/// 65.9t: i -verbose shows what ac saved: its metafile is kept, with its fragments
 								/// (the only file the info command takes: g_acmeta, never in dt)
 								const bool acmeta= (command == 'i') && flagverbose && acmeta_nome(originalfilename);
@@ -213385,6 +218034,24 @@ class pakka_Archive : public libzpaq::Reader
 
 // Read arc (default: archive) up to -date into ht, dt, ver. Return place to
 // append. If errors is not NULL then set it to number of errors found.
+/// 65.21c: the lines of pakka (its reader is the list of zpaq 7.15): as printf did; with -json "text" lines
+/// (the pieces of one line put together: ":all", then "\n")
+static void pakka_dice(const char *i_formato, ...)
+{
+	va_list args;
+	va_start(args, i_formato);
+	if (!flagjson)
+	{
+		vprintf(i_formato, args);
+		va_end(args);
+		return;
+	}
+	char buffer[2048];
+	vsnprintf(buffer, sizeof(buffer), i_formato, args);
+	va_end(args);
+	json_pezzo(buffer);
+}
+
 int64_t Jidac::pakka_read_archive(const char *arc)
 {
 	dcsize= dhsize= 0;
@@ -213392,23 +218059,23 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 	pakka_Archive in;
 	if (!in.open(arc))
 	{
-		list_printutf8(arc, stderr);
-		printf(" not found.\n");
-		return 2;
+		/// 65.21c: it was " not found." on stderr and 2 given back as the size read: an empty list, exit code 0
+		myprintf("66936! pakka: <<%Z>> cannot be opened (not there?): nothing done\n", arc);
+		return -1;
 	}
 
 	list_print_datetime();
 
 	if (all)
-		printf(":all");
+		pakka_dice(":all");
 	else
 	{
 		if (version == LIST_DEFAULT_VERSION)
-			printf(":default");
+			pakka_dice(":default");
 		else
-			printf(":until %1.0f: ", version + 0.0);
+			pakka_dice(":until %1.0f: ", version + 0.0);
 	}
-	printf("\n");
+	pakka_dice("\n");
 
 	// Test password
 	if (g_password)
@@ -213417,9 +218084,9 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 		const int nr  = in.read(s, 4);
 		if (nr > 0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3] < 1))
 		{
-			list_print_datetime();
-			printf("zpaqlist:password incorrect\n");
-			exit(1);
+			/// 65.21c: it was exit(1), a WARNING, for a list that cannot be read at all: an error, as everywhere
+			myprintf("66937! pakka: the password is not right (or this is not a zpaq archive): nothing listed\n");
+			seppuku(2);
 		}
 		in.seek(-nr, SEEK_CUR);
 	}
@@ -213467,7 +218134,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 				if (!d.findBlock())
 					break;
 				pass= LIST_RECOVER;
-				printf("Attempting to recover fragment tables...\n");
+				pakka_dice("Attempting to recover fragment tables...\n");
 			}
 			else
 				break;
@@ -213514,7 +218181,12 @@ int64_t Jidac::pakka_read_archive(const char *arc)
                             eta = (int)(((double)elapsed * (i_totali - i_lavorati) / i_lavorati) / 1000.0);
                         }
                         
+                        if (flagjson) /// 65.21b
+                            json_prog("dec", percentuale, i_lavorati, i_totali, eta);
+                        else
+                        {
               			printf("@SPK@DEC@%d@%lld@%lld@%d\n", percentuale, (long long)i_lavorati, (long long)i_totali, eta);	                        fflush(stdout); // Svuota il buffer verso Lazarus
+                        }
                         
                         last_spk_percent = percentuale; // Aggiorna la memoria
                     }
@@ -213544,7 +218216,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 						{
 							int64_t startprintf= mtime();
 							list_print_datetime();
-							printf("Current block %08d\n", blocchini);
+							pakka_dice("Current block %08d\n", blocchini);
 							fflush(stdout);
 							total_time+= mtime() - startprintf;
 						}
@@ -213614,14 +218286,14 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 						d.readSegmentEnd(sha1result);
 						if (usize != int64_t(sha1.usize()))
 						{
-							printf("%s size should be %1.0f, is %1.0f\n",
+							pakka_dice("%s size should be %1.0f, is %1.0f\n",
 								   filename.s.c_str(), double(usize),
 								   double(sha1.usize()));
 							libzpaq::error("incorrect block size");
 						}
 						if (sha1result[0] && memcmp(sha1result + 1, sha1.result(), 20))
 						{
-							printf("%s checksum error\n", filename.s.c_str());
+							pakka_dice("%s checksum error\n", filename.s.c_str());
 							libzpaq::error("bad checksum");
 						}
 					}
@@ -213642,7 +218314,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 							jmp			 = list_btol(s);
 							if (jmp < 0)
 							{
-								printf("Incomplete transaction ignored\n");
+								pakka_dice("Incomplete transaction ignored\n");
 								isbreak= true;
 							}
 							else if (jmp > 0)
@@ -213653,7 +218325,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 						}
 						if (os.size() != 8)
 						{
-							printf("Bad JIDAC header size: %d\n", list_size(os));
+							pakka_dice("Bad JIDAC header size: %d\n", list_size(os));
 							isbreak= true;
 						}
 						if (isbreak)
@@ -213682,7 +218354,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 						const unsigned n= (os.size() - 4) / 24;
 						if (list_ht.size() > num)
 						{
-							printf(
+							pakka_dice(
 								"Unordered fragment tables: expected >= %d found %1.0f\n",
 								list_size(list_ht), double(num));
 							pass= LIST_ERR;
@@ -213783,12 +218455,12 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 								n= num;
 							unsigned f= list_btoi(p); // number of fragments
 							if (n != num)
-								printf("fragments %u-%u were moved to %u-%u\n",
+								pakka_dice("fragments %u-%u were moved to %u-%u\n",
 									   n, n + f - 1, num, num + f - 1);
 							n= num;
 							if (f && f * 4 + 8 <= os.size())
 							{
-								printf("Recovering fragments %u-%u at %1.0f\n",
+								pakka_dice("Recovering fragments %u-%u at %1.0f\n",
 									   n, n + f - 1, double(block_offset));
 								while (list_ht.size() <= n + f)
 									list_ht.push_back(list_HT());
@@ -213805,7 +218477,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 								// Compute hashes
 								if (sum + f * 4 + 8 == os.size())
 								{
-									printf("Computing hashes for %s bytes\n", migliaia(sum));
+									pakka_dice("Computing hashes for %s bytes\n", migliaia(sum));
 									libzpaq::SHA1 sha1;
 									p= os.c_str();
 									for (unsigned i= 0; i < f; ++i)
@@ -213824,7 +218496,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 
 						if (list_ht[num].csize != block_offset)
 						{
-							printf("Changing block %s offset from %1.0f to %1.0f\n",
+							pakka_dice("Changing block %s offset from %1.0f to %1.0f\n",
 								   migliaia(num), double(list_ht[num].csize), double(block_offset));
 							list_ht[num].csize= block_offset;
 						}
@@ -213833,7 +218505,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 					// Bad JIDAC block
 					else if (pass != LIST_RECOVER)
 					{
-						printf("Bad JIDAC block ignored: %s %s\n",
+						pakka_dice("Bad JIDAC block ignored: %s %s\n",
 							   filename.s.c_str(), comment.s.c_str());
 					}
 				}
@@ -213898,14 +218570,14 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 	if (in.tell() > 32 * (g_password != 0) && !found_data)
 	{
 		list_print_datetime();
-		printf("archive contains no data\n");
+		pakka_dice("archive contains no data\n");
 	}
 	in.close();
 
 	// Recompute file sizes in recover mode
 	if (pass == LIST_RECOVER)
 	{
-		printf("Recomputing file sizes\n");
+		pakka_dice("Recomputing file sizes\n");
 		for (list_DTMap::iterator p= list_dt.begin(); p != list_dt.end(); ++p)
 		{
 			for (unsigned i= 0; i < p->second.dtv.size(); ++i)
@@ -213921,10 +218593,11 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 		}
 	}
 
-	fprintf(list_outputlog, "!%d\n", list_size(list_ver) - 1);
+	if (!flagjson) /// 65.21c: -json, the versions are in "count"
+		fprintf(list_outputlog, "!%d\n", list_size(list_ver) - 1);
 	///	fprintf(list_outputlog, "$%s\n", atoi(block_offset));
 	list_print_datetime();
-	printf("OUTPUT...V %d, F %d, %s bytes %d blocks Otime %1.3f s\n",
+	pakka_dice("OUTPUT...V %d, F %d, %s bytes %d blocks Otime %1.3f s\n",
 		   list_size(list_ver) - 1, list_size(list_dt), migliaia(block_offset), blocchini, (total_time / 1000.0));
 
 	return block_offset;
@@ -213934,97 +218607,7 @@ int64_t Jidac::pakka_read_archive(const char *arc)
 // List contents
 
 
-// pakka for ... catpaq DLL
-#ifdef DLL 
-int Jidac::pakkalist()
-{
-	// Init archive state
-	list_ht.resize(1);	// element 0 not used
-	list_ver.resize(1); // version 0
-	dhsize= dcsize= 0;
-
-	int64_t csize= pakka_read_archive(archive.c_str());
-	if (csize == 0)
-	{
-		myprintf("03163: Readed archive size 0\n");
-		return 2;
-	}
-
-	vector<list_DTMap::const_iterator> filelist;
-	for (list_DTMap::iterator p= list_dt.begin(); p != list_dt.end(); ++p)
-	{
-		if (p->second.dtv.size() < 1)
-		{
-			myprintf("97064: Invalid index entry: %s\n", p->first.c_str());
-			return 2;
-		}
-		if (!strstr(p->first.c_str(), ":$DATA")) // fuck off windows metadata
-			filelist.push_back(p);
-	}
-
-	/// versions
-	for (int i= 0; i < list_size(list_ver); ++i)
-		if (!(i == 0 && list_ver[i].updates == 0 && list_ver[i].deletes == 0 && list_ver[i].date == 0 && list_ver[i].usize == 0))
-			myprintf("| %6d %s\n", i, list_dateToString(list_ver[i].date).c_str());
-
-	string lastfile= "?";
-
-	unsigned int dieci= 1;
-	unsigned int righe= 0;
-	for (unsigned fi= 0; fi < filelist.size(); ++fi)
-	{
-		list_DTMap::const_iterator p= filelist[fi];
-		for (unsigned i= 0; i < p->second.dtv.size(); ++i)
-			if (p->second.dtv[i].version >= 1 // since
-				&& (all || (i + 1 == p->second.dtv.size() && p->second.dtv[i].date)))
-				if (!strstr(p->first.c_str(), ":$DATA"))
-					righe+= 4;
-	}
-	/// I need line numbers at the head, not at the tail, of the output
-	myprintf("+%d\n", (int)righe);
-
-	unsigned int blocco		= (filelist.size() / 10) + 1;
-	
-	for (unsigned fi= 0; fi < filelist.size(); ++fi)
-	{
-		if ((fi + 1) % blocco == 0)
-		{
-			///lato PASCAL ignora queste righe, o meglio trasfondile dentro il LOG per l'avanzamento
-			myprintf("$$$NULL-W %03d%% %08d/%.08d\n", int((dieci++) * 10), int(fi + 1), (int)filelist.size());
-		}
-		list_DTMap::const_iterator p= filelist[fi];
-		for (unsigned i= 0; i < p->second.dtv.size(); ++i)
-			if (p->second.dtv[i].version >= 1 // since
-				&& (all || (i + 1 == p->second.dtv.size() && p->second.dtv[i].date)))
-			{
-				myprintf("-%d\n", p->second.dtv[i].version);
-				if (p->second.dtv[i].date)
-					myprintf("%s\n%s\n",
-							list_mydateToString(p->second.dtv[i].date).c_str(),
-							migliaia(p->second.dtv[i].size));
-				else
-					myprintf("D\n0\n");
-///attenzione a UTF-8 per i nomi dei file
-///attenzione al formato "deduplicato" (che è di default)
-				if (flagdistinct)
-					myprintf("%s",p->first.c_str());
-				else
-				{
-					if (lastfile != p->first.c_str())
-					{
-						myprintf("%s",p->first.c_str());
-						lastfile= p->first.c_str();
-					}
-					else
-						myprintf("?");
-				}
-				myprintf("\n");
-			}
-	}
-	return 0;
-}
-
-#else
+/// pakka: the list for catpaq (every version of a file, one after the other)
 int Jidac::pakkalist()
 {
 	// Init archive state
@@ -214067,6 +218650,8 @@ int Jidac::pakkalist()
 		seppuku();
 	}
 	csize= pakka_read_archive(archive.c_str());
+	if (csize < 0) /// 65.21c: the archive cannot be opened (66936)
+		return 2;
 	if (csize == 0)
 	{
 		myprintf("03163: Readed archive size 0\n");
@@ -214078,11 +218663,94 @@ int Jidac::pakkalist()
 	{
 		if (p->second.dtv.size() < 1)
 		{
-			printf("Invalid index entry: %s\n", p->first.c_str());
+			pakka_dice("Invalid index entry: %s\n", p->first.c_str());
 			libzpaq::error("corrupted index");
 		}
 		if (!strstr(p->first.c_str(), ":$DATA")) // fuck off windows metadata
 			filelist.push_back(p);
+	}
+
+	if (flagjson)
+	{
+		/*
+			65.21c: -json. The same list, a JSON object per line: the shape of pakka (a file once, all its versions
+			after it, nothing to sort), what catpaq needs and nothing to take apart twice. The numbers as numbers,
+			the dates as zpaq keeps them (YYYYMMDDHHMMSS, the list above only moves its digits), 0 = deleted there
+			  {"ev":"count","files":F,"vers":V,"recs":R}   first, to make room (R: the versions of all the files below)
+			  {"ev":"ver","n":3,"date":20261111100000,"add":12,"del":1,"bytes":1234567}
+			  {"f":"c:/doc/a.txt","v":[1,20261101090000,123,3,0,0]}
+			65.21d: the line of a file is the one written a million times: no "ev" (the key "f" says what it is) and
+			its versions three numbers at a time (version, date, size), no [] each. I decided: it is my format, not
+			a standard. A million files: 101 MB were 22% more than the classic list
+			Which versions of a file: as above (-all every one, else the last if not deleted). With -out the list
+			goes into that file; start, prog, msg, end on stdout. Written in one go, not a flush per line
+		*/
+		int64_t nfile= 0;
+		int64_t nrec = 0;
+		int64_t nver = 0;
+		for (unsigned fi= 0; fi < filelist.size(); ++fi)
+		{
+			list_DTMap::const_iterator p= filelist[fi];
+			int64_t					   qui= 0;
+			for (unsigned i= 0; i < p->second.dtv.size(); ++i)
+				if (p->second.dtv[i].version >= 1 && (all || (i + 1 == p->second.dtv.size() && p->second.dtv[i].date)))
+					qui++;
+			if (qui > 0)
+				nfile++;
+			nrec+= qui;
+		}
+		for (int i= 0; i < list_size(list_ver); ++i)
+			if (!(i == 0 && list_ver[i].updates == 0 && list_ver[i].deletes == 0 && list_ver[i].date == 0 && list_ver[i].usize == 0))
+				nver++;
+		if (list_outputlog == stdout)
+			json_avvia();
+		char		riga[256];
+		std::string linea;
+		linea.reserve(4096);
+		snprintf(riga, sizeof(riga), "{\"ev\":\"count\",\"files\":%lld,\"vers\":%lld,\"recs\":%lld}\n",
+				 (long long)nfile, (long long)nver, (long long)nrec);
+		fputs(riga, list_outputlog);
+		for (int i= 0; i < list_size(list_ver); ++i)
+			if (!(i == 0 && list_ver[i].updates == 0 && list_ver[i].deletes == 0 && list_ver[i].date == 0 && list_ver[i].usize == 0))
+			{
+				snprintf(riga, sizeof(riga), "{\"ev\":\"ver\",\"n\":%d,\"date\":%lld,\"add\":%lld,\"del\":%lld,\"bytes\":%lld}\n",
+						 i, (long long)list_ver[i].date, (long long)list_ver[i].updates, (long long)list_ver[i].deletes,
+						 (long long)list_ver[i].usize);
+				fputs(riga, list_outputlog);
+			}
+		const unsigned int ogni	= (filelist.size() / 10) + 1;
+		const int64_t	   inizio= mtime();
+		for (unsigned fi= 0; fi < filelist.size(); ++fi)
+		{
+			list_DTMap::const_iterator p= filelist[fi];
+			linea.clear();
+			for (unsigned i= 0; i < p->second.dtv.size(); ++i)
+				if (p->second.dtv[i].version >= 1 && (all || (i + 1 == p->second.dtv.size() && p->second.dtv[i].date)))
+				{
+					if (linea.empty())
+						linea= "{\"f\":" + json_stringa(p->first) + ",\"v\":[";
+					else
+						linea+= ',';
+					snprintf(riga, sizeof(riga), "%d,%lld,%lld", p->second.dtv[i].version,
+							 (long long)p->second.dtv[i].date, (long long)(p->second.dtv[i].date ? p->second.dtv[i].size : 0));
+					linea+= riga;
+				}
+			if (!linea.empty())
+			{
+				linea+= "]}\n";
+				fwrite(linea.data(), 1, linea.size(), list_outputlog);
+			}
+			if ((fi + 1) % ogni == 0) /// ten steps, as the W lines
+			{
+				const int64_t trascorso= mtime() - inizio;
+				const int	  eta	   = (int)(((double)trascorso * (filelist.size() - fi - 1) / (fi + 1)) / 1000.0);
+				json_prog("lst", (int)(((int64_t)(fi + 1) * 100) / filelist.size()), fi + 1, filelist.size(), eta);
+			}
+		}
+		fflush(list_outputlog);
+		if (g_output != "")
+			fclose(list_outputlog);
+		return 0;
 	}
 
 	/// versions
@@ -214113,7 +218781,7 @@ int Jidac::pakkalist()
 		if ((fi + 1) % blocco == 0)
 		{
 			list_print_datetime();
-			printf("W %03d%% %08d/%.08d\n", int((dieci++) * 10), int(fi + 1), (int)filelist.size());
+			pakka_dice("W %03d%% %08d/%.08d\n", int((dieci++) * 10), int(fi + 1), (int)filelist.size());
 		}
 		list_DTMap::const_iterator p= filelist[fi];
 		for (unsigned i= 0; i < p->second.dtv.size(); ++i)
@@ -214151,16 +218819,15 @@ int Jidac::pakkalist()
 		fseeko(list_outputlog, 0, SEEK_END);
 		uint64_t outsize= ftello(list_outputlog);
 		list_print_datetime();
-		printf("Output %s bytes / %s lines in %1.3f s\n", migliaia(outsize), migliaia2(righe), (mtime() - startoutput) / 1000.0);
+		pakka_dice("Output %s bytes / %s lines in %1.3f s\n", migliaia(outsize), migliaia2(righe), (mtime() - startoutput) / 1000.0);
 		fclose(list_outputlog);
 	}
 
 	list_print_datetime();
-	printf("T=%1.3fs", (mtime() - list_global_start) / 1000.0);
-	printf(" (all OK)\n");
+	pakka_dice("T=%1.3fs", (mtime() - list_global_start) / 1000.0);
+	pakka_dice(" (all OK)\n");
 	return 0;
 }
-#endif
 
 
 bool decode_zpaq_version(const string& i_string, string &o_maj, string &o_minor, string &o_letter)
@@ -215873,9 +220540,16 @@ int Jidac::update()
 		return 2;
 	}
 
+	/// 65.21h: issue 361, written by the batch when the new exe is in place (this zpaqfranz waits for it)
+	string filefatto= filebatch + ".done";
+	if (fileexists(filefatto))
+		delete_file(filefatto.c_str());
 	fullzpaqexename= linuxtowinpath(fullzpaqexename);
 	exefile		   = linuxtowinpath(exefile);
 	filebatch	   = linuxtowinpath(filebatch);
+	const string filefattowin= linuxtowinpath(filefatto);
+	char		 mioprocesso[32];
+	snprintf(mioprocesso, sizeof(mioprocesso), "%lu", (unsigned long)GetCurrentProcessId());
 	/*
 		65.19d: the batch. Before: taskkill, del of the exe, "if exist goto again" forever (and invisible:
 		its output went into the pipe of the killed parent) when the exe could not be deleted; a del that
@@ -215889,6 +220563,15 @@ int Jidac::update()
 		65.19o: no "zpaqfranz updated" at the end. The taskkill ends this zpaqfranz, the shell writes its
 		prompt at once, and what the batch printed after it looked like a stop waiting for a key. Now
 		this zpaqfranz says it before (03867): the batch writes only when something goes wrong
+		65.21h: issue 361 (cheebusjeebus). Killed by the taskkill of its batch, this zpaqfranz always ended with
+		exit code 1 (the one taskkill /F gives), even when the update was good: no use in a script. And a
+		script went on while the batch was still moving and copying the exe. Now the taskkill skips this
+		process (/FI "PID ne", ZPAQFRANZ_UPDPID): the other zpaqfranz are killed as before, this one
+		waits. The batch renames the exe while this process runs from it (Windows lets a running exe be
+		renamed, not deleted), copies the new one, checks it, then writes ZPAQFRANZ_UPDDONE: this zpaqfranz
+		looks at the exe (SHA-256) and ends with 0 (03838) or 2 (03839). The .old, the image of this
+		process, is deleted by the batch after it has ended (30 attempts). If the exe cannot be moved for
+		10 s (a file system that does not rename a running exe) the batch kills this one too, as before
 	*/
 	string vecchio= fullzpaqexename;
 	if ((vecchio.size() > 4) && (stringtolower(vecchio.substr(vecchio.size() - 4)) == ".exe"))
@@ -215908,7 +220591,12 @@ int Jidac::update()
 		"echo Running update batch (this is good)",
 		"set /a ZPAQFRANZ_GIRI=0",
 		":again",
+		"if %ZPAQFRANZ_GIRI% geq 10 goto killall",
+		"taskkill /F /IM \"%ZPAQFRANZ_UPDIMAGE%\" /FI \"PID ne %ZPAQFRANZ_UPDPID%\" >nul 2>&1",
+		"goto killed",
+		":killall",
 		"taskkill /F /IM \"%ZPAQFRANZ_UPDIMAGE%\" >nul 2>&1",
+		":killed",
 		"move /y \"%ZPAQFRANZ_UPDEXE%\" \"%ZPAQFRANZ_UPDOLD%\" >nul 2>&1",
 		"if not exist \"%ZPAQFRANZ_UPDEXE%\" goto moved",
 		"set /a ZPAQFRANZ_GIRI+=1",
@@ -215920,12 +220608,13 @@ int Jidac::update()
 		"if errorlevel 1 goto restore",
 		"fc /b \"%ZPAQFRANZ_UPDNEW%\" \"%ZPAQFRANZ_UPDEXE%\" >nul 2>&1",
 		"if errorlevel 1 goto restore",
+		"echo done>\"%ZPAQFRANZ_UPDDONE%\"",
 		"set /a ZPAQFRANZ_GIRI=0",
 		":delold",
 		"del /f \"%ZPAQFRANZ_UPDOLD%\" >nul 2>&1",
 		"if not exist \"%ZPAQFRANZ_UPDOLD%\" goto deleted",
 		"set /a ZPAQFRANZ_GIRI+=1",
-		"if %ZPAQFRANZ_GIRI% geq 5 goto deleted",
+		"if %ZPAQFRANZ_GIRI% geq 30 goto deleted",
 		"ping -n 2 127.0.0.1 >nul",
 		"goto delold",
 		":deleted",
@@ -215942,6 +220631,7 @@ int Jidac::update()
 		":nomove",
 		"echo UPDATE FAILED: cannot move \"%ZPAQFRANZ_UPDEXE%\" away (in use? read-only?): nothing changed",
 		":end",
+		"del /f \"%ZPAQFRANZ_UPDDONE%\" >nul 2>&1",
 		"(goto) 2>nul & del /f \"%~f0\"",
 	};
 	for (unsigned int i= 0; i < sizeof(righe) / sizeof(righe[0]); i++)
@@ -215957,6 +220647,8 @@ int Jidac::update()
 	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDOLD", utow(vecchio.c_str()).c_str());
 	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDNEW", utow(exefile.c_str()).c_str());
 	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDIMAGE", utow(immagine.c_str()).c_str());
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDPID", utow(mioprocesso).c_str());		 /// 65.21h: issue 361
+	SetEnvironmentVariableW(L"ZPAQFRANZ_UPDDONE", utow(filefattowin.c_str()).c_str()); /// 65.21h: issue 361
 
 	if (flagdebug3)
 	{
@@ -215966,6 +220658,8 @@ int Jidac::update()
 		myprintf("03837: set \"ZPAQFRANZ_UPDOLD=%s\"\n", vecchio.c_str());
 		myprintf("03837: set \"ZPAQFRANZ_UPDNEW=%s\"\n", exefile.c_str());
 		myprintf("03837: set \"ZPAQFRANZ_UPDIMAGE=%s\"\n", immagine.c_str());
+		myprintf("03837: set \"ZPAQFRANZ_UPDPID=%s\"\n", mioprocesso);
+		myprintf("03837: set \"ZPAQFRANZ_UPDDONE=%s\"\n", filefattowin.c_str());
 		return 0;
 	}
 	/// cmd /d (no AutoRun) /c ""batch"", with the standard handles of this process (console, file or
@@ -215997,7 +220691,7 @@ int Jidac::update()
 	si.hStdInput = maniglie[0];
 	si.hStdOutput= maniglie[1];
 	si.hStdError = maniglie[2];
-	myprintf("03867: This zpaqfranz now closes, the new one takes its place: a message only if that fails\n");
+	myprintf("03867: The update batch now puts the new one in place: this zpaqfranz waits for it\n"); /// 65.21h: issue 361
 	fflush(stdout);
 	fflush(stderr);
 	if (!CreateProcessW(comando.c_str(), &riga[0], NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
@@ -216006,9 +220700,13 @@ int Jidac::update()
 		return 2;
 	}
 	CloseHandle(pi.hThread);
-	/// the taskkill of the batch ends this process here. If not (no taskkill.exe: XP Home), the batch
-	/// went on all the same (NTFS lets a running exe be renamed): is the exe now the new one?
-	WaitForSingleObject(pi.hProcess, INFINITE);
+	/// 65.21h: issue 361. The batch does not kill this process (only after 10 s of an exe that cannot be moved):
+	/// here until the new exe is in place (the file ZPAQFRANZ_UPDDONE) or the batch has ended (it failed, it
+	/// put the old one back). Then: is the exe now the new one? The exit code says it. The batch goes on
+	/// after this process has ended, to delete the .old (this process runs from it)
+	while (WaitForSingleObject(pi.hProcess, 100) == WAIT_TIMEOUT)
+		if (fileexists(filefatto))
+			break;
 	CloseHandle(pi.hProcess);
 	franz_do_hash dopo("SHA-256");
 	const int64_t dimensionedopo= prendidimensionefile(fullzpaqexename.c_str());
@@ -219714,12 +224412,6 @@ int Jidac::checkautotest(string i_path, bool i_quick)
     }
     return 0;
 }
-#ifdef DLL
-bool Jidac::isjitable()
-{
-	return true;
-}
-#else
 	
 bool Jidac::isjitable()
 {
@@ -219885,7 +224577,6 @@ bool Jidac::isjitable()
 	return risultato;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
-#endif
 void Jidac::tabba()
 {
 	if (g_csvstring != "")
@@ -226765,6 +231456,11 @@ string zipdefaultname(const string &i_archive)
 /// (extractstdout), with dt/ht/block already read, and the bytes go to stdout
 bool g_stdoutsequenziale= false;
 
+/// 65.21j: -datefrom -dateto (and -mindate -maxdate): a date out of the range asked
+static bool data_fuori(int64_t i_data)
+{
+	return ((g_datefrom > 0) && (i_data < g_datefrom)) || ((g_dateto > 0) && (i_data > g_dateto));
+}
 int Jidac::extract()
 {
 	archive= getbackupnameifany(archive);
@@ -227745,6 +232441,16 @@ int Jidac::extract()
 				}
 			}
 	}
+	/// 65.21j: -datefrom -dateto (-mindate -maxdate) in x too (they were taken, and ignored: everything extracted).
+	/// As in l: every name, file or folder, by its own date (the folders of the files taken are made anyway, with
+	/// the date of now). x only (zip is x too, -test too): never in a repack, nor in the extract() of consolidate
+	const bool filtrodate= (command == 'x') && (repack == "") && ((g_datefrom > 0) || (g_dateto > 0));
+	int64_t	   fuoridate = 0;
+	/// 65.21k: -minsize -maxsize in x too (taken, and ignored), as in l: a file by its size; with them a folder is not
+	/// a name of its own (the folders of the files taken are made anyway, with the date of now). The same cases as
+	/// the dates, and not with -image: there -minsize is the step of the progress of the writes (help 779)
+	const bool filtrodim= (command == 'x') && (repack == "") && (!flagimage) && ((minsize > 0) || (maxsize > 0));
+	int64_t	   fuoridim = 0;
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 	{
 		p->second.data= -1; // skip
@@ -227752,6 +232458,21 @@ int Jidac::extract()
 		/// the pieces of an image not to be written (header, footer, meta of a .vhd): no check of a
 		/// file with their name on disk (nor its deletion with -force), no count, no block
 		bool entra= (p->second.date && p->first != "") && (!p->second.donotextractme);
+		if (entra && filtrodate && data_fuori(p->second.date))
+		{
+			entra= false;
+			fuoridate++;
+		}
+		if (entra && filtrodim)
+		{
+			if (isdirectory(p->first))
+				entra= false;
+			else if (((maxsize > 0) && (maxsize < (uint64_t)p->second.size)) || ((minsize > 0) && (minsize > (uint64_t)p->second.size)))
+			{
+				entra= false;
+				fuoridim++;
+			}
+		}
 
 		if (entra)
 		{
@@ -227987,6 +232708,10 @@ int Jidac::extract()
 			}
 		} // end if selected
 	} // end for
+	if ((fuoridate > 0) && (!flagterse)) /// 65.21j
+		myprintf("03879: %s names left out by their date (-datefrom -dateto)\n", migliaia(fuoridate));
+	if ((fuoridim > 0) && (!flagterse)) /// 65.21k
+		myprintf("03880: %s files left out by their size (-minsize -maxsize)\n", migliaia(fuoridim));
 	/// x archive missing-file: nothing to do, as before, but a warning (rc 1)
 	const bool nienteselezionato= (command == 'x') && (files.size() > 0) && (total_files == 0) && (real_dirs == 0) && (skipped == 0) && (collisioni == 0);
 
@@ -239810,9 +244535,9 @@ int Jidac::mysql()
 		}
 	}
 	if (g_ifexist != "")
-		if (!direxists(g_ifexist))
+		if (!ifexist_presente(g_ifexist))
 		{
-			myprintf("79566! Abort because -ifexist <<%Z>>\n", g_ifexist.c_str());
+			myprintf("79566! Abort because -ifexist <<%Z>> is not there (no file, no folder)\n", g_ifexist.c_str());
 			return 2;
 		}
 	string themysql;
@@ -265703,9 +270428,9 @@ int Jidac::gestisciexternal()
 int Jidac::gestisciifexist()
 {
 	if (g_ifexist != "")
-		if (!direxists(g_ifexist))
+		if (!ifexist_presente(g_ifexist))
 		{
-			myprintf("01853! Abort because -ifexist <<%Z>>\n", g_ifexist.c_str());
+			myprintf("01853! Abort because -ifexist <<%Z>> is not there (no file, no folder)\n", g_ifexist.c_str());
 			return 2;
 		}
 	return 0;
@@ -265809,7 +270534,6 @@ int Jidac::gestiscidataset()
 	if ((flagvss) && (!flagimage))
 	{
 #if defined(_WIN32)
-#ifndef DLL
 
 		std::string vssTarget;
 		if (g_myvss.isvsslinked(g_franzsnap, &vssTarget))
@@ -265953,7 +270677,6 @@ int Jidac::gestiscidataset()
 				myprintf("01942: TOFILESSS %s\n", tofiles[i].c_str());
 			myprintf("\n");
 		}
-#endif
 #else
 		myprintf("01943: Volume Shadow Copies runs only on Windows\n");
 #endif // corresponds to #if (#if defined(_WIN32))
@@ -267221,11 +271944,15 @@ struct franzacimg
 	string	meta;
 	string	excluded;
 	string	zeroed;
+	string	wim; /// 65.21 -wim FD18
+	string	wimd; /// 65.21 -wim FD19
 	franzfs fsheader;
 	franzfs fsfooter;
 	franzfs fsmeta;
 	franzfs fsexcluded;
 	franzfs fszeroed;
+	franzfs fswim; /// 65.21 -wim FD18
+	franzfs fswimd; /// 65.21 -wim FD19
 	franzacimg() : zona(-1), lettera(0), sottile(false)
 	{
 	}
@@ -268314,6 +273041,13 @@ void Jidac::ac_aggiungi()
 			ac_voce(img.header, &img.fsheader, 1, 0, true);
 			ac_voce(img.footer, &img.fsfooter, 1, 0, true);
 			ac_voce(img.meta, &img.fsmeta, 1, 0, true);
+			if (flagwim) /// 65.21 -wim FD18: the state of -wim, after the other files of the image
+			{
+				img.wim= base + ".wim";
+				ac_voce(img.wim, &img.fswim, 1, 0, true);
+				img.wimd= base + ".wimd"; /// FD19
+				ac_voce(img.wimd, &img.fswimd, 1, 0, true);
+			}
 			if (ac_esclusioni(img.lettera))
 			{
 				img.excluded= base + ".exclud";
@@ -268388,6 +273122,8 @@ int Jidac::ac_cambia(size_t i_fi)
 		imager_meta	   = img->meta;
 		imager_excluded= img->excluded;
 		imager_zeroed  = img->zeroed;
+		imager_wim	   = img->wim; /// 65.21 -wim FD18
+		imager_wimd	   = img->wimd; /// FD19
 		aperta		   = preparavhd(img->lettera);
 		if (aperta)
 		{
@@ -268417,6 +273153,10 @@ int Jidac::ac_cambia(size_t i_fi)
 				g_ac.annullati.insert(img->excluded);
 			if (img->zeroed != "")
 				g_ac.annullati.insert(img->zeroed);
+			if (img->wim != "")
+				g_ac.annullati.insert(img->wim);
+			if (img->wimd != "")
+				g_ac.annullati.insert(img->wimd);
 			vf[i_fi]->second.date= 0; /// (never made: not in the index)
 			img->sottile		 = false;
 			img->file			 = "image_" + string(1, img->lettera) + ".raw";
@@ -268438,6 +273178,8 @@ int Jidac::ac_cambia(size_t i_fi)
 		imager_meta	   = "";
 		imager_excluded= "";
 		imager_zeroed  = "";
+		imager_wim	   = "";
+		imager_wimd	   = "";
 		rawimager.setnonbloccare(false);
 		if (!rawimager.apriraw(img->lettera, false))
 		{
@@ -272322,6 +277064,15 @@ void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterat
 	i_hashtobewritten= "";
 	i_hasherror		 = "";
 	i_hashname		 = "";
+#ifdef _WIN32
+	/// 65.21 -wim FD3: an image with skipped blocks: their data were not read, the hash of the file cannot be
+	/// taken. CRC-32 only (combined, skipped blocks too), as -crc32: see writefranzattr
+	if (g_wimsenzahash.count(i_p->first))
+	{
+		i_p->second.hashtype= "";
+		return;
+	}
+#endif
 #if defined(_WIN32) && !defined(ANCIENT)
 	/// 65.9n: ac took this hash already, for its metafile (ac_hash). The hasher is closed by that (the
 	/// result() of a SHA starts again from nothing): the very same string, not a second result
@@ -272786,8 +277537,10 @@ int Jidac::add()
 		for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
 		{
 			string filename= rename(p->first);
-			if (filename.size() > maxfilelength)
-				maxfilelength= filename.size();
+			/// 65.21l: issue 363, a relative name by its full length (the absolute ones as before: no cost)
+			const size_t lunghezza= nome_assolutowin(filename) ? filename.size() : lunghezza_pienowin(filename);
+			if (lunghezza > maxfilelength)
+				maxfilelength= (unsigned int)lunghezza;
 		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
@@ -273169,6 +277922,8 @@ int Jidac::add()
 	franzfs thefranzfs_meta;
 	franzfs thefranzfs_excluded;
 	franzfs thefranzfs_zeroed;
+	franzfs thefranzfs_wim; /// 65.21 -wim FD18
+	franzfs thefranzfs_wimd; /// 65.21 -wim FD19
 	
 	memfilehash= "";
 
@@ -273286,6 +278041,38 @@ int Jidac::add()
 			DTMap::iterator p= edt.find(imager_zeroed);
 			if (p != edt.end())
 				vf.push_back(p);
+		}
+		imager_wim= "";
+		imager_wimd= ""; /// FD19
+		if (flagwim) /// 65.21 -wim FD18: the state of -wim for the next run, in the archive: made at the end of the image
+		{
+			imager_wim= "image_" + std::string(1, (char)toupper(lettera)) + ".wim";
+			thefranzfs_wim.init(1);
+			DT &d			 = edt[imager_wim];
+			d.creationdate	 = now();
+			d.accessdate	 = now();
+			d.date			 = 0; // if date !=0 ram is filled
+			d.size			 = 1; // fake, we'll init() later
+			d.attr			 = 8311;
+			d.pramfile		 = &thefranzfs_wim;
+			d.data			 = 1; // add in every case
+			DTMap::iterator p= edt.find(imager_wim);
+			if (p != edt.end())
+				vf.push_back(p);
+			/// FD19: the changes since the base, after it
+			imager_wimd= imager_wim + "d";
+			thefranzfs_wimd.init(1);
+			DT &dd			  = edt[imager_wimd];
+			dd.creationdate	  = now();
+			dd.accessdate	  = now();
+			dd.date			  = 0; // if date !=0 ram is filled
+			dd.size			  = 1; // fake, we'll init() later
+			dd.attr			  = 8311;
+			dd.pramfile		  = &thefranzfs_wimd;
+			dd.data			  = 1; // add in every case
+			DTMap::iterator pd= edt.find(imager_wimd);
+			if (pd != edt.end())
+				vf.push_back(pd);
 		}
 		
 	}
@@ -273521,6 +278308,42 @@ int Jidac::add()
 										int64_t metasize   = array_to_ramfile(metaarray, vf[fi]->second.pramfile);
 										vf[fi]->second.size= metasize;
 										vf[fi]->second.date= nowutc(); 
+									}
+									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
+								}
+								else if ((imager_wimd != "") && (vf[fi]->first == imager_wimd) && (vf[fi]->second.pramfile != NULL)) /// 65.21 -wim FD19
+								{
+									if (vf[fi]->second.date == 0)
+									{
+										if (g_wim.deltabytes.empty()) /// no state made: the file says so (FDWIMNON)
+										{
+											const char nessuno[]= "FDWIMNON";
+											g_wim.deltabytes.assign(nessuno, nessuno + 8);
+										}
+										vf[fi]->second.size= array_to_ramfile(g_wim.deltabytes, vf[fi]->second.pramfile);
+										vf[fi]->second.date= nowutc();
+										std::vector<uint8_t>().swap(g_wim.deltabytes);
+										DTMap::iterator vecchio= dt.find(vf[fi]->first); /// FD19b: kept, not removed (the same as before: not written again)
+										if (vecchio != dt.end())
+											vecchio->second.data= 1;
+									}
+									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
+								}
+								else if ((imager_wim != "") && (vf[fi]->first == imager_wim) && (vf[fi]->second.pramfile != NULL)) /// 65.21 -wim FD18
+								{
+									if (vf[fi]->second.date == 0)
+									{
+										if (g_wim.statobytes.empty()) /// no state made: the file says so (FDWIMNON)
+										{
+											const char nessuno[]= "FDWIMNON";
+											g_wim.statobytes.assign(nessuno, nessuno + 8);
+										}
+										vf[fi]->second.size= array_to_ramfile(g_wim.statobytes, vf[fi]->second.pramfile);
+										vf[fi]->second.date= nowutc();
+										std::vector<uint8_t>().swap(g_wim.statobytes);
+										DTMap::iterator vecchio= dt.find(vf[fi]->first); /// FD19b: kept, not removed (the same as before: not written again)
+										if (vecchio != dt.end())
+											vecchio->second.data= 1;
 									}
 									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
 								}
@@ -274029,6 +278852,10 @@ int Jidac::add()
 		{
 			if (imgdash.attivo()) /// the stream of the image is over: the final map
 				imgdash.fine();
+#ifdef _WIN32
+			g_wim.chiudi(vf[fi]->second.ptr, ht); /// 65.21 -wim FD3: the state, with the fragments of this file
+			g_wim.stampa(); /// 65.21 -wim FD2b: -wim, under the final map (before it, the map wrote over it)
+#endif
 			dedupesize+= fsize;
 			DTMap::iterator p	   = vf[fi];
 			string			newname= rename(p->first.c_str());
@@ -274784,6 +279611,20 @@ ThreadReturn add2_scanthread(void *i_arg)
 	add2_scan((s_add2scan *)i_arg);
 	return 0;
 }
+/// 65.21 -wim FD3: several elements of the stream of an image, each one cut by itself (a cut at its end)
+struct s_add2scangruppo
+{
+	std::vector<s_add2scan> *scan;
+	std::vector<size_t>		 quali;
+	s_add2scangruppo() : scan(NULL) {}
+};
+ThreadReturn add2_scangruppo(void *i_arg)
+{
+	s_add2scangruppo *g= (s_add2scangruppo *)i_arg;
+	for (size_t i= 0; i < g->quali.size(); i++)
+		add2_scan(&(*g->scan)[g->quali[i]]);
+	return 0;
+}
 /// the next batch is read (and goes into the hash of the file) while the
 /// current one is cut and stored. One batch at a time, in order: the hash
 /// of the file sees the bytes in the same order as add()
@@ -274846,6 +279687,17 @@ struct s_add2imgread
 	double	secondi; // the read
 	int64_t errori;	 // g_imgerrori right after it
 };
+/// 65.21 -wim FD3: an element of the stream of an image (512 of bitmap + a block), read or skipped
+struct s_add2wimel
+{
+	int64_t dove;	 // in the batch (read)
+	int64_t bytes;	 // 0: skipped
+	int64_t blocco;	 // of the source
+	double	secondi; // the read
+	int64_t errori;	 // g_imgerrori right after it
+	bool	pezzi;	  // FD4: cut in pieces (a block with metadata)
+	uint32_t maschera; // FD4: its pieces not read (their fragments of before)
+};
 struct s_add2imgjob
 {
 	Jidac		   *jidac;
@@ -274861,6 +279713,9 @@ struct s_add2imgjob
 	int				fatale;	 // out: the reader gave an error code, not data (imagefatale)
 	double			secondi; // out: inside the reads
 	std::vector<s_add2imgread> letture; // out
+	bool					   wim;		 // 65.21 -wim FD3: the stream by elements, skipped ones too
+	std::vector<s_add2wimel>   elementi; // out (wim)
+	double					   tcalcoli; // out (wim): CRC-32 and hashes of the data read
 };
 ThreadReturn add2_imgthread(void *i_arg)
 {
@@ -274871,6 +279726,85 @@ ThreadReturn add2_imgthread(void *i_arg)
 	lavoro->fatale		= 0;
 	lavoro->secondi		= 0;
 	lavoro->letture.clear();
+	lavoro->elementi.clear();
+	lavoro->tcalcoli= 0;
+#ifdef _WIN32
+	/// 65.21 -wim FD3: the batch of an image with -wim. One element at a time, as the loop of add() takes them, but
+	/// a skipped one has no data: noted, and its CRC-32 of before goes into the one of the file, in its place
+	if (lavoro->wim)
+	{
+	const int64_t elemento= (int64_t)g_ioBUFSIZE;
+	while ((lavoro->letti + elemento <= lavoro->voglio) && (lavoro->elementi.size() < 256))
+	{
+		char		*qui  = lavoro->buf + lavoro->letti;
+		bool		 finito= false;
+		int64_t		 fatti = 0;
+		const double prima = franzusb::adesso();
+		const int	 presi = jidac->handle_vhd_read(qui, g_ioBUFSIZE, flagverbose, &finito, &fatti);
+		const double durata= franzusb::adesso() - prima;
+		s_add2wimel	 una;
+		una.dove   = lavoro->letti;
+		una.bytes  = 0;
+		una.blocco = (int64_t)jidac->imager.ultimoblocco();
+		una.secondi = durata;
+		una.errori	= g_imgerrori;
+		una.pezzi	= false;
+		una.maschera= 0;
+		if (presi == FRANZIMAGER_SALTATO)
+		{
+			(*lavoro->p).second.file_crc32= wim_crccombina((*lavoro->p).second.file_crc32, g_wim.crcprima((uint64_t)una.blocco), (size_t)elemento);
+			(*lavoro->p).second.hashedsize+= elemento;
+			lavoro->elementi.push_back(una);
+			*lavoro->presi+= elemento;
+			continue;
+		}
+		if (presi < 0)
+			lavoro->fatale= presi;
+		if (presi <= 0)
+		{
+			lavoro->eof= true;
+			break;
+		}
+		lavoro->secondi+= durata;
+		una.bytes	= presi;
+		una.pezzi	= jidac->imager.wimpezzi() && (presi == (int)elemento);
+		una.maschera= una.pezzi ? jidac->imager.wimmaschera() : 0;
+		lavoro->elementi.push_back(una);
+		const double tcalc0= franzusb::adesso(); /// FD7
+		uint32_t	 crc   = 0;
+		if (una.pezzi) /// FD4: piece by piece, in order: the CRC-32 of each one (of before, if it was not read)
+		{
+			for (uint32_t p= 0; p < g_wim.npezzi; p++)
+			{
+				const uint64_t da  = g_wim.pezzoinizio(p);
+				const uint64_t lung= g_wim.pezzolung(p);
+				uint32_t	   cp  = 0;
+				if ((una.maschera >> p) & 1)
+				{
+					cp							  = g_wim.crcpezzoprima((uint64_t)una.blocco, p);
+					(*lavoro->p).second.file_crc32= wim_crccombina((*lavoro->p).second.file_crc32, cp, (size_t)lung);
+					(*lavoro->p).second.hashedsize+= (int64_t)lung;
+				}
+				else if (lavoro->hash)
+					jidac->updatehash(&lavoro->p, qui + da, (int)lung, &cp, g_wim.senzahash);
+				else
+					cp= crc32_16bytes(qui + da, (size_t)lung, 0);
+				g_wim.crcpezzoletto((uint64_t)una.blocco, p, cp);
+				crc= wim_crccombina(crc, cp, (size_t)lung);
+			}
+		}
+		else if (lavoro->hash)
+			jidac->updatehash(&lavoro->p, qui, presi, &crc, g_wim.senzahash);
+		else
+			crc= crc32_16bytes(qui, (size_t)presi, 0);
+		g_wim.crcletto((uint64_t)una.blocco, crc);
+		lavoro->tcalcoli+= franzusb::adesso() - tcalc0;
+		lavoro->letti+= presi;
+		*lavoro->presi+= presi;
+	}
+	return 0;
+	}
+#endif
 	while (lavoro->letti + (int64_t)g_ioBUFSIZE <= lavoro->voglio)
 	{
 		char		*qui   = lavoro->buf + lavoro->letti;
@@ -275228,8 +280162,10 @@ int Jidac::add2()
 		for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
 		{
 			string filename= rename(p->first);
-			if (filename.size() > maxfilelength)
-				maxfilelength= filename.size();
+			/// 65.21l: issue 363, a relative name by its full length (the absolute ones as before: no cost)
+			const size_t lunghezza= nome_assolutowin(filename) ? filename.size() : lunghezza_pienowin(filename);
+			if (lunghezza > maxfilelength)
+				maxfilelength= (unsigned int)lunghezza;
 		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
@@ -275616,6 +280552,8 @@ int Jidac::add2()
 	franzfs thefranzfs_meta;
 	franzfs thefranzfs_excluded;
 	franzfs thefranzfs_zeroed;
+	franzfs thefranzfs_wim; /// 65.21 -wim FD18
+	franzfs thefranzfs_wimd; /// 65.21 -wim FD19
 	
 	memfilehash= "";
 
@@ -275733,6 +280671,38 @@ int Jidac::add2()
 			DTMap::iterator p= edt.find(imager_zeroed);
 			if (p != edt.end())
 				vf.push_back(p);
+		}
+		imager_wim= "";
+		imager_wimd= ""; /// FD19
+		if (flagwim) /// 65.21 -wim FD18: the state of -wim for the next run, in the archive: made at the end of the image
+		{
+			imager_wim= "image_" + std::string(1, (char)toupper(lettera)) + ".wim";
+			thefranzfs_wim.init(1);
+			DT &d			 = edt[imager_wim];
+			d.creationdate	 = now();
+			d.accessdate	 = now();
+			d.date			 = 0; // if date !=0 ram is filled
+			d.size			 = 1; // fake, we'll init() later
+			d.attr			 = 8311;
+			d.pramfile		 = &thefranzfs_wim;
+			d.data			 = 1; // add in every case
+			DTMap::iterator p= edt.find(imager_wim);
+			if (p != edt.end())
+				vf.push_back(p);
+			/// FD19: the changes since the base, after it
+			imager_wimd= imager_wim + "d";
+			thefranzfs_wimd.init(1);
+			DT &dd			  = edt[imager_wimd];
+			dd.creationdate	  = now();
+			dd.accessdate	  = now();
+			dd.date			  = 0; // if date !=0 ram is filled
+			dd.size			  = 1; // fake, we'll init() later
+			dd.attr			  = 8311;
+			dd.pramfile		  = &thefranzfs_wimd;
+			dd.data			  = 1; // add in every case
+			DTMap::iterator pd= edt.find(imager_wimd);
+			if (pd != edt.end())
+				vf.push_back(pd);
 		}
 		
 	}
@@ -275914,7 +280884,7 @@ int Jidac::add2()
 		bool turboimg= (fi < vf.size()) && flagimage && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && ((int64_t)g_ioBUFSIZE <= TURBOCHUNK);
 #ifdef _WIN32
 		if (turboimg && (flagvhd || flagntfs) && (vf[fi]->second.pramfile != NULL))
-			if ((vf[fi]->first == imager_zeroed) || (vf[fi]->first == imager_excluded) || (vf[fi]->first == imager_header) || (vf[fi]->first == imager_footer) || (vf[fi]->first == imager_meta))
+			if ((vf[fi]->first == imager_zeroed) || (vf[fi]->first == imager_excluded) || (vf[fi]->first == imager_header) || (vf[fi]->first == imager_footer) || (vf[fi]->first == imager_meta) || (vf[fi]->first == imager_wim) || (vf[fi]->first == imager_wimd))
 				turboimg= false;
 		if (turboimg && flagac && ac_mio(vf[fi]->first)) /// 65.9n: the pieces of ac: the loop below, as the files in memory
 			turboimg= false;
@@ -276148,7 +281118,218 @@ int Jidac::add2()
 			}
 
 		};
-		if (turbo)
+		/// 65.21 -wim FD3: the stream of an image of NTFS with -wim, element by element (512 of bitmap + a
+		/// block). Every element is cut by itself (the state of the fragmenter fresh at its start, a cut at its
+		/// end): a block that did not change has the very same fragments as before, wherever it is in the
+		/// stream. A skipped element has no data: its fragments of before go in its place. The cuts at the
+		/// elements make this archive different from the one of add(), on purpose
+		bool wimel= false;
+#ifdef _WIN32
+		if (turboimg && flagwim && g_wim.attivo && (flagvhd || flagntfs) && (!flagverify) && (!flagcollision))
+		{
+			const double tv0= franzwim::adesso(); /// FD6
+			g_wim.validariuso(ht);
+			g_wim.tvalida	   = franzwim::adesso() - tv0;
+			g_wim.tflussoinizio= wim_ora();
+			g_wim.senzahash	 = (g_wim.nriusabili + g_wim.npzriusabili > 0);
+			g_wim.saltoattivo= true;
+			g_wim.elementi.clear();
+			wimel			 = true;
+			if ((!g_wim.primavolta) && flagverbose) /// FD20
+			{
+				if (g_wim.nnonriusabili > 0)
+					myprintf("44032: wim: %c: fragments of before in the archive for %s blocks and %s pieces of 64 KB (%s blocks NOT usable: not there, or not the same)\n", g_wim.lettera, migliaia(g_wim.nriusabili), migliaia3(g_wim.npzriusabili), migliaia2(g_wim.nnonriusabili));
+				else
+					myprintf("44032: wim: %c: fragments of before in the archive for %s blocks and %s pieces of 64 KB\n", g_wim.lettera, migliaia(g_wim.nriusabili), migliaia2(g_wim.npzriusabili));
+			}
+			if (g_wim.senzahash)
+				g_wimsenzahash.insert(vf[fi]->first);
+		}
+#endif
+		if (wimel)
+		{
+#ifdef _WIN32
+			const int64_t ELEMENTO	= (int64_t)g_ioBUFSIZE;
+			int64_t		  imgpresi	= 0;
+			double		  imgsecondi= 0;
+			int			  imgfatale = 0;
+			unsigned	  fj		= 0;
+			int			  qui		= 0;
+			bool		  eof		= false;
+			s_add2imgjob  imglettura[2];
+			for (int k= 0; k < 2; k++)
+			{
+				imglettura[k].jidac	 = this;
+				imglettura[k].p		 = p;
+				imglettura[k].buf	 = &turbobuf[k][0] + TURBOROOM;
+				imglettura[k].tmp	 = buf;
+				imglettura[k].voglio = TURBOCHUNK;
+				imglettura[k].hash	 = (g_franzotype > 0);
+				imglettura[k].sottile= true;
+				imglettura[k].presi	 = &imgpresi;
+				imglettura[k].letti	 = 0;
+				imglettura[k].eof	 = false;
+				imglettura[k].fatale = 0;
+				imglettura[k].secondi= 0;
+				imglettura[k].wim	 = true;
+			}
+			imgdash_ntfs(imgdash, imager, vf[fi]->first);
+			const int64_t imginizio= mtime();
+			ThreadID	  tidlettura;
+			bool		  leggendo= false;
+			add2_imgthread(&imglettura[0]);
+			while (!eof)
+			{
+				if (leggendo)
+				{
+					const double tatt0= franzwim::adesso(); /// FD7: the main thread waits for the reader
+					join(tidlettura);
+					g_wim.tattesa+= franzwim::adesso() - tatt0;
+					CloseHandle(tidlettura);
+					leggendo= false;
+				}
+				s_add2imgjob &lotto= imglettura[qui];
+				eof				   = lotto.eof;
+				if (lotto.fatale != 0)
+					imgfatale= lotto.fatale;
+				if (!eof)
+				{
+					run(tidlettura, add2_imgthread, &imglettura[1 - qui]);
+					leggendo= true;
+				}
+				/// the elements read: cut by the threads, each one by itself (FD4: a block with metadata, piece by piece;
+				/// the pieces not read are not cut, their fragments of before go in their place)
+				const size_t		nel= lotto.elementi.size();
+				const uint32_t		np = g_wim.npezzi;
+				std::vector<size_t> primo(nel + 1, 0);
+				for (size_t i= 0; i < nel; i++)
+					primo[i + 1]= primo[i] + (lotto.elementi[i].pezzi ? np : 1);
+				const size_t						  ntask= primo[nel];
+				std::vector<s_add2scan>				  scan(ntask);
+				std::vector<std::vector<s_add2frag> > liste(ntask);
+				std::vector<size_t>					  dacut;
+				for (size_t i= 0; i < nel; i++)
+				{
+					const s_add2wimel &el= lotto.elementi[i];
+					if (el.bytes <= 0)
+						continue;
+					const uint32_t quanti= el.pezzi ? np : 1;
+					for (uint32_t p= 0; p < quanti; p++)
+					{
+						if (el.pezzi && ((el.maschera >> p) & 1))
+							continue;
+						const size_t  t	 = primo[i] + p;
+						const int64_t da = el.pezzi ? (int64_t)g_wim.pezzoinizio(p) : 0;
+						s_add2scan	 &s	 = scan[t];
+						s.base			 = (const unsigned char *)lotto.buf + el.dove + da;
+						s.from			 = 0;
+						s.fine			 = el.pezzi ? (int64_t)g_wim.pezzolung(p) : el.bytes;
+						s.after			 = -1;
+						s.dopo			 = 0;
+						s.chiudi		 = true;
+						s.h_threshold	 = h_threshold;
+						s.minf			 = MIN_FRAGMENT;
+						s.maxf			 = MAX_FRAGMENT;
+						s.out			 = &liste[t];
+						s.open			 = 0;
+						dacut.push_back(t);
+					}
+				}
+				int gruppi= turbothreads;
+				if (gruppi > (int)dacut.size())
+					gruppi= (int)dacut.size();
+				if (gruppi < 1)
+					gruppi= 1;
+				std::vector<s_add2scangruppo> gruppo((size_t)gruppi);
+				for (size_t i= 0; i < dacut.size(); i++)
+				{
+					gruppo[i % (size_t)gruppi].scan= &scan;
+					gruppo[i % (size_t)gruppi].quali.push_back(dacut[i]);
+				}
+				std::vector<ThreadID> tids((size_t)gruppi);
+				for (int g= 1; g < gruppi; g++)
+					run(tids[g], add2_scangruppo, &gruppo[g]);
+				if (!dacut.empty())
+					add2_scangruppo(&gruppo[0]);
+				for (int g= 1; g < gruppi; g++)
+				{
+					join(tids[g]);
+					CloseHandle(tids[g]);
+				}
+				/// in order: the fragments of an element read, or the ones of before of a skipped one
+				for (size_t i= 0; i < nel; i++)
+				{
+					const s_add2wimel &el	 = lotto.elementi[i];
+					const uint64_t	   inizio= vf[fi]->second.ptr.size();
+					imgdash.dopocon(el.blocco, ELEMENTO, el.secondi, el.errori);
+					if (el.bytes == 0)
+					{
+						const uint32_t quanti= g_wim.riuso((uint64_t)el.blocco, vf[fi]->second.ptr);
+						total_done+= ELEMENTO;
+						imgdash.frammento(ELEMENTO, false);
+						fj+= quanti;
+						g_wim.elemento((uint64_t)el.blocco, inizio, quanti);
+					}
+					else
+					{
+						uint32_t	   pin[32], pq[32];
+						const uint32_t quanti= el.pezzi ? np : 1;
+						for (uint32_t p= 0; p < quanti; p++)
+						{
+							const uint64_t pinizio= vf[fi]->second.ptr.size();
+							if (el.pezzi && ((el.maschera >> p) & 1))
+							{
+								const uint32_t q   = g_wim.riusopezzo((uint64_t)el.blocco, p, vf[fi]->second.ptr);
+								const int64_t  lung= (int64_t)g_wim.pezzolung(p);
+								total_done+= lung;
+								imgdash.frammento(lung, false);
+								fj+= q;
+							}
+							else
+							{
+								const size_t			 t = primo[i] + p;
+								std::vector<s_add2frag> &fr= liste[t];
+								for (size_t k= 0; k < fr.size(); k++)
+								{
+									s_add2frag &uno= fr[k];
+									total_done+= uno.len;
+									const unsigned htptr= htinv.find(uno.sha1);
+									imgdash.frammento(uno.len, htptr == 0);
+									elabora(fj, uno.len, uno.hits, uno.o1, uno.sha1, htptr, (const char *)scan[t].base + uno.start);
+									++fj;
+								}
+							}
+							if (el.pezzi)
+							{
+								pin[p]= (uint32_t)pinizio;
+								pq[p] = (uint32_t)(vf[fi]->second.ptr.size() - pinizio);
+							}
+						}
+						g_wim.elemento((uint64_t)el.blocco, inizio, (uint32_t)(vf[fi]->second.ptr.size() - inizio), el.pezzi ? pin : NULL, el.pezzi ? pq : NULL);
+					}
+					imagereaded+= ELEMENTO;
+					img_avvisa(imgdash.live());
+					if ((!imgdash.mostra(total_done - g_ac.basefatti, total_size, g_inoutput - g_ac.basescritti)) && (!flagnoeta))
+						print_eta_image("NTFS", 100.0f * (total_done - g_ac.basefatti) / (total_size + 1), total_done - g_ac.basefatti, total_size,
+										g_inoutput - g_ac.basescritti, startstream, &ultimotempo, &last_update_time);
+				}
+				imgsecondi+= lotto.secondi;
+				g_wim.tcalcoli+= lotto.tcalcoli; /// FD7
+				qui= 1 - qui;
+			}
+			g_wim.saltoattivo= false;
+			g_wim.tflussofine= wim_ora(); /// FD6
+			g_wim.tletture	 = imgsecondi;
+			if (imgfatale != 0)
+				imagefatale(imgfatale);
+			if (flagverbose)
+			{
+				const double tutto= (mtime() - imginizio + 1) / 1000.0;
+				myprintf("65394: image stream (-wim): %s bytes (skipped ones too), %.2f s inside the reads, %.2f s in all, -turbo %d threads\n", migliaia(imgpresi), imgsecondi, tutto, turbothreads);
+			}
+#endif
+		}
+		else if (turbo)
 		{
 			int64_t		  carry= 0; // the open fragment, from its start (a cut), just before the new data
 			unsigned	  fj   = 0; // fragments of this file, so far
@@ -276189,6 +281370,7 @@ int Jidac::add2()
 				imglettura[k].eof	 = false;
 				imglettura[k].fatale = 0;
 				imglettura[k].secondi= 0;
+				imglettura[k].wim	 = false; /// 65.21 -wim FD3: not here (see wimel)
 			}
 			if (turboimg)
 			{
@@ -276589,6 +281771,42 @@ int Jidac::add2()
 										int64_t metasize   = array_to_ramfile(metaarray, vf[fi]->second.pramfile);
 										vf[fi]->second.size= metasize;
 										vf[fi]->second.date= nowutc(); 
+									}
+									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
+								}
+								else if ((imager_wimd != "") && (vf[fi]->first == imager_wimd) && (vf[fi]->second.pramfile != NULL)) /// 65.21 -wim FD19
+								{
+									if (vf[fi]->second.date == 0)
+									{
+										if (g_wim.deltabytes.empty()) /// no state made: the file says so (FDWIMNON)
+										{
+											const char nessuno[]= "FDWIMNON";
+											g_wim.deltabytes.assign(nessuno, nessuno + 8);
+										}
+										vf[fi]->second.size= array_to_ramfile(g_wim.deltabytes, vf[fi]->second.pramfile);
+										vf[fi]->second.date= nowutc();
+										std::vector<uint8_t>().swap(g_wim.deltabytes);
+										DTMap::iterator vecchio= dt.find(vf[fi]->first); /// FD19b: kept, not removed (the same as before: not written again)
+										if (vecchio != dt.end())
+											vecchio->second.data= 1;
+									}
+									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
+								}
+								else if ((imager_wim != "") && (vf[fi]->first == imager_wim) && (vf[fi]->second.pramfile != NULL)) /// 65.21 -wim FD18
+								{
+									if (vf[fi]->second.date == 0)
+									{
+										if (g_wim.statobytes.empty()) /// no state made: the file says so (FDWIMNON)
+										{
+											const char nessuno[]= "FDWIMNON";
+											g_wim.statobytes.assign(nessuno, nessuno + 8);
+										}
+										vf[fi]->second.size= array_to_ramfile(g_wim.statobytes, vf[fi]->second.pramfile);
+										vf[fi]->second.date= nowutc();
+										std::vector<uint8_t>().swap(g_wim.statobytes);
+										DTMap::iterator vecchio= dt.find(vf[fi]->first); /// FD19b: kept, not removed (the same as before: not written again)
+										if (vecchio != dt.end())
+											vecchio->second.data= 1;
 									}
 									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
 								}
@@ -277097,6 +282315,10 @@ int Jidac::add2()
 		{
 			if (imgdash.attivo()) /// the stream of the image is over: the final map
 				imgdash.fine();
+#ifdef _WIN32
+			g_wim.chiudi(vf[fi]->second.ptr, ht); /// 65.21 -wim FD3: the state, with the fragments of this file
+			g_wim.stampa(); /// 65.21 -wim FD2b: -wim, under the final map (before it, the map wrote over it)
+#endif
 			dedupesize+= fsize;
 			DTMap::iterator p	   = vf[fi];
 			string			newname= rename(p->first.c_str());
@@ -277757,9 +282979,44 @@ int Jidac::add()
 }
 #endif // corresponds to #ifndef (#ifndef ANCIENT)
 #ifdef _WIN32
+/// 65.21 -wim FD18: the state of -wim of this image from the archive (image_X.wim, read_archive took it with -wim): in
+/// g_wimprima for franzwim::caricaprima. Not there: the old file beside the archive, if any (franzwim)
+void Jidac::wim_caricastato(char i_lettera)
+{
+	std::vector<uint8_t>().swap(g_wimprima);
+	std::vector<uint8_t>().swap(g_wimdelta);
+	g_wimprimaok  = false;
+	g_wimdeltaok  = false;
+	g_wimprimanome= "image_" + string(1, (char)toupper(i_lettera)) + ".wim";
+	if (!flagwim)
+		return;
+	DTMap::iterator p= dt.find(g_wimprimanome);
+	if ((p == dt.end()) || (p->second.date == 0))
+		return;
+	g_wimprimaok= true; /// the archive has it: that one or nothing
+	if (extracttobuffer(g_wimprimanome, g_wimprima) != 0)
+	{
+		myprintf("44060$ wim: %c: cannot read %s from the archive: everything is read\n", toupper(i_lettera), g_wimprimanome.c_str());
+		std::vector<uint8_t>().swap(g_wimprima);
+		return;
+	}
+	/// FD19: the changes since that base (not there: a state of FD18, the base alone)
+	const string	nomed= g_wimprimanome + "d";
+	DTMap::iterator q	 = dt.find(nomed);
+	if ((q == dt.end()) || (q->second.date == 0))
+		return;
+	g_wimdeltaok= true;
+	if (extracttobuffer(nomed, g_wimdelta) != 0)
+	{
+		myprintf("44060$ wim: %c: cannot read %s from the archive: everything is read\n", toupper(i_lettera), nomed.c_str());
+		std::vector<uint8_t>().swap(g_wimprima); /// (the base alone is not the state of the last run)
+		std::vector<uint8_t>().swap(g_wimdelta);
+	}
+}
 bool Jidac::preparavhd(char drive_letter)
 {
 	lettera= drive_letter;
+	wim_caricastato(drive_letter); /// 65.21 -wim FD18
 
 	// create franzimager instance
 	if (flagntfs)
@@ -277780,6 +283037,8 @@ bool Jidac::preparavhd(char drive_letter)
 
 	// apri vhd
 	imager.setvssautomatico(imagevss == 1);
+	if (flagwim) /// 65.21 -wim: the state of -wim goes next to the archive
+		g_wimarchivio= archive;
 	if (!imager.aprivhd(drive_letter, imagevss > 0))
 	{
 		myprintf("73531! cannot open drive %c\n", drive_letter);

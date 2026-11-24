@@ -116,8 +116,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #undef SFTP			 /// 65.20c: whatever the command line says (Fedora's spec gives -DSFTP)
 #endif // BUILD_FEDORA
 
-#define ZPAQ_VERSION "65.22t"
-#define ZPAQ_DATE "(2026-11-19)"
+#define ZPAQ_VERSION "65.23t"
+#define ZPAQ_DATE "(2026-11-23)"
 
 
 /*
@@ -88316,6 +88316,16 @@ bool flagnosparse= false; /// 65.6a: -sparse is the default (x), -nosparse turns
 #ifndef ZPAQ_SPARSEMIN
 #define ZPAQ_SPARSEMIN ((int64_t)16 << 20)
 #endif
+/*
+	65.23a issue 374: a virtual disk is sparse while written (65.7o) only up to this size.
+	Every all-zeros fragment not written is a hole, and NTFS has a limit on how many pieces
+	a sparse file can have: a .vhd of 631 GB from a spinning disk got "cannot write" (disk
+	full?, with 1.3 TB free) at 529 GB, and slower and slower after. Bigger: not sparse,
+	the -huge way (the gaps, if any, written by us, with their progress)
+*/
+#ifndef ZPAQ_VHDSPARSEMAX
+#define ZPAQ_VHDSPARSEMAX ((int64_t)32 << 30)
+#endif
 #endif
 uint64_t	g_ramsize;
 bool		flagramsize= false;
@@ -88494,6 +88504,8 @@ bool flagcsv;
 bool flagstdout;
 bool flagstore;
 bool flagtar;
+/// 65.23c: -tar on Windows, the security (owner, group, DACL, SACL, label) of every file of the version: see wintar_prepara()
+#define ZPAQ_WINTAR "VFILE-w-tar.txt"
 bool flagnumeric; /// x -tar: owners by number only (as tar --numeric-owner)
 bool flagsameperms; /// 65.19h: x on *nix, not root: the modes of the archive exactly (as tar -p)
 struct franz_posix; /// -tar: see "-tar (*nix)"
@@ -99412,7 +99424,11 @@ static bool iserr(int op) {
 static int oplen(const U8* hcomp) {
   if (*hcomp==255) return 3;
   if (*hcomp%8==7) return 2;
-  if (*hcomp<51 && (*hcomp%8-1)/2==0) {  // ++ or -- opcode
+  /// 65.23a issue 376: it was (*hcomp%8-1)/2==0, true for %8==0 too (-1/2 is 0 in C): a run of
+  /// the same swap (b<>a b<>a) was one instruction, and assemble() made one xchg of it (the run
+  /// length is used only by ++ and --). b<>a b<>a is nothing, the JIT swapped once: not as the
+  /// interpreter, the reference. No method of zpaq or zpaqfranz has two of them in a row
+  if (*hcomp<51 && (*hcomp%8==1 || *hcomp%8==2)) {  // ++ or -- opcode
     int i;
     for (i=1; i<127 && hcomp[i]==hcomp[0]; ++i);
     return i;
@@ -116256,7 +116272,9 @@ FP myfopen(const char *filename, MODE mode, int64_t i_date= 0)
 	if (flagdebug3)
 		myprintf("00089: CreateFile\n");
 
-	FP risultato= CreateFile(utow(filename).c_str(), access, share, NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
+	/// 65.23c: -tar (an administrator, SeBackupPrivilege / SeRestorePrivilege enabled): as backup software, so a file whose
+	/// permissions keep out even the administrators (a DENY, the files of a game...) is read and written all the same
+	FP risultato= CreateFile(utow(filename).c_str(), access, share, NULL, disp, FILE_ATTRIBUTE_NORMAL | (flagtar ? FILE_FLAG_BACKUP_SEMANTICS : 0), NULL);
 	if (flagdebug3)
 		myprintf("00090: Createfile risultato %s\n", migliaia(int64_t(risultato)));
 
@@ -116351,9 +116369,16 @@ bool trysparse(FP i_fp, int64_t i_size, bool i_origin, const char *i_filename, b
 	if (isdiscovirtuale(i_filename))
 	{
 		/// left sparse (even when it was at the origin) it could not be mounted. 65.7o: sparse only
-		/// WHILE it is written, when the caller clears it at the end (toglisparse)
+		/// WHILE it is written, when the caller clears it at the end (toglisparse). 65.23a: and not
+		/// a big one (ZPAQ_VHDSPARSEMAX, the limits of NTFS on sparse files)
 		if ((!i_discotemporaneo) || (!flagsparse))
 			return false;
+		if (i_size > ZPAQ_VHDSPARSEMAX)
+		{
+			if (flagverbose)
+				myprintf("39877: virtual disk of %s: not sparse while written (more than %s), the -huge way <<%Z>>\n", tohuman(i_size), tohuman2(ZPAQ_VHDSPARSEMAX), i_filename);
+			return false;
+		}
 	}
 	else if (!i_origin)
 	{
@@ -135094,10 +135119,11 @@ struct DT // if you get some warning here, update your compiler!
 	bool			 donotextractme;
 	int64_t			 zipdataoffset; // 'zip' command: where this file's data goes into the .zip
 	int				 zipindex;		// ...and which g_zipentries[] describes it
+	int				 wintar;		// 65.23c: x -tar on Windows, its security descriptor (g_wintar_sd), -1 none
 	vector<unsigned> block_for_ptr;
 
 	DT() : date(0), size(0), attr(0), data(0), creationdate(0), accessdate(0), written(-1), isordered(false), isselected(false), /*franz_block_size(FRANZOFFSETV3),*/ file_crc32(0), hashedsize(0), chunk(-1), expectedsize(0), version(0), forceadd(false), rehash(false), is4(false), red_total(0), red_count(0), red_min(256), red_max(0), red_avg(0), red_candidate(0), isedt(false), kompressedsize(0), filework(0),
-		   donotextractme(false), zipdataoffset(-1), zipindex(-1)
+		   donotextractme(false), zipdataoffset(-1), zipindex(-1), wintar(-1)
 	{
 		franz_block_size= dt_franzdimensione();
 
@@ -152689,7 +152715,29 @@ struct ThreadContext
 	std::map<int, int>	   tentativiram;	  /// 65.20d: how many times a block found no memory (bad_alloc), under cache_mutex
 	std::set<int>		   blocchi_senzaram;  /// 65.20d: the blocks given up for lack of memory (09189), under cache_mutex
 	int64_t				   memoria_finita;	  /// 65.20d: how many times a worker found no memory, under cache_mutex
-	ThreadContext() : frag_stato(NULL), controllablocchi(false), memoria_finita(0)
+	/*
+		65.23q: extractstdout, the cache keeps only the fragments still to be written (frag_usi NULL: the whole block, as
+		franzimage does). An image of many versions: of a block of an old version a few fragments here and there, all
+		over the disk. The whole block stayed in the cache to the end, the cache filled up, the blocks read ahead waited
+		or were thrown away, and the same blocks were decompressed again and again
+	*/
+	vector<int32_t>					*frag_usi;		  /// every fragment of ht: how many times it is still to be written (cache_mutex)
+	std::map<int, vector<int64_t> > block_dove;		  /// a cached block kept in part: where each of its fragments is, -1 not kept
+	int64_t							blocchi_decompressi; /// how many decompressions, every block counted each time (cache_mutex)
+	/*
+		65.23r: the cache by FRAGMENT. When room is needed the fragments needed latest are put aside (all the blocks of
+		the cache together), not whole blocks: a block keeps what is needed soon (block_dove -3: put aside, still to be
+		written). A fragment put aside is asked again (da_rileggere) when the read ahead gets to it, or when it is needed;
+		the new copy of the block waits in block_nuovo, and only the main thread puts it in the cache (it is the only
+		one that deletes a block: the one it writes from is never deleted under it). All under cache_mutex
+	*/
+	std::map<int, std::pair<string *, vector<int64_t> > > block_nuovo;
+	std::set<int>										   da_rileggere;
+	int64_t												   blocchi_riletti; /// decompressions to take back fragments put aside
+	int64_t												   tagli;			  /// how many times fragments were put aside
+	int64_t												   buttati;			  /// blocks read ahead thrown away (the cache full, the main thread waiting)
+	int64_t												   attese_daparte;	  /// the main thread waited for a fragment put aside (the read ahead did not get there)
+	ThreadContext() : frag_stato(NULL), controllablocchi(false), memoria_finita(0), frag_usi(NULL), blocchi_decompressi(0), blocchi_riletti(0), tagli(0), buttati(0), attese_daparte(0)
 	{
 	}
 };
@@ -153371,6 +153419,13 @@ class Jidac
 	bool   tar_ownerchanged(DTMap::iterator i_old, DTMap::iterator i_new);
 	void   tar_linkmasters(map<string, string> &o_linkto);
 	int	   tar_restore(int &o_errors);
+	void   tar_collega(const vector<DTMap::iterator> &i_collegamenti, map<string, DTMap::iterator> &io_nuovicapi, int64_t &io_fatti, int64_t &io_sbagliati); /// 65.23a
+#endif
+#ifdef _WIN32
+	int	   wintar_prepara();		  /// 65.23c: a -tar on Windows, the table of the security (VFILE-w-tar.txt)
+	int64_t wintar_aliastogli(bool i_add); /// 65.23n: a (and t archive folder) on Windows, the app execution aliases out of edt (a -tar: kept for the table)
+	int	   wintar_carica();			  /// x -tar: the table of the archive, to the entries of dt
+	void   wintar_restore(int &o_errors); /// x -tar: the security given back, after the data
 #endif
 	string find_unix_command(const string &i_thecommand);
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -153670,11 +153725,20 @@ static void cache_svuota_per_memoria(ThreadContext *ctx, int i_blocco)
 		ctx->current_cache_size-= (int64_t)it->second->size();
 		delete it->second;
 		ctx->block_access_time.erase(it->first);
+		ctx->block_dove.erase(it->first); /// 65.23q
 		pthread_mutex_lock(ctx->queue_mutex);
 		ctx->pending_jobs.erase(it->first);
 		pthread_mutex_unlock(ctx->queue_mutex);
 		ctx->block_cache.erase(it++);
 	}
+	/// 65.23r: the new copies waiting to go in, too (the fragments put aside are asked again when needed)
+	for (std::map<int, std::pair<string *, vector<int64_t> > >::iterator n= ctx->block_nuovo.begin(); n != ctx->block_nuovo.end(); ++n)
+	{
+		ctx->current_cache_size-= (int64_t)n->second.first->size();
+		delete n->second.first;
+	}
+	ctx->block_nuovo.clear();
+	ctx->da_rileggere.clear();
 	pthread_mutex_lock(ctx->queue_mutex);
 	if ((ctx->block_cache.find(i_blocco) == ctx->block_cache.end()) && (ctx->pending_jobs.count(i_blocco) == 0))
 	{
@@ -153754,6 +153818,9 @@ void *worker_routine(void *arg)
 
 		pthread_mutex_lock(ctx->cache_mutex);
 		bool already_cached= (ctx->block_cache.find(block_idx) != ctx->block_cache.end());
+		/// 65.23r: in the cache with fragments put aside, asked again: decompressed (unless its new copy is there)
+		if (already_cached && (ctx->da_rileggere.count(block_idx) > 0) && (ctx->block_nuovo.find(block_idx) == ctx->block_nuovo.end()))
+			already_cached= false;
 		pthread_mutex_unlock(ctx->cache_mutex);
 
 		if (already_cached)
@@ -153889,6 +153956,10 @@ void *worker_routine(void *arg)
 			try /// 65.20d: the copy for the cache can find no memory too (it was a crash, 0xC0000409)
 			{
 				res= (read_success || recupero) ? new string(out_sb.c_str(), out_sb.size()) : new string("");
+				/// 65.23q: the buffer of the decompression (up to twice the block: it grows by doubling) is not needed any
+				/// more: given back now, not at the end of the round (it was held while this worker waited for room in the
+				/// cache, and it would be held during the copy of the fragments still to be written)
+				out_sb.reset();
 			}
 			catch (std::bad_alloc &)
 			{
@@ -153923,6 +153994,7 @@ void *worker_routine(void *arg)
 			if (tentativi <= 4)
 			{
 				myprintf("09190$ Block %d: no memory to decompress it (%d of 4): the cache goes from %s to %s, it is read again\n", block_idx, tentativi, tohuman(prima), tohuman2(g_GLOBAL_RAM_LIMIT));
+				ctx->da_rileggere.erase(block_idx); /// 65.23r: asked again by who needs it
 				pthread_mutex_lock(ctx->queue_mutex);
 				ctx->pending_jobs.erase(block_idx);
 				pthread_mutex_unlock(ctx->queue_mutex);
@@ -153974,7 +154046,79 @@ void *worker_routine(void *arg)
 			}
 		}
 
+		/*
+			65.23q: only the fragments still to be written go in the cache (see ThreadContext::frag_usi), after the checks
+			above (they look at the whole block). A fragment not kept is never asked again: its count only goes down. A
+			fragment wanted but past the end of the block (damaged) is not kept: the main thread says so, as before. No
+			fragment wanted at all (a block read again after its last use): not cached. No memory for the copy: the whole
+			block, as before
+		*/
+		vector<int64_t> dovefrag;
+		bool			compattato= false;
+		bool			inutile	  = false;
+		if ((ctx->frag_usi != NULL) && (res != NULL) && (!senzamemoria))
+		{
+			const Block		 &b	= (*ctx->blocks)[block_idx];
+			const vector<HT> &ht= *ctx->hts;
+			vector<char>	  tenere(b.frags, 0);
+			pthread_mutex_lock(ctx->cache_mutex);
+			for (unsigned j= 0; (j < b.frags) && (b.start + j < ctx->frag_usi->size()); j++)
+				tenere[j]= ((*ctx->frag_usi)[b.start + j] > 0) ? 1 : 0;
+			pthread_mutex_unlock(ctx->cache_mutex);
+			int64_t q		= 0;
+			int64_t quanti	= 0;
+			bool	voluto	= false;
+			for (unsigned j= 0; (j < b.frags) && (b.start + j < ht.size()); j++)
+			{
+				const int64_t lung= ht[b.start + j].usize;
+				/// 65.23s: a fragment of 0 bytes (the one of an empty file) or with no size is wanted too: the main thread
+				/// waits for its block all the same. It was skipped here, and a block wanted only for it was never
+				/// cached: pp and x -stdout waited for ever (an empty file of version 1, the rest of its block changed)
+				if (tenere[j])
+					voluto= true;
+				if (lung <= 0)
+					continue;
+				if (tenere[j] && (q + lung <= (int64_t)res->size()))
+					quanti+= lung;
+				q+= lung;
+			}
+			if (!voluto)
+				inutile= true;
+			else if (quanti < (int64_t)res->size())
+			{
+				string *compatto= NULL;
+				try
+				{
+					compatto= new string();
+					compatto->reserve((size_t)quanti);
+					dovefrag.assign(b.frags, -1);
+					q= 0;
+					for (unsigned j= 0; (j < b.frags) && (b.start + j < ht.size()); j++)
+					{
+						const int64_t lung= ht[b.start + j].usize;
+						if (lung <= 0)
+							continue;
+						if (tenere[j] && (q + lung <= (int64_t)res->size()))
+						{
+							dovefrag[j]= (int64_t)compatto->size();
+							compatto->append(res->data() + q, (size_t)lung);
+						}
+						q+= lung;
+					}
+					delete res;
+					res		  = compatto;
+					compattato= true;
+				}
+				catch (std::bad_alloc &)
+				{
+					delete compatto;
+					dovefrag.clear();
+				}
+			}
+		}
+
 		pthread_mutex_lock(ctx->cache_mutex);
+		ctx->blocchi_decompressi++;
 
 		if (eccezione)
 			ctx->blocchi_eccezione.insert(block_idx);
@@ -153990,6 +154134,26 @@ void *worker_routine(void *arg)
 		}
 		if (primavolta) /// once: a block thrown out of the cache comes back here
 			myprintf("66401! Block %d at offset %lld (%lld bytes): %u of %u fragments are NOT good\n", block_idx, dove, quanto, nonbuoni, (unsigned)stati.size());
+
+		if (inutile && (block_idx == ctx->priority_block))
+		{
+			/// 65.23s: the main thread waits for this block: it goes in, whole, whatever the counts say (a block thrown
+			/// away here while the main thread waits for it is a wait with no end, see above)
+			if (flagdebug)
+				myprintf("09529: Worker %d: block %d with no fragment still to be written, but the main thread waits for it: in\n", thread_id, block_idx);
+			inutile= false;
+		}
+		if (inutile) /// 65.23q: nobody wants its fragments any more (after what is said of it, above)
+		{
+			delete res;
+			ctx->da_rileggere.erase(block_idx); /// 65.23r
+			pthread_mutex_lock(ctx->queue_mutex);
+			ctx->pending_jobs.erase(block_idx);
+			pthread_mutex_unlock(ctx->queue_mutex);
+			pthread_cond_broadcast(ctx->cond_block_ready);
+			pthread_mutex_unlock(ctx->cache_mutex);
+			continue;
+		}
 
 		bool is_priority= (block_idx == ctx->priority_block);
 
@@ -154044,6 +154208,8 @@ void *worker_routine(void *arg)
 			if (flagdebug)
 				myprintf("09226: Worker %d: block %d read ahead thrown away (RAM full, the main thread waits for block %d)", thread_id, block_idx, (int)ctx->priority_block);
 			delete res;
+			ctx->da_rileggere.erase(block_idx); /// 65.23r: asked again when needed
+			ctx->buttati++;
 			pthread_mutex_lock(ctx->queue_mutex);
 			ctx->pending_jobs.erase(block_idx);
 			pthread_mutex_unlock(ctx->queue_mutex);
@@ -154061,8 +154227,24 @@ void *worker_routine(void *arg)
 			ctx->block_cache[block_idx]		 = res;
 			ctx->block_access_time[block_idx]= ctx->access_counter++;
 			ctx->current_cache_size+= res->size();
+			if (compattato) /// 65.23q
+				ctx->block_dove[block_idx].swap(dovefrag);
+			else
+				ctx->block_dove.erase(block_idx);
 			if (flagdebug3)
 				myprintf("09225: Worker %d: cached block %d (total: %d blocks, %d MB)", thread_id, block_idx, (int)ctx->block_cache.size(), (int)(ctx->current_cache_size / (1024 * 1024)));
+			ctx->da_rileggere.erase(block_idx); /// 65.23r
+		}
+		else if ((ctx->da_rileggere.count(block_idx) > 0) && (ctx->block_nuovo.find(block_idx) == ctx->block_nuovo.end()))
+		{
+			/// 65.23r: read again for its fragments put aside: the new copy waits for the main thread (see block_nuovo)
+			std::pair<string *, vector<int64_t> > &n= ctx->block_nuovo[block_idx];
+			n.first= res;
+			if (compattato)
+				n.second.swap(dovefrag);
+			ctx->current_cache_size+= res->size();
+			ctx->blocchi_riletti++;
+			ctx->da_rileggere.erase(block_idx);
 		}
 		else
 		{
@@ -161043,6 +161225,32 @@ bool crc32_conservato(const string &i_crc, bool i_vuoto)
 	}
 	return (!zeri) || i_vuoto;
 }
+bool ishashusable(const string &i_hash); /// (with the add: the hash carried over)
+/// 65.23m issue 375: the hash stored for a file with data, all zeros (or "!ERROR!"), is NO hash, not a hash that does
+/// not match. zpaqfranz before 65.1 wrote it so for a change of the attributes only (Windows: the archive bit,
+/// read-only...; *nix: chmod): the file was not read, its fragments are the ones of the version before, CRC-32
+/// 00000000 too. The checks took it for a hash: "NOT AS STORED" (tw), FAILED (v, t -verify), different (t with a
+/// folder), ERROR (p) on files that are good. Now hash and type are emptied (the check goes on as for a file with no
+/// hash) and the CRC-32 too if it is not a real one; true if it was so. A real hash of all zeros: once in 2^64
+bool hash_azzerato(int64_t i_dimensione, string &io_tipo, string &io_hash, string &io_crc32)
+{
+	if ((i_dimensione <= 0) || (io_hash == "") || ishashusable(io_hash))
+		return false;
+	io_tipo= "";
+	io_hash= "";
+	if (!crc32_conservato(io_crc32, false))
+		io_crc32= "";
+	return true;
+}
+/// 65.23m issue 375: the files of a check with such a hash, and how to store the real one
+void hashzero_nota(int64_t i_quanti)
+{
+	if (i_quanti <= 0)
+		return;
+	color_yellow();
+	myprintf("64457$ %s file(s) with a hash of all zeros = no hash (zpaqfranz before 65.1 wrote it for a change of the attributes only, without reading the file). To store it: the same a with -touch (only those files are read, no new data)\n", migliaia(i_quanti));
+	color_restore();
+}
 /// 65.22a: the image of a -wim run with blocks skipped (their data not read): CRC-32 only, the hash of the file cannot
 /// be taken (see g_wimsenzahash). Known by its name: X.fhd with X.wim (the state of -wim) in the same version
 template <class MAPPA>
@@ -161493,6 +161701,7 @@ string Jidac::sanitizzanomefile(string i_filename, int i_filelength, int &io_col
 							   myversion,
 							   myposix,
 							   myisadded);
+			(void)hash_azzerato(p->second.size, myhashtype, myhash, mycrc32); /// 65.23m issue 375: all zeros = no hash
 			if (myhashtype != "")
 				if (myhash != "")
 				{
@@ -164389,10 +164598,10 @@ static const franz_helpriga g_helprighetutte[]=
 	HU(549, "a", "-shutdown", "Attempt to shut down the computer upon completion"),
 	HIT(549, 0xCB6A7421, "Prova a spegnere il computer alla fine"),
 	HRU(549, 0xCB6A7421, "Попытаться выключить компьютер по завершении"),
+	HU(550, "a", "-tar", "*nix: metadata as tar (owner, mode, ns times, symlinks, hard links, FIFO, devices)|Windows: owner and permissions (DACL, SACL, label), hard links (administrator)"),
+	HIT(550, 0x3D04A548, "*nix: i metadati come tar (proprietario, permessi, tempi in ns,|  symlink, hard link, FIFO, dispositivi)|Windows: proprietario e permessi (DACL, SACL, etichetta), hard link (amministratore)"),
+	HRU(550, 0x3D04A548, "*nix: метаданные как tar (владелец, права, время в нс,|  symlink, hard link, FIFO, устройства)|Windows: владелец и права (DACL, SACL, метка), hard link (администратор)"),
 #ifdef unix
-	HU(550, "a", "-tar", "Store *nix metadata, as tar: owner, mode, ns times, symlinks, hard links, FIFO, devices"),
-	HIT(550, 0x6B17ABB3, "Salva i metadati *nix, come tar: proprietario, permessi,|  tempi in ns, symlink, hard link, FIFO, dispositivi"),
-	HRU(550, 0x6B17ABB3, "Хранить метаданные *nix, как tar: владелец, права,|  время в нс, symlink, hard link, FIFO, устройства"),
 	HU(1922, "a", "-tar -not X/*", "With -tar, X/* leaves out what is inside X, not X itself:|  the folder is kept, empty, with its owner, mode and times (as tar)"), /// 65.18j issue 350
 	HIT(1922, 0x77CEC5E5, "Con -tar, X/* lascia fuori cio' che c'e' dentro X, non X:|  la cartella resta, vuota, con proprietario, permessi e tempi (tar)"),
 	HRU(1922, 0x77CEC5E5, "С -tar, X/* исключает содержимое X, но не саму X:|  папка остаётся, пустая, с владельцем, правами и временем (как tar)"),
@@ -165297,13 +165506,13 @@ losetup -d /dev/loop0
 	HINCLUDI("x", 'u', "@range", 'b'),
 	HINCLUDI("x", 'u', "@date", 'b'), /// 65.21j: -datefrom -dateto -mindate -maxdate filter x too
 	HINCLUDI("x", 'u', "@size", 'b'), /// 65.21k: -minsize -maxsize too (not with -image: see 779)
+	HU(784, "x", "-tar", "*nix: give back metadata (owner by name, mode, times), symlinks, hard links, FIFO, devices|Windows: owner and permissions (accounts by name), hard links (administrator)"),
+	HIT(784, 0xE3D26383, "*nix: rida' i metadati (proprietario per nome, permessi, tempi),|  symlink, hard link, FIFO, dispositivi|Windows: proprietario e permessi (account per nome), hard link (amministratore)"),
+	HRU(784, 0xE3D26383, "*nix: вернуть метаданные (владелец по имени, права, время),|  symlink, hard link, FIFO, устройства|Windows: владелец и права (учётные записи по имени), hard link (администратор)"),
+	HU(785, "x", "-numeric", "With -tar: owner by uid/gid only (as tar --numeric-owner)|Windows: the SIDs as stored, not by the name of the account"),
+	HIT(785, 0x50B13EF2, "Con -tar: proprietario solo per|  uid/gid (come tar --numeric-owner)|Windows: i SID come salvati, non per nome dell'account"),
+	HRU(785, 0x50B13EF2, "С -tar: владелец только по uid/gid|  (как tar --numeric-owner)|Windows: SID как сохранены, не по имени учётной записи"),
 #ifdef unix
-	HU(784, "x", "-tar", "Give back *nix metadata (owner by name, mode, times), symlinks, hard links, FIFO, devices"),
-	HIT(784, 0xC7B3C58B, "Rida' i metadati *nix (proprietario per nome, permessi,|  tempi), symlink, hard link, FIFO, dispositivi"),
-	HRU(784, 0xC7B3C58B, "Вернуть метаданные *nix (владелец по имени, права,|  время), symlink, hard link, FIFO, устройства"),
-	HU(785, "x", "-numeric", "With -tar: owner by uid/gid only (as tar --numeric-owner)"),
-	HIT(785, 0x9DA9E417, "Con -tar: proprietario solo per|  uid/gid (come tar --numeric-owner)"),
-	HRU(785, 0x9DA9E417, "С -tar: владелец только по uid/gid|  (как tar --numeric-owner)"),
 	HU(1947, "x", "-sameperms", "Not root: the modes exactly as in the archive|(setuid, setgid, sticky too; the umask ignored)|Default, as tar: umask, no setuid/setgid/sticky; root: exact"),
 	HIT(1947, 0xE08AC10D, "Non root: i permessi esattamente come nell'archivio|(anche setuid, setgid, sticky; umask ignorata)|Default, come tar: umask, niente setuid/setgid/|sticky; root: sempre esatti"),
 	HRU(1947, 0xE08AC10D, "Не root: права точно как в архиве|(и setuid, setgid, sticky; umask не учитывается)|По умолчанию, как tar: umask, без setuid/setgid/|sticky; root: всегда точно"),
@@ -167217,6 +167426,9 @@ losetup -d /dev/loop0
 	HU(1297, "image", "-force", "Overwrite an existing destination file"),
 	HIT(1297, 0x11646B5C, "Sovrascrive un file di destinazione esistente"),
 	HRU(1297, 0x11646B5C, "Перезаписать существующий файл назначения"),
+	HU(2010, "image", "-ssd", "-to x.vhd: written by the threads in any order, sparse while written (SSD, NVMe)|  Without it: in order, every byte once (HDD, USB, NAS)|  A .vhdx, a .vmdk, a raw file: always in order"), /// 65.23p
+	HIT(2010, 0xEE3050F9, "-to x.vhd: scritto dai thread in qualsiasi ordine, sparse mentre si scrive|  (SSD, NVMe). Senza: in ordine, ogni byte una volta (HDD, USB, NAS)|  Un .vhdx, un .vmdk, un file raw: sempre in ordine"),
+	HRU(2010, 0xEE3050F9, "-to x.vhd: пишется потоками в любом порядке, разреженным во время записи|  (SSD, NVMe). Без него: по порядку, каждый байт один раз (HDD, USB, NAS)|  .vhdx, .vmdk, raw-файл: всегда по порядку"),
 	HESEMPI("image", 'b'),
 	HTESTO(1298, "image", 'e', 'c', "Restore to file"),
 	HIT(1298, 0xD3AA8BAC, "Ripristina in un file"),
@@ -168735,9 +168947,9 @@ losetup -d /dev/loop0
 	HTESTO(1740, "@flag", 'a', 0, "zip: the same as -deflate"),
 	HIT(1740, 0x6F9522C3, "zip: come -deflate"),
 	HRU(1740, 0x6F9522C3, "zip: то же, что -deflate"),
-	HTESTO(1741, "@flag", 'a', 0, "TAR mode (store/show Posix metadata)"),
-	HIT(1741, 0xCDDA7EE3, "Modalita' TAR (salva/mostra i metadati Posix)"),
-	HRU(1741, 0xCDDA7EE3, "Режим TAR (хранить/показывать метаданные Posix)"),
+	HTESTO(1741, "@flag", 'a', 0, "TAR mode (store/show Posix metadata; Windows: permissions)"),
+	HIT(1741, 0x8EEE38D9, "Modalita' TAR (salva/mostra i metadati Posix; Windows: permessi)"),
+	HRU(1741, 0x8EEE38D9, "Режим TAR (хранить/показывать метаданные Posix; Windows: права)"),
 	HTESTO(1742, "@flag", 'a', 0, "x -tar: owners by uid/gid only, not by name"),
 	HIT(1742, 0x470EE078, "x -tar: proprietari solo per uid/gid, non per nome"),
 	HRU(1742, 0x470EE078, "x -tar: владельцы только по uid/gid, не по имени"),
@@ -172021,7 +172233,7 @@ void programflags_riempi(bool *i_flagtest)
 	g_programflags.add(&flagstore,			"-store",				"Store mode: no deduplication, no compression",		"");
 	g_programflags.add(&flagdeflate,		"-deflate",				"zip: compress (deflate) instead of storing",			"");
 	g_programflags.add(&flagdeflate,		"-zip",					"zip: the same as -deflate",							"");
-	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store/show Posix metadata)",							"");
+	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store/show Posix metadata; Windows: permissions)",							"");
 	g_programflags.add(&flagnumeric,		"-numeric",				"x -tar: owners by uid/gid only, not by name",			"");
 #ifdef unix
 	g_programflags.add(&flagsameperms,		"-sameperms",			"*nix, not root: extract the modes exactly (as root does)",	""); /// 65.19h
@@ -172578,10 +172790,22 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("52860: k0 flagnojit %d\n",int(flagnojit));
 
 #if defined(__amd64__) || defined(__i386__)
+	/*
+		65.23a issue 376: -nojit, when the user writes it, wins. The JIT is turned
+		on by itself (if the system can) only when nothing was said: before, the
+		flag was set to false on every x86, so -nojit never did anything
+	*/
+	if (flagnojit)
+	{
+		if (flagdebug)
+			myprintf("52863: -nojit: the JIT stays OFF, ZPAQL interpreted\n");
+	}
+	else
+	{
 	if (flagdebug)
 		myprintf("52820: This seems amd64/i386, turning OFF flagnojit\n");
 	flagnojit=false;
-	
+
 #ifdef unix
 	if (flagdebug)
 		myprintf("52588: UNIX: checking OS support for JIT\n");
@@ -172618,6 +172842,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		munmap(p,8192);
 	}
 #endif // corresponds to #ifdef (#ifdef unix)
+	} /// (not -nojit)
 #else
 	if (flagdebug)
 		myprintf("52824: CPU not amd64/i386, turning ON flagnojit\n");
@@ -173987,7 +174212,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 #ifdef ZPAQFULL ///NOSFTPSTART
 	/// (cloud with -image asks for the administrator rights at the very start: see cloud_eleva)
-	if (((command=='a') && (flagvss || flagimage)) || (command=='q'))
+	/// 65.23c: -tar on Windows (the security of the files of every user) too
+	if (((command=='a') && (flagvss || flagimage)) || (command=='q') || (((command=='a') || (command=='x')) && flagtar))
 	{
 		/// (-elevated, hidden: added to the elevated run, never relaunched twice. -elevatefake,
 		/// hidden, for the tests: relaunched without UAC, as if not an administrator)
@@ -178185,6 +178411,7 @@ int Jidac::mount()
 				franz_posix* posix	  = NULL;
 				bool		 aggiunto = false;
 				decode_franz_block(false, p->second.franz_block, tipo, hash, crc32, creazione, accesso, ordinato, versione, posix, aggiunto);
+				(void)hash_azzerato(p->second.size, tipo, hash, crc32); /// 65.23m issue 375: all zeros = no hash, size only
 				if (tipo=="" && crc32!="")
 					tipo= "CRC-32";
 				if (tipo!="" && franz_get_hash(tipo)!=NULL)
@@ -179101,6 +179328,11 @@ bool Jidac::isselected(const char *filename, bool rn, int64_t i_size)
 		return true; // dirsize, take ALL the stuff, for pos() filtering
 	if (g_optional == "zfsadd")
 		return true; // skip all this stuff, take everything
+#ifdef _WIN32
+	/// 65.23c: -tar, the table of the security is always taken (it is of every file, not of a folder)
+	if (flagtar && (strcmp(filename, ZPAQ_WINTAR) == 0))
+		return true;
+#endif
 	bool matched= true;
 #ifdef _WIN32
 	if (flagonedrive)
@@ -181810,7 +182042,9 @@ void Jidac::write715attr(libzpaq::StringBuffer &i_sb, uint64_t i_data, unsigned 
 	  linkname too, for the older zpaqfranz
 	- hard links: the files with the same (device, inode) found in the same add
 	  are a group. The first name (in order) is stored as a regular file, every
-	  other one as LNKTYPE with linkname = that first name. The content is stored
+	  other one as LNKTYPE with linkname = that first name. 65.23a: a group
+	  already in the archive keeps its first name (a new link joins it, even if
+	  its name sorts before). The content is stored
 	  anyway (deduplication: it costs just the index), so without -tar, or when
 	  the link cannot be made (another filesystem...), the file is a copy
 	- FIFOs, character and block devices (with major and minor): no data
@@ -181822,11 +182056,13 @@ void Jidac::write715attr(libzpaq::StringBuffer &i_sb, uint64_t i_data, unsigned 
 
 	What "x -tar" does, after all the data are written
 	- files (in name order): a symlink replaces the extracted file with the
-	  link; a hard link replaces the copy with a link to the first name (if it
-	  is there, on the same filesystem, a regular file); FIFOs by mkfifo();
+	  link; FIFOs by mkfifo();
 	  devices by mknod() (root only). Then owner (root only, by name if that
 	  name exists here, else by number; -numeric: always by number, as
 	  tar --numeric-owner), THEN mode (chown drops setuid/setgid), then times
+	- hard links after all the files (65.23a): every copy of a group becomes a
+	  link to one name of it, stored as a file if there is one (there, on the
+	  same filesystem, a regular file), else the first one
 	- directories last, deepest first: the files created inside do not change
 	  their times any more, and a read-only directory does not stop the work
 	- an existing symlink, FIFO or device where x has to write a file is removed
@@ -182565,6 +182801,21 @@ int restorefilemetadata(const char *filepath, const struct franz_posix *metadata
 #endif
 	return 0;
 }
+/// 65.23a: the typeflag of an entry of the archive stored with -tar (REGTYPE, LNKTYPE...), 0 without metadata
+static char tar_tipo(DTMap::iterator i_p)
+{
+	string		 myhashtype	   = "";
+	string		 myhash		   = "";
+	string		 mycrc32	   = "";
+	int64_t		 mycreationtime= 0;
+	int64_t		 myaccesstime  = 0;
+	bool		 myisordered   = false;
+	int			 myversion	   = 0;
+	franz_posix *myposix	   = NULL;
+	bool		 myisadded	   = false;
+	decode_franz_block(false, i_p->second.franz_block, myhashtype, myhash, mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
+	return (myposix == NULL) ? 0 : myposix->typeflag[0];
+}
 /// -tar: every hard link group with two or more names in this add: the first name
 /// (archived name) for the others. A first name too long for linkname: copies
 void Jidac::tar_linkmasters(map<string, string> &o_linkto)
@@ -182583,7 +182834,33 @@ void Jidac::tar_linkmasters(map<string, string> &o_linkto)
 		nomi.erase(std::unique(nomi.begin(), nomi.end()), nomi.end());
 		if (nomi.size() < 2)
 			continue;
-		string primo= rename(nomi[0]);
+		/*
+			65.23a issue 377: a group already in the archive keeps its first name there. The names
+			not written again in this add (same date and size: the same inode, untouched) keep what
+			they have, a link to that name. The first in order was taken: a new link that sorts
+			before them (d/nuovo, the file in d/s/f) became the first name of a group of its own,
+			and x -tar gave it a copy of the data, nlink 1. Now: an old name stored as a file, else
+			an old name stored as a link (x -tar joins the links of a group in any order), else
+			(all new, or all written again) the first in order, as before
+		*/
+		size_t scelto = 0;
+		int	   qualita= 0; /// 2 in the archive as a file, 1 as a link, 0 new
+		for (size_t i= 0; (i < nomi.size()) && (qualita < 2); i++)
+		{
+			string nomearchivio= rename(nomi[i]);
+			franzreplace(nomearchivio);
+			DTMap::iterator a= dt.find(nomearchivio);
+			DTMap::iterator e= edt.find(nomi[i]);
+			if ((a == dt.end()) || (!a->second.date) || (e == edt.end()) || (a->second.date != e->second.date) || (a->second.size != e->second.size))
+				continue; /// new, or written again now
+			const int q= (tar_tipo(a) == LNKTYPE) ? 1 : 2;
+			if (q > qualita)
+			{
+				qualita= q;
+				scelto = i;
+			}
+		}
+		string primo= rename(nomi[scelto]);
 		franzreplace(primo);
 		if (primo.size() >= sizeof(((franz_posix *)0)->linkname))
 		{
@@ -182591,8 +182868,9 @@ void Jidac::tar_linkmasters(map<string, string> &o_linkto)
 			myprintf("64403$ Hard link: first name longer than %d bytes, stored as copies <<%Z>>\n", (int)sizeof(((franz_posix *)0)->linkname) - 1, primo.c_str());
 			continue;
 		}
-		for (unsigned i= 1; i < nomi.size(); i++)
-			o_linkto[nomi[i]]= primo;
+		for (unsigned i= 0; i < nomi.size(); i++)
+			if (i != scelto)
+				o_linkto[nomi[i]]= primo;
 	}
 }
 /// -tar: a chown or chgrp only (the attr has just the mode): true if the owner
@@ -182645,11 +182923,130 @@ bool tar_stessidati(DTMap::iterator i_a, DTMap::iterator i_b)
 	}
 	return (hash[0] != "") && (hash[0] == hash[1]);
 }
+/// 65.23a issue 377: the hard link groups of x -tar, by archived name (union-find)
+static string tar_radice(map<string, string> &io_padre, const string &i_nome)
+{
+	string r= i_nome;
+	for (;;)
+	{
+		map<string, string>::iterator it= io_padre.find(r);
+		if ((it == io_padre.end()) || (it->second == r))
+			break;
+		r= it->second;
+	}
+	string x= i_nome; /// straight to the root, the next time
+	while (x != r)
+	{
+		map<string, string>::iterator it= io_padre.find(x);
+		if (it == io_padre.end())
+			break;
+		const string dopo= it->second;
+		it->second		 = r;
+		x				 = dopo;
+	}
+	return r;
+}
+static void tar_unisci(map<string, string> &io_padre, const string &i_a, const string &i_b)
+{
+	const string ra= tar_radice(io_padre, i_a);
+	const string rb= tar_radice(io_padre, i_b);
+	if (ra != rb)
+		io_padre[ra]= rb;
+}
+/*
+	65.23a issue 377: x -tar, the hard links (LNKTYPE, extracted as copies, in name order), when
+	every file is there. A group: a link and the name it points to (there, with the same data),
+	or the links whose first name is gone (deleted, or other data now: never linked to it, it
+	would give them the data of another file) and have the same data. The name that stays a
+	file: one stored as a file, else the first link of the group; every other one becomes a
+	link to it. Before, a link was made at once, to its own first name: a first name that was
+	made a link later (a group of the archive joined to a new name) kept the old copy, two
+	groups and a copy of the data
+*/
+void Jidac::tar_collega(const vector<DTMap::iterator> &i_collegamenti, map<string, DTMap::iterator> &io_nuovicapi, int64_t &io_fatti, int64_t &io_sbagliati)
+{
+	if (i_collegamenti.empty())
+		return;
+	std::set<string> deilink; /// the names of the links here
+	for (size_t k= 0; k < i_collegamenti.size(); k++)
+		deilink.insert(i_collegamenti[k]->first);
+	map<string, string> padre;
+	vector<string>		file;	  /// names pointed to that are not links here: a file of the group
+	std::set<string>	senzacapo; /// links whose first name is gone or changed (-verbose)
+	for (size_t k= 0; k < i_collegamenti.size(); k++)
+	{
+		DTMap::iterator l	  = i_collegamenti[k];
+		franz_posix	   *posix= NULL;
+		string			h1, h2, h3;
+		int64_t			t1= 0, t2= 0;
+		bool			b1= false, b2= false;
+		int				v1= 0;
+		decode_franz_block(false, l->second.franz_block, h1, h2, h3, t1, t2, b1, v1, posix, b2);
+		if (posix == NULL)
+			continue;
+		const string	capo= tar_field(posix->linkname, sizeof(posix->linkname));
+		DTMap::iterator c	= dt.find(capo);
+		if ((c != dt.end()) && c->second.date && tar_stessidati(c, l))
+		{
+			tar_unisci(padre, l->first, capo);
+			if (deilink.find(capo) == deilink.end())
+				file.push_back(capo);
+		}
+		else
+		{
+			senzacapo.insert(l->first);
+			map<string, DTMap::iterator>::iterator n= io_nuovicapi.find(capo);
+			if (n == io_nuovicapi.end())
+				io_nuovicapi[capo]= l; /// the first survivor
+			else if (tar_stessidati(n->second, l))
+				tar_unisci(padre, l->first, n->second->first);
+		}
+	}
+	map<string, string> resta; /// group (its root) => the name that stays a file
+	for (size_t k= 0; k < file.size(); k++)
+	{
+		const string r= tar_radice(padre, file[k]);
+		if (resta.find(r) != resta.end())
+			continue;
+		struct stat sf;
+		if ((lstat(rename(file[k]).c_str(), &sf) == 0) && S_ISREG(sf.st_mode))
+			resta[r]= file[k];
+	}
+	for (size_t k= 0; k < i_collegamenti.size(); k++)
+	{
+		const string r= tar_radice(padre, i_collegamenti[k]->first);
+		if (resta.find(r) == resta.end())
+			resta[r]= i_collegamenti[k]->first;
+	}
+	for (size_t k= 0; k < i_collegamenti.size(); k++)
+	{
+		DTMap::iterator l	  = i_collegamenti[k];
+		franz_posix	   *posix= NULL;
+		string			h1, h2, h3;
+		int64_t			t1= 0, t2= 0;
+		bool			b1= false, b2= false;
+		int				v1= 0;
+		decode_franz_block(false, l->second.franz_block, h1, h2, h3, t1, t2, b1, v1, posix, b2);
+		if (posix == NULL)
+			continue;
+		const string fn	   = rename(l->first);
+		const string quale = resta[tar_radice(padre, l->first)];
+		const string linkto= (quale == l->first) ? "" : rename(quale);
+		if (flagverbose && (senzacapo.find(l->first) != senzacapo.end()))
+			myprintf("64406: Hard link %Z: first name %Z gone or changed, %s\n", fn.c_str(), tar_field(posix->linkname, sizeof(posix->linkname)).c_str(), (linkto == "") ? "kept as a file" : linkto.c_str());
+		if (restorefilemetadata(fn.c_str(), posix, linkto) == 0)
+			io_fatti++;
+		else
+			io_sbagliati++;
+	}
+}
 /// x -tar: give back what tar would, when all the data are written. Files in
-/// name order, then the directories from the deepest (see "-tar (*nix)" above)
+/// name order, then the hard links, then the directories from the deepest (see "-tar (*nix)" above)
 int Jidac::tar_restore(int &o_errors)
 {
 	vector<DTMap::iterator> cartelle;
+	/// 65.23a issue 377: the hard links (extracted as copies) after all the files, see passo 1
+	vector<DTMap::iterator> collegamenti;
 	/// hard link group whose first name is gone (deleted, or replaced by another file in a later
 	/// version): its first survivor with the same data is the new first name of the others
 	map<string, DTMap::iterator> nuovicapi;
@@ -182659,6 +183056,8 @@ int Jidac::tar_restore(int &o_errors)
 	g_tarnotroot						 = 0;
 	for (int passo= 0; passo < 2; passo++)
 	{
+		if (passo == 1)
+			tar_collega(collegamenti, nuovicapi, fatti, sbagliati); /// before the directories: a link changes their times
 		const size_t quanti= (passo == 0) ? dt.size() : cartelle.size();
 		DTMap::iterator p  = dt.begin();
 		for (size_t i= 0; i < quanti; i++)
@@ -182703,27 +183102,12 @@ int Jidac::tar_restore(int &o_errors)
 					chmod(fn.c_str(), (st.st_mode & 07777) | 0700);
 				continue;
 			}
-			string linkto= "";
-			if (myposix->typeflag[0] == LNKTYPE)
+			if ((myposix->typeflag[0] == LNKTYPE) && S_ISREG(st.st_mode))
 			{
-				/// never link to a first name that is not there any more, or holds other data now:
-				/// the link would give THIS file the data of another one
-				const string	capo= tar_field(myposix->linkname, sizeof(myposix->linkname));
-				DTMap::iterator c	= dt.find(capo);
-				if ((c != dt.end()) && c->second.date && tar_stessidati(c, p))
-					linkto= rename(capo);
-				else
-				{
-					map<string, DTMap::iterator>::iterator n= nuovicapi.find(capo);
-					if (n == nuovicapi.end())
-						nuovicapi[capo]= p; /// the first survivor: a file, not a link
-					else if (tar_stessidati(n->second, p))
-						linkto= rename(n->second->first);
-					if (flagverbose)
-						myprintf("64406: Hard link %Z: first name %Z gone or changed, %s\n", fn.c_str(), capo.c_str(), (linkto == "") ? "kept as a file" : linkto.c_str());
-				}
+				collegamenti.push_back(p); /// 65.23a: when every file of its group is there
+				continue;
 			}
-			if (restorefilemetadata(fn.c_str(), myposix, linkto) == 0)
+			if (restorefilemetadata(fn.c_str(), myposix, "") == 0)
 				fatti++;
 			else
 				sbagliati++;
@@ -182735,6 +183119,1580 @@ int Jidac::tar_restore(int &o_errors)
 	if ((sbagliati > 0) && (o_errors == 0))
 		o_errors= 1;
 	return (int)fatti;
+}
+#endif
+/// 65.23i: the table of -tar of Windows, read on every system (l shows TAR for its files)
+/// the table, read (wintar_leggi)
+struct wintar_tabella
+{
+	string									  computer;
+	std::map<string, std::pair<int, string> > utenti; /// SID (text) => SID_NAME_USE, domain\name
+	vector<string>							  sd;
+	vector<std::pair<string, int> >			  file;	 /// name, descriptor
+	vector<std::pair<string, int> >			  link;	 /// name, group
+	vector<std::pair<string, string> >		  corti; /// 65.23k: name, short name (8.3)
+	vector<std::pair<string, string> >		  ea;	 /// 65.23k: name, extended attributes (FILE_FULL_EA_INFORMATION, a list)
+	vector<std::pair<string, std::pair<string, string> > > reparse; /// 65.23m: name, (attributes/date, the reparse point)
+};
+/// 65.23k: hex text (of S and E) to bytes. false: not hex
+static bool wintar_dahex(const string &i_hex, string &o_dati)
+{
+	o_dati= "";
+	if ((i_hex.size() % 2) != 0)
+		return false;
+	for (size_t i= 0; i + 1 < i_hex.size(); i+= 2)
+	{
+		int v= 0;
+		for (int k= 0; k < 2; k++)
+		{
+			const char c= i_hex[i + k];
+			v*= 16;
+			if ((c >= '0') && (c <= '9'))
+				v+= c - '0';
+			else if ((c >= 'A') && (c <= 'F'))
+				v+= c - 'A' + 10;
+			else
+				return false;
+		}
+		o_dati+= (char)v;
+	}
+	return true;
+}
+/// the text of the table. false: not a table. Lines not known (a newer zpaqfranz): left alone
+static bool wintar_leggi(const string &i_testo, wintar_tabella &o_t)
+{
+	o_t.computer= "";
+	o_t.utenti.clear();
+	o_t.sd.clear();
+	o_t.file.clear();
+	o_t.link.clear();
+	o_t.corti.clear();
+	o_t.ea.clear();
+	o_t.reparse.clear();
+	size_t inizio= 0;
+	bool   testa = false;
+	while (inizio < i_testo.size())
+	{
+		size_t fine= i_testo.find('\n', inizio);
+		if (fine == string::npos)
+			fine= i_testo.size();
+		const string riga= i_testo.substr(inizio, fine - inizio);
+		inizio			 = fine + 1;
+		if (!testa)
+		{
+			if (riga.compare(0, 17, "zpaqfranz-wintar ") != 0)
+				return false;
+			testa= true;
+			continue;
+		}
+		if ((riga.size() < 3) || (riga[1] != ' '))
+			continue;
+		const char tipo= riga[0];
+		if (tipo == 'S')
+		{
+			if (((riga.size() - 2) % 2) != 0)
+				return false;
+			string sd= "";
+			for (size_t i= 2; i + 1 < riga.size(); i+= 2)
+			{
+				int v= 0;
+				for (int k= 0; k < 2; k++)
+				{
+					const char c= riga[i + k];
+					v*= 16;
+					if ((c >= '0') && (c <= '9'))
+						v+= c - '0';
+					else if ((c >= 'A') && (c <= 'F'))
+						v+= c - 'A' + 10;
+					else
+						return false;
+				}
+				sd+= (char)v;
+			}
+			o_t.sd.push_back(sd);
+		}
+		else if (tipo == 'C')
+			o_t.computer= riga.substr(2);
+		else if ((tipo == 'F') || (tipo == 'L') || (tipo == 'U') || (tipo == 'N') || (tipo == 'E') || (tipo == 'R'))
+		{
+			const size_t spazio= riga.find(' ', 2);
+			if ((spazio == string::npos) || (spazio + 1 >= riga.size()))
+				return false;
+			const string primo= riga.substr(2, spazio - 2);
+			const string resto= riga.substr(spazio + 1);
+			if (tipo == 'R') /// 65.23m: R <hex of the reparse point> <attributes hex>/<date> <name>
+			{
+				string		 dati;
+				const size_t spazio2= resto.find(' ');
+				if ((!wintar_dahex(primo, dati)) || (spazio2 == string::npos) || (spazio2 + 1 >= resto.size()))
+					return false;
+				o_t.reparse.push_back(std::make_pair(resto.substr(spazio2 + 1), std::make_pair(resto.substr(0, spazio2), dati)));
+				continue;
+			}
+			if (tipo == 'N') /// 65.23k: N <short name> <name>
+			{
+				o_t.corti.push_back(std::make_pair(resto, primo));
+				continue;
+			}
+			if (tipo == 'E') /// 65.23k: E <hex of the extended attributes> <name>
+			{
+				string ea;
+				if (!wintar_dahex(primo, ea))
+					return false;
+				o_t.ea.push_back(std::make_pair(resto, ea));
+				continue;
+			}
+			if (tipo == 'U')
+			{
+				const size_t spazio2= resto.find(' ');
+				if ((spazio2 == string::npos) || (spazio2 + 1 >= resto.size()))
+					return false;
+				o_t.utenti[primo]= std::make_pair(atoi(resto.substr(0, spazio2).c_str()), resto.substr(spazio2 + 1));
+				continue;
+			}
+			const int numero= atoi(primo.c_str());
+			if (numero < 0)
+				return false;
+			if (tipo == 'F')
+			{
+				if (numero >= (int)o_t.sd.size())
+					return false;
+				o_t.file.push_back(std::make_pair(resto, numero));
+			}
+			else
+				o_t.link.push_back(std::make_pair(resto, numero));
+		}
+	}
+	return testa;
+}
+#ifdef _WIN32
+/*
+	65.23c: -tar on Windows. What tar keeps on *nix (owner and mode of every file) is,
+	here, the security descriptor: owner, group, DACL, and the SACL with the integrity
+	label when the privilege is there. The franz block has no room for it (a descriptor
+	can be KBs, 550 bytes is the limit of every older zpaqfranz): one more file in the
+	version, VFILE-w-tar.txt, with the table of ALL the files of the archive at that
+	version, not only of the ones of this add. A change of the permissions does not touch
+	the date (the file is not read again), and x -until N needs the table of N only. A
+	descriptor, often the same for thousands of files, is written once. Text, anyone
+	can read it:
+		zpaqfranz-wintar 2
+		C <the computer of the add>
+		U <SID> <SID_NAME_USE> <domain>\<name>   (65.23h: the accounts, see below)
+		S <hex of the self-relative descriptor>  (the first is number 0, then 1...)
+		F <number of the descriptor> <name in the archive>
+		L <number of the group> <name in the archive>   (65.23h: hard links)
+		N <short name> <name in the archive>   (65.23k: 8.3, when it is not the name itself)
+		E <hex of the extended attributes> <name in the archive>   (65.23k: only who has them)
+		R <hex of the reparse point> <attributes hex>/<date> <name in the archive>   (65.23m: app aliases)
+	a: the files of this add (from the shadow copy, with -vss), and from the table of the
+	archive the ones out of this add (another folder stays as it was; the files deleted
+	now go away with their entry). The same table as before: the entry keeps its date,
+	nothing is written. Administrator only (the elevated run, as -image): the descriptors
+	of the files of the other users cannot be read otherwise, and half a table would be
+	worse than none.
+	x: the table is read first (wintar_carica: its descriptor to every entry of dt, so it
+	follows the names changed by the sanitization), then, after the data
+	(wintar_restore), every file extracted (or found equal with -force), then the folders
+	from the deepest, by SetKernelObjectSecurity: exactly what was stored, no inheritance
+	pushed to the children (as SetNamedSecurityInfo would). SeRestorePrivilege for an owner
+	that is not who extracts, SeSecurityPrivilege for the SACL.
+	65.23h, the accounts: a SID of a computer or of a domain (S-1-5-21-..., S-1-12-1-...
+	of Entra ID) means nothing on another PC. Every one in the descriptors (owner, group,
+	the ACEs) goes in the table with its name, as LookupAccountSid gives it at the add. At
+	x, the name is looked for here (a local account of the computer of the add: the same
+	name on this computer), and its SID takes the place of the old one in the descriptors.
+	Not found (or -numeric, as tar --numeric-owner): the SID as it was. The SIDs that are
+	the same everywhere (SYSTEM, Administrators, TrustedInstaller, the capabilities...)
+	are never by name: their names change with the language of Windows.
+	65.23h, hard links: the names of the same file (volume and file index) in this add are
+	a group. x makes every other name of the group a link to the first one extracted (the
+	same data: size and hash), before the permissions, and sets the date of their folders
+	again (a new link changes it). Without -tar: copies, as always.
+	65.23k, extended attributes: WSL1 keeps the owner, mode and device of Linux in them
+	($LXUID, $LXGID, $LXMOD, $LXDEV...): a distribution restored without is broken. Read
+	with the same handle (NtQueryInformationFile for their size: almost every file has
+	none, then NtQueryEaFile), the ones of the kernel ($KERNEL.*) left out: no program can
+	set them. Given back by NtSetEaFile, before the permissions.
+	65.23k, short names (8.3): an installer, the registry, can keep C:\PROGRA~1\GAMENA~1:
+	after a restore Windows can make GAMENA~2. Read by FileAlternateNameInformation (the
+	short name of the name opened), given back by SetFileShortNameW: first every short name
+	to give back is taken away, then set (the extraction may have given one to another file
+	of the folder; if that one is an entry extracted now, without a short name of its own,
+	its own goes away). A volume without short names (fsutil 8dot3name): a WARNING.
+	At x: hard links, short names, the dates of the folders they touched, extended
+	attributes, permissions
+	65.23m, the app execution aliases (%LOCALAPPDATA%\Microsoft\WindowsApps: winget.exe,
+	python.exe, wt.exe...): not files, a reparse point (IO_REPARSE_TAG_APPEXECLINK) of 0 bytes
+	that only CreateProcess opens, every read fails ("cannot access the file", and the add
+	ended with errors, always, for a whole profile). Given back as files of 0 bytes they would
+	break the app (an empty winget.exe first in the PATH). So they are never in the archive as
+	files: without -tar a line says how many (Windows makes them again when the app is
+	registered); with -tar their reparse point (package, app, the exe), attributes and date go
+	in the table (R) with their permissions (F), and x -tar makes them again
+	(FSCTL_SET_REPARSE_POINT), before the permissions. x without -tar: nothing
+*/
+#define WINTAR_LABEL ((SECURITY_INFORMATION)0x00000010L) /// LABEL_SECURITY_INFORMATION (Vista+), not in every header
+std::string						g_wintar_testo;	 /// a: the table of this version
+std::vector<std::string>		g_wintar_sd;	 /// x: the descriptors of the table
+std::set<std::string>			g_wintaruguali;	 /// x -force: the files found equal (not written: their security given back anyway)
+std::vector<std::vector<string> > g_wintar_gruppi; /// x: the hard link groups of the table (names in the archive)
+std::vector<std::pair<string, string> > g_wintar_corti; /// x: 65.23k name, short name
+std::vector<std::pair<string, string> > g_wintar_ea;	/// x: 65.23k name, extended attributes
+/// 65.23m: the app execution aliases (see above): a, the ones of this add; x, the ones of the table to make
+#define WINTAR_APPEXECLINK 0x8000001BUL /// IO_REPARSE_TAG_APPEXECLINK, not in every header
+struct wintar_alias
+{
+	string	nome; /// a: as scanned (-vss: in the shadow copy); x: in the archive
+	int64_t date;
+	int64_t attr; /// 'w' + the attributes << 8
+	string	dati; /// the reparse point, as FSCTL_GET_REPARSE_POINT gives it
+	int		sd;	  /// x: its descriptor, -1 none
+	wintar_alias() : date(0), attr(0), sd(-1)
+	{
+	}
+};
+std::vector<wintar_alias> g_wintar_alias; /// a -tar
+std::vector<wintar_alias> g_wintar_rip;	  /// x -tar
+/// 65.23k: ntdll at run time, the calls of the extended attributes and of the short name
+struct wintar_iosb
+{
+	union
+	{
+		LONG  Status;
+		PVOID Pointer;
+	} u;
+	ULONG_PTR Information;
+};
+typedef LONG(WINAPI *wintar_nqif_t)(HANDLE, wintar_iosb *, PVOID, ULONG, int);
+typedef LONG(WINAPI *wintar_nqea_t)(HANDLE, wintar_iosb *, PVOID, ULONG, BOOLEAN, PVOID, ULONG, PULONG, BOOLEAN);
+typedef LONG(WINAPI *wintar_nsea_t)(HANDLE, wintar_iosb *, PVOID, ULONG);
+typedef ULONG(WINAPI *wintar_rnsde_t)(LONG);
+static wintar_nqif_t  wintar_nqif = NULL;
+static wintar_nqea_t  wintar_nqea = NULL;
+static wintar_nsea_t  wintar_nsea = NULL;
+static wintar_rnsde_t wintar_rnsde= NULL;
+static void			  wintar_ntdll()
+{
+	static bool fatto= false;
+	if (fatto)
+		return;
+	fatto	  = true;
+	HMODULE nt= GetModuleHandleA("ntdll.dll");
+	if (nt == NULL)
+		return;
+	wintar_nqif = (wintar_nqif_t)(void *)GetProcAddress(nt, "NtQueryInformationFile");
+	wintar_nqea = (wintar_nqea_t)(void *)GetProcAddress(nt, "NtQueryEaFile");
+	wintar_nsea = (wintar_nsea_t)(void *)GetProcAddress(nt, "NtSetEaFile");
+	wintar_rnsde= (wintar_rnsde_t)(void *)GetProcAddress(nt, "RtlNtStatusToDosError");
+}
+static std::wstring wintar_percorso(const string &i_nome); /// (below)
+/// the extended attributes (a list of FILE_FULL_EA_INFORMATION) without the ones of the kernel ($KERNEL.*), every entry
+/// on 4 bytes, the last one with NextEntryOffset 0. "" none left
+static string wintar_eapulisci(const char *i_buf, size_t i_len)
+{
+	vector<string> tenute;
+	size_t		   pos= 0;
+	while (pos + 8 <= i_len)
+	{
+		ULONG  prossimo= 0;
+		USHORT lvalore = 0;
+		memcpy(&prossimo, i_buf + pos, 4);
+		const unsigned char lnome= (unsigned char)i_buf[pos + 5];
+		memcpy(&lvalore, i_buf + pos + 6, 2);
+		const size_t lunghezza= 8 + (size_t)lnome + 1 + (size_t)lvalore;
+		if (pos + lunghezza > i_len)
+			break;
+		string nome(i_buf + pos + 8, lnome);
+		if (stringtoupper(nome.substr(0, 8)) != "$KERNEL.")
+			tenute.push_back(string(i_buf + pos, lunghezza));
+		if (prossimo == 0)
+			break;
+		pos+= prossimo;
+	}
+	string r= "";
+	for (size_t i= 0; i < tenute.size(); i++)
+	{
+		string voce= tenute[i];
+		ULONG  prossimo= 0;
+		if (i + 1 < tenute.size())
+		{
+			voce.append((4 - (voce.size() % 4)) % 4, '\0');
+			prossimo= (ULONG)voce.size();
+		}
+		memcpy(&voce[0], &prossimo, 4);
+		r+= voce;
+	}
+	return r;
+}
+/// 65.23k: what the volume of a name keeps (GetVolumeInformation once per volume). 0 permissions, 1 extended attributes,
+/// 2 short names, 3 hard links. Not known: true (it is tried)
+static bool wintar_puo(const string &i_nome, int i_cosa)
+{
+	static std::map<std::wstring, std::pair<DWORD, string> > visti; /// root => flags, file system
+	wchar_t													  radice[MAX_PATH + 1];
+	if (!GetVolumePathNameW(wintar_percorso(i_nome).c_str(), radice, MAX_PATH))
+		return true;
+	std::map<std::wstring, std::pair<DWORD, string> >::iterator v= visti.find(radice);
+	if (v == visti.end())
+	{
+		wchar_t fs[64];
+		DWORD	flags= 0;
+		if (!GetVolumeInformationW(radice, NULL, 0, NULL, NULL, &flags, fs, 64))
+			return true;
+		visti[radice]= std::make_pair(flags, stringtoupper(wtou(fs)));
+		v			 = visti.find(radice);
+	}
+	const DWORD	  flags= v->second.first;
+	const bool	  ntfs = (v->second.second == "NTFS");
+	switch (i_cosa)
+	{
+		case 0:
+			return (flags & FILE_PERSISTENT_ACLS) != 0;
+		case 1:
+			return ntfs || ((flags & 0x00800000) != 0); /// FILE_SUPPORTS_EXTENDED_ATTRIBUTES
+		case 2:
+			return ntfs; /// (FAT makes its own, exFAT and ReFS have none)
+		default:
+			return ntfs || ((flags & 0x00400000) != 0); /// FILE_SUPPORTS_HARD_LINKS
+	}
+}
+/// the error of a NTSTATUS, as Windows says it
+static DWORD wintar_errore(LONG i_stato)
+{
+	wintar_ntdll();
+	return (wintar_rnsde != NULL) ? (DWORD)wintar_rnsde(i_stato) : (DWORD)i_stato;
+}
+/// the short name (8.3) of the name opened, "" none
+static string wintar_cortodi(HANDLE i_h)
+{
+	wintar_ntdll();
+	if (wintar_nqif == NULL)
+		return "";
+	struct
+	{
+		ULONG lunghezza;
+		WCHAR nome[64];
+	} alterno;
+	memset(&alterno, 0, sizeof(alterno));
+	wintar_iosb io;
+	memset(&io, 0, sizeof(io));
+	if (wintar_nqif(i_h, &io, &alterno, sizeof(alterno), 21 /* FileAlternateNameInformation */) < 0)
+		return "";
+	if ((alterno.lunghezza == 0) || (alterno.lunghezza >= sizeof(alterno.nome)))
+		return "";
+	return wtou(std::wstring(alterno.nome, alterno.lunghezza / 2).c_str());
+}
+/// the short name of a name on disk now
+static string wintar_corto(const string &i_nome)
+{
+	HANDLE h= CreateFileW(wintar_percorso(i_nome).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return "";
+	const string r= wintar_cortodi(h);
+	CloseHandle(h);
+	return r;
+}
+/// a short name given (i_corto) or taken away (""). A read-only file: the attribute off while it is done
+static bool wintar_scrivicorto(const string &i_nome, const string &i_corto, DWORD &o_errore)
+{
+	o_errore					= 0;
+	const std::wstring percorso = wintar_percorso(i_nome);
+	const DWORD		   attributi= GetFileAttributesW(percorso.c_str());
+	const bool		   solalettura= (attributi != INVALID_FILE_ATTRIBUTES) && (attributi & FILE_ATTRIBUTE_READONLY);
+	if (solalettura)
+		SetFileAttributesW(percorso.c_str(), attributi & ~FILE_ATTRIBUTE_READONLY);
+	HANDLE h= CreateFileW(percorso.c_str(), GENERIC_WRITE | DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	bool   ok= false;
+	if (h == INVALID_HANDLE_VALUE)
+		o_errore= GetLastError();
+	else
+	{
+		ok= SetFileShortNameW(h, utow(i_corto.c_str()).c_str()) != 0;
+		if (!ok)
+			o_errore= GetLastError();
+		CloseHandle(h);
+	}
+	if (solalettura)
+		SetFileAttributesW(percorso.c_str(), attributi);
+	return ok;
+}
+/// the extended attributes given back. A read-only file: the attribute off while it is done
+static bool wintar_scriviea(const string &i_nome, const string &i_ea, DWORD &o_errore)
+{
+	o_errore= 0;
+	wintar_ntdll();
+	if ((wintar_nsea == NULL) || i_ea.empty())
+	{
+		o_errore= ERROR_PROC_NOT_FOUND;
+		return false;
+	}
+	const std::wstring percorso	  = wintar_percorso(i_nome);
+	const DWORD		   attributi  = GetFileAttributesW(percorso.c_str());
+	const bool		   solalettura= (attributi != INVALID_FILE_ATTRIBUTES) && (attributi & FILE_ATTRIBUTE_READONLY);
+	if (solalettura)
+		SetFileAttributesW(percorso.c_str(), attributi & ~FILE_ATTRIBUTE_READONLY);
+	HANDLE h = CreateFileW(percorso.c_str(), FILE_WRITE_EA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	bool   ok= false;
+	if (h == INVALID_HANDLE_VALUE)
+		o_errore= GetLastError();
+	else
+	{
+		string		copia= i_ea;
+		wintar_iosb io;
+		memset(&io, 0, sizeof(io));
+		const LONG stato= wintar_nsea(h, &io, &copia[0], (ULONG)copia.size());
+		ok				= (stato >= 0);
+		if (!ok)
+			o_errore= wintar_errore(stato);
+		CloseHandle(h);
+	}
+	if (solalettura)
+		SetFileAttributesW(percorso.c_str(), attributi);
+	return ok;
+}
+/// true: the privilege is enabled (AdjustTokenPrivileges says yes even when it gave nothing: ERROR_NOT_ALL_ASSIGNED)
+static bool wintar_privilegio(const char *i_nome)
+{
+	HANDLE token;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+		return false;
+	TOKEN_PRIVILEGES tp;
+	tp.PrivilegeCount			= 1;
+	tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	bool fatto					= false;
+	if (LookupPrivilegeValueA(NULL, i_nome, &tp.Privileges[0].Luid))
+		fatto= AdjustTokenPrivileges(token, FALSE, &tp, 0, NULL, NULL) && (GetLastError() == ERROR_SUCCESS);
+	CloseHandle(token);
+	return fatto;
+}
+/*
+	a name as a path for CreateFileW: a folder without its last /, X:/ as it is.
+	65.23t: a long one in the extended form \\?\ (forcelongpath), with or without -longpath. Without it the calls fail
+	over 259 characters (path not found): x -tar of a Windows from WinPE, 10 hard links of WindowsApps not made (names
+	of 245-256 characters, + ".zpaqfranz_link" of wintar_collega), and the security, the extended attributes and the
+	short names of a name over 259 not read by a, not given back by x. The short ones as before (\\?\ does not drop the
+	dots and spaces at the end of a name, as the calls of x without it do)
+*/
+static std::wstring wintar_percorso(const string &i_nome)
+{
+	string percorso= i_nome;
+	if ((percorso.size() > 3) && (percorso[percorso.size() - 1] == '/'))
+		percorso.erase(percorso.size() - 1);
+	const std::wstring corto= utow(percorso.c_str());
+	if (corto.size() + 20 < MAX_PATH) /// 20: the room for ".zpaqfranz_link"
+		return corto;
+	return utow(forcelongpath(percorso).c_str());
+}
+/// 65.23m: the reparse point of a name (not followed), and its tag. false: none, or it cannot be read
+static bool wintar_reparse(const string &i_nome, string &o_dati, DWORD &o_tag)
+{
+	o_dati= "";
+	o_tag = 0;
+	HANDLE h= CreateFileW(wintar_percorso(i_nome).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	std::vector<char> buf(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+	DWORD			  letti= 0;
+	const BOOL		  ok   = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, &buf[0], (DWORD)buf.size(), &letti, NULL);
+	CloseHandle(h);
+	if ((!ok) || (letti < 8))
+		return false;
+	memcpy(&o_tag, &buf[0], 4);
+	o_dati.assign(&buf[0], letti);
+	return true;
+}
+/// the security descriptor of a file or folder, self-relative. i_sacl: with the SACL (SeSecurityPrivilege)
+/// 65.23h: o_info (if not NULL), who the file is (volume, index, number of names: the hard links)
+/// 65.23k: o_ea, o_corto (if not NULL): its extended attributes (without $KERNEL.*) and its short name, "" none
+static bool wintar_leggisd(const string &i_nome, bool i_sacl, string &o_sd, DWORD &o_errore, BY_HANDLE_FILE_INFORMATION *o_info= NULL, string *o_ea= NULL, string *o_corto= NULL)
+{
+	o_sd	= "";
+	o_errore= 0;
+	if (o_info != NULL)
+		memset(o_info, 0, sizeof(*o_info));
+	if (o_ea != NULL)
+		*o_ea= "";
+	if (o_corto != NULL)
+		*o_corto= "";
+	HANDLE h= CreateFileW(wintar_percorso(i_nome).c_str(), READ_CONTROL | (i_sacl ? ACCESS_SYSTEM_SECURITY : 0) | ((o_ea != NULL) ? FILE_READ_EA : 0), FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		o_errore= GetLastError();
+		return false;
+	}
+	if (o_info != NULL)
+		if (!GetFileInformationByHandle(h, o_info))
+			memset(o_info, 0, sizeof(*o_info));
+	if (o_corto != NULL)
+		*o_corto= wintar_cortodi(h);
+	if (o_ea != NULL)
+	{
+		wintar_ntdll();
+		ULONG		quanto= 0; /// FILE_EA_INFORMATION: their size (almost always 0)
+		wintar_iosb io;
+		memset(&io, 0, sizeof(io));
+		if ((wintar_nqif != NULL) && (wintar_nqea != NULL) && (wintar_nqif(h, &io, &quanto, sizeof(quanto), 7 /* FileEaInformation */) >= 0) && (quanto > 0))
+		{
+			/// (the list as given is a bit bigger than EaSize: the names with their zero, every entry on 4 bytes)
+			std::vector<char> buf((size_t)quanto * 2 + 4096);
+			memset(&io, 0, sizeof(io));
+			const LONG stato= wintar_nqea(h, &io, &buf[0], (ULONG)buf.size(), FALSE, NULL, 0, NULL, TRUE);
+			if ((stato >= 0) && (io.Information > 0) && (io.Information <= buf.size()))
+				*o_ea= wintar_eapulisci(&buf[0], (size_t)io.Information);
+		}
+	}
+	SECURITY_INFORMATION cosa= OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | WINTAR_LABEL;
+	if (i_sacl)
+		cosa|= SACL_SECURITY_INFORMATION;
+	bool ok= false;
+	for (int giro= 0; (giro < 2) && (!ok); giro++)
+	{
+		if (giro == 1)
+			cosa&= ~WINTAR_LABEL; /// (XP: no label)
+		DWORD serve= 0;
+		GetKernelObjectSecurity(h, cosa, NULL, 0, &serve);
+		if ((serve == 0) || (serve > (1u << 20)))
+		{
+			o_errore= GetLastError();
+			continue;
+		}
+		std::vector<char> buf(serve);
+		if (GetKernelObjectSecurity(h, cosa, (PSECURITY_DESCRIPTOR)&buf[0], serve, &serve))
+		{
+			const DWORD lunghezza= GetSecurityDescriptorLength((PSECURITY_DESCRIPTOR)&buf[0]);
+			o_sd.assign(&buf[0], ((lunghezza > 0) && (lunghezza <= buf.size())) ? lunghezza : buf.size());
+			ok= true;
+		}
+		else
+			o_errore= GetLastError();
+	}
+	CloseHandle(h);
+	return ok;
+}
+/// the descriptor given back, as it is: the parts it has (owner, group, DACL, SACL with the label)
+static bool wintar_scrivisd(const string &i_nome, const string &i_sd, bool i_sacl, DWORD &o_errore)
+{
+	o_errore= 0;
+	if (i_sd.empty())
+	{
+		o_errore= ERROR_INVALID_SECURITY_DESCR;
+		return false;
+	}
+	string				 copia= i_sd; /// (a copy of its own: the calls below take a non-const pointer)
+	PSECURITY_DESCRIPTOR sd	  = (PSECURITY_DESCRIPTOR)&copia[0];
+	if (!IsValidSecurityDescriptor(sd))
+	{
+		o_errore= ERROR_INVALID_SECURITY_DESCR;
+		return false;
+	}
+	/// SetKernelObjectSecurity keeps P (protected) but not AI (auto-inherited): it wants the _REQ bit for that
+	/// (the kernel sets AI on this object; the children are not touched, that is done by SetNamedSecurityInfo)
+	SECURITY_DESCRIPTOR_CONTROL controllo= 0;
+	DWORD						revisione= 0;
+	if (GetSecurityDescriptorControl(sd, &controllo, &revisione))
+	{
+		SECURITY_DESCRIPTOR_CONTROL richiesta= 0;
+		if (controllo & SE_DACL_AUTO_INHERITED)
+			richiesta|= SE_DACL_AUTO_INHERIT_REQ;
+		if (controllo & SE_SACL_AUTO_INHERITED)
+			richiesta|= SE_SACL_AUTO_INHERIT_REQ;
+		if (richiesta)
+			SetSecurityDescriptorControl(sd, richiesta, richiesta);
+	}
+	SECURITY_INFORMATION cosa	= 0;
+	PSID				 sid	= NULL;
+	BOOL				 predef = FALSE;
+	BOOL				 c_e	= FALSE;
+	PACL				 acl	= NULL;
+	if (GetSecurityDescriptorOwner(sd, &sid, &predef) && (sid != NULL))
+		cosa|= OWNER_SECURITY_INFORMATION;
+	sid= NULL;
+	if (GetSecurityDescriptorGroup(sd, &sid, &predef) && (sid != NULL))
+		cosa|= GROUP_SECURITY_INFORMATION;
+	if (GetSecurityDescriptorDacl(sd, &c_e, &acl, &predef) && c_e)
+		cosa|= DACL_SECURITY_INFORMATION;
+	c_e= FALSE;
+	if (GetSecurityDescriptorSacl(sd, &c_e, &acl, &predef) && c_e)
+		cosa|= i_sacl ? (SACL_SECURITY_INFORMATION | WINTAR_LABEL) : WINTAR_LABEL;
+	if (cosa == 0)
+		return true;
+	bool ok= false;
+	for (int giro= 0; (giro < 2) && (!ok); giro++)
+	{
+		if (giro == 1)
+		{
+			if (!(cosa & WINTAR_LABEL))
+				break;
+			cosa&= ~WINTAR_LABEL; /// (XP: no label)
+		}
+		DWORD accesso= 0;
+		if (cosa & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | WINTAR_LABEL))
+			accesso|= WRITE_OWNER;
+		if (cosa & DACL_SECURITY_INFORMATION)
+			accesso|= WRITE_DAC;
+		if (cosa & SACL_SECURITY_INFORMATION)
+			accesso|= ACCESS_SYSTEM_SECURITY;
+		HANDLE h= CreateFileW(wintar_percorso(i_nome).c_str(), accesso, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+		if (h == INVALID_HANDLE_VALUE)
+		{
+			o_errore= GetLastError();
+			return false;
+		}
+		ok= SetKernelObjectSecurity(h, cosa, sd) != 0;
+		if (!ok)
+			o_errore= GetLastError();
+		CloseHandle(h);
+	}
+	return ok;
+}
+/// 65.23h: the SIDs of a descriptor (self-relative: pointers into its own bytes): owner, group, and the ACEs of the
+/// DACL and the SACL that have one right after the mask (allowed, denied, audit, alarm, and their callback ones)
+static void wintar_sidsd(char *io_sd, vector<PSID> &o_sid)
+{
+	o_sid.clear();
+	PSECURITY_DESCRIPTOR sd	 = (PSECURITY_DESCRIPTOR)io_sd;
+	PSID				 s	 = NULL;
+	BOOL				 pred= FALSE;
+	if (GetSecurityDescriptorOwner(sd, &s, &pred) && (s != NULL) && IsValidSid(s))
+		o_sid.push_back(s);
+	s= NULL;
+	if (GetSecurityDescriptorGroup(sd, &s, &pred) && (s != NULL) && IsValidSid(s))
+		o_sid.push_back(s);
+	for (int k= 0; k < 2; k++)
+	{
+		BOOL	   c_e= FALSE;
+		PACL	   acl= NULL;
+		const BOOL ok = (k == 0) ? GetSecurityDescriptorDacl(sd, &c_e, &acl, &pred) : GetSecurityDescriptorSacl(sd, &c_e, &acl, &pred);
+		if ((!ok) || (!c_e) || (acl == NULL))
+			continue;
+		for (DWORD i= 0; i < acl->AceCount; i++)
+		{
+			LPVOID ace= NULL;
+			if ((!GetAce(acl, i, &ace)) || (ace == NULL))
+				continue;
+			const ACE_HEADER *h= (const ACE_HEADER *)ace;
+			const BYTE		  t= h->AceType;
+			if ((t == 0) || (t == 1) || (t == 2) || (t == 3) || (t == 9) || (t == 10) || (t == 13))
+			{
+				PSID p= (PSID)((BYTE *)ace + 8);
+				if ((h->AceSize >= 16) && IsValidSid(p) && (8 + GetLengthSid(p) <= h->AceSize))
+					o_sid.push_back(p);
+			}
+		}
+	}
+}
+static string wintar_sidtesto(PSID i_sid)
+{
+	LPWSTR t= NULL;
+	string r= "";
+	if (ConvertSidToStringSidW(i_sid, &t) && (t != NULL))
+	{
+		r= wtou(t);
+		LocalFree(t);
+	}
+	return r;
+}
+/// a SID of a computer or of a domain (Entra ID too): by name. The others are the same everywhere
+static bool wintar_pernome(const string &i_sid)
+{
+	return (i_sid.compare(0, 9, "S-1-5-21-") == 0) || (i_sid.compare(0, 9, "S-1-12-1-") == 0);
+}
+static string wintar_computer()
+{
+	wchar_t nome[MAX_COMPUTERNAME_LENGTH + 2];
+	DWORD	n= MAX_COMPUTERNAME_LENGTH + 1;
+	if (!GetComputerNameW(nome, &n))
+		return "";
+	return wtou(nome);
+}
+/// the table as text (see above). o_descrittori: how many different
+static string wintar_testo(const map<string, string> &i_tabella, const string &i_computer, const std::map<string, std::pair<int, string> > &i_utenti, const vector<vector<string> > &i_gruppi, const map<string, string> &i_corti, const map<string, string> &i_ea, const map<string, std::pair<string, string> > &i_reparse, int64_t &o_descrittori)
+{
+	static const char cifre[]= "0123456789ABCDEF";
+	map<string, int>  numero;
+	string			  descrittori= "";
+	string			  file		 = "";
+	for (map<string, string>::const_iterator p= i_tabella.begin(); p != i_tabella.end(); ++p)
+	{
+		map<string, int>::iterator n= numero.find(p->second);
+		int						   quale;
+		if (n == numero.end())
+		{
+			quale			 = (int)numero.size();
+			numero[p->second]= quale;
+			descrittori+= "S ";
+			for (size_t i= 0; i < p->second.size(); i++)
+			{
+				descrittori+= cifre[((unsigned char)p->second[i]) >> 4];
+				descrittori+= cifre[((unsigned char)p->second[i]) & 15];
+			}
+			descrittori+= '\n';
+		}
+		else
+			quale= n->second;
+		file+= "F " + myto_string((int64_t)quale) + " " + p->first + "\n";
+	}
+	o_descrittori= (int64_t)numero.size();
+	string testa = "zpaqfranz-wintar 2\n";
+	if (i_computer != "")
+		testa+= "C " + i_computer + "\n";
+	for (std::map<string, std::pair<int, string> >::const_iterator u= i_utenti.begin(); u != i_utenti.end(); ++u)
+		testa+= "U " + u->first + " " + myto_string((int64_t)u->second.first) + " " + u->second.second + "\n";
+	string link= "";
+	for (size_t g= 0; g < i_gruppi.size(); g++)
+		for (size_t k= 0; k < i_gruppi[g].size(); k++)
+			link+= "L " + myto_string((int64_t)g) + " " + i_gruppi[g][k] + "\n";
+	/// 65.23k: short names, extended attributes
+	string altro= "";
+	for (map<string, string>::const_iterator c= i_corti.begin(); c != i_corti.end(); ++c)
+		altro+= "N " + c->second + " " + c->first + "\n";
+	for (map<string, string>::const_iterator e= i_ea.begin(); e != i_ea.end(); ++e)
+	{
+		altro+= "E ";
+		for (size_t i= 0; i < e->second.size(); i++)
+		{
+			altro+= cifre[((unsigned char)e->second[i]) >> 4];
+			altro+= cifre[((unsigned char)e->second[i]) & 15];
+		}
+		altro+= " " + e->first + "\n";
+	}
+	/// 65.23m: the app execution aliases
+	for (map<string, std::pair<string, string> >::const_iterator r= i_reparse.begin(); r != i_reparse.end(); ++r)
+	{
+		altro+= "R ";
+		for (size_t i= 0; i < r->second.second.size(); i++)
+		{
+			altro+= cifre[((unsigned char)r->second.second[i]) >> 4];
+			altro+= cifre[((unsigned char)r->second.second[i]) & 15];
+		}
+		altro+= " " + r->second.first + " " + r->first + "\n";
+	}
+	return testa + descrittori + file + link + altro;
+}
+/// 65.23h: two entries with the very same data in the archive (the same fragments, or the same size and hash)
+static bool wintar_stessidati(DTMap::iterator i_a, DTMap::iterator i_b)
+{
+	if (i_a->second.size != i_b->second.size)
+		return false;
+	if (i_a->second.ptr == i_b->second.ptr)
+		return true;
+	string			hash[2];
+	DTMap::iterator quale[2]= {i_a, i_b};
+	for (int i= 0; i < 2; i++)
+	{
+		string		 myhashtype	   = "";
+		string		 myhash		   = "";
+		string		 mycrc32	   = "";
+		int64_t		 mycreationtime= 0;
+		int64_t		 myaccesstime  = 0;
+		bool		 myisordered   = false;
+		int			 myversion	   = 0;
+		franz_posix *myposix	   = NULL;
+		bool		 myisadded	   = false;
+		decode_franz_block(false, quale[i]->second.franz_block, myhashtype, myhash, mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
+		if (myhash.find_first_not_of('0') != string::npos)
+			hash[i]= myhashtype + ":" + myhash;
+	}
+	return (hash[0] != "") && (hash[0] == hash[1]);
+}
+/// 65.23n: a on Windows, after the scan: the app execution aliases (0 bytes, a reparse point APPEXECLINK) out of edt,
+/// they cannot be read (and given back as files they would break the app). -tar: kept, for the table (R).
+/// i_add false: t archive folder, the folder scanned (they are never in the archive: not "+external")
+int64_t Jidac::wintar_aliastogli(bool i_add)
+{
+	g_wintar_alias.clear();
+	int64_t quanti= 0;
+	for (DTMap::iterator p= edt.begin(); p != edt.end();)
+	{
+		DTMap::iterator q= p++;
+		if ((!q->second.date) || (q->second.size != 0) || ((q->second.attr & 255) != 'w') || (!((q->second.attr >> 8) & FILE_ATTRIBUTE_REPARSE_POINT)) || (q->first == "") || isdirectory(q->first) || isads(q->first))
+			continue;
+		string dati= "";
+		DWORD  tag = 0;
+		if ((!wintar_reparse(q->first, dati, tag)) || (tag != WINTAR_APPEXECLINK))
+			continue;
+		quanti++;
+		if (flagverbose)
+			myprintf("64465: app execution alias <<%Z>>\n", q->first.c_str());
+		if (flagtar && i_add)
+		{
+			wintar_alias a;
+			a.nome= q->first;
+			a.date= q->second.date;
+			a.attr= q->second.attr;
+			a.dati= dati;
+			g_wintar_alias.push_back(a);
+		}
+		edt.erase(q);
+	}
+	if (quanti > 0)
+		myprintf("64462: %s app execution alias(es) of Windows (WindowsApps: 0 bytes, they cannot be read) %s\n", migliaia(quanti), (!i_add) ? "not compared (never files of an archive)" : (flagtar ? "in the table of -tar, not as files" : "not stored: Windows makes them (-tar keeps them)"));
+	return quanti;
+}
+/// a -tar: the table of this version in g_wintar_testo, its entry in edt (read as the special files of -tar)
+int Jidac::wintar_prepara()
+{
+	g_wintar_testo= "";
+	if (!wintar_privilegio("SeBackupPrivilege"))
+	{
+		myprintf("64420! -tar on Windows needs an administrator (the security of the files of every user)\n");
+		return 2;
+	}
+	const bool								  sacl	  = wintar_privilegio("SeSecurityPrivilege");
+	const string							  computer= wintar_computer();
+	map<string, string>						  tabella;
+	std::map<string, std::pair<int, string> > utentiprima; /// the accounts of the table of the archive
+	vector<vector<string> >					  gruppi;
+	map<string, string>						  corti; /// 65.23k name => short name
+	map<string, string>						  eamap; /// 65.23k name => extended attributes
+	map<string, std::pair<string, string> >	  reparse; /// 65.23m name => (attributes/date, reparse point): the aliases
+	int64_t									  dallarchivio= 0;
+	DTMap::iterator							  vecchia	  = dt.find(ZPAQ_WINTAR);
+	if ((vecchia != dt.end()) && vecchia->second.date)
+	{
+		std::vector<uint8_t> dati;
+		wintar_tabella		 t;
+		if ((extracttobuffer(ZPAQ_WINTAR, dati) == 0) && wintar_leggi(string(dati.begin(), dati.end()), t))
+		{
+			for (size_t i= 0; i < t.file.size(); i++)
+				if (!isselected(t.file[i].first.c_str(), true, -1)) /// out of this add: as it was
+				{
+					tabella[t.file[i].first]= t.sd[t.file[i].second];
+					dallarchivio++;
+				}
+			utentiprima= t.utenti;
+			/// its hard link groups, with the names that are still there
+			std::map<int, vector<string> > vecchigruppi;
+			for (size_t i= 0; i < t.link.size(); i++)
+				if (tabella.find(t.link[i].first) != tabella.end())
+					vecchigruppi[t.link[i].second].push_back(t.link[i].first);
+			for (std::map<int, vector<string> >::iterator g= vecchigruppi.begin(); g != vecchigruppi.end(); ++g)
+				if (g->second.size() > 1)
+					gruppi.push_back(g->second);
+			/// 65.23k: their short names and extended attributes
+			for (size_t i= 0; i < t.corti.size(); i++)
+				if (tabella.find(t.corti[i].first) != tabella.end())
+					corti[t.corti[i].first]= t.corti[i].second;
+			for (size_t i= 0; i < t.ea.size(); i++)
+				if (tabella.find(t.ea[i].first) != tabella.end())
+					eamap[t.ea[i].first]= t.ea[i].second;
+			/// 65.23m: the aliases out of this add (their F is kept above)
+			for (size_t i= 0; i < t.reparse.size(); i++)
+				if (tabella.find(t.reparse[i].first) != tabella.end())
+					reparse[t.reparse[i].first]= t.reparse[i].second;
+		}
+		else
+			myprintf("64421$ -tar: cannot read %s from the archive: the security of the files of this add only\n", ZPAQ_WINTAR);
+	}
+	int64_t																 letti	 = 0;
+	int64_t																 nonletti= 0;
+	std::map<std::pair<uint64_t, uint64_t>, vector<string> > stessofile; /// (volume, file index) => names, the hard links
+	for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
+	{
+		if ((!p->second.date) || (p->first == "") || isads(p->first) || (p->first == ZPAQ_WINTAR))
+			continue;
+		string nome= rename(p->first); /// the name in the archive, as buildindexchunks makes it
+		if ((flagvss) && (!flagimage))
+			myreplace(nome, g_vss_shadow, g_franzsnap);
+		franzreplace(nome);
+		string					   sd	 = "";
+		DWORD					   errore= 0;
+		BY_HANDLE_FILE_INFORMATION info;
+		string					   ea	 = "";
+		string					   corto = "";
+		if (wintar_leggisd(p->first, sacl, sd, errore, &info, &ea, &corto))
+		{
+			tabella[nome]= sd;
+			letti++;
+			if (ea != "")
+				eamap[nome]= ea;
+			if (corto != "")
+			{
+				/// a short name that is not the name itself (a name already 8.3 has none of its own)
+				string lungo= nome;
+				if ((lungo.size() > 1) && (lungo[lungo.size() - 1] == '/'))
+					lungo.erase(lungo.size() - 1);
+				const size_t barra= lungo.find_last_of('/');
+				if (barra != string::npos)
+					lungo= lungo.substr(barra + 1);
+				if (stringtoupper(lungo) != stringtoupper(corto))
+					corti[nome]= corto;
+			}
+			if ((info.nNumberOfLinks > 1) && (!(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) && (!isdirectory(nome)))
+				stessofile[std::make_pair((uint64_t)info.dwVolumeSerialNumber, ((uint64_t)info.nFileIndexHigh << 32) | info.nFileIndexLow)].push_back(nome);
+		}
+		else
+		{
+			nonletti++;
+			if ((nonletti <= 20) || flagverbose)
+				myprintf("64422$ -tar: cannot read the security of <<%Z>> (%s)\n", p->first.c_str(), decodewinerror(errore, "", false).c_str());
+		}
+	}
+	/// 65.23m: the app execution aliases of this add (out of edt, see wintar_aliastogli): permissions and reparse point
+	for (size_t i= 0; i < g_wintar_alias.size(); i++)
+	{
+		const wintar_alias &a= g_wintar_alias[i];
+		string				nome= rename(a.nome);
+		if ((flagvss) && (!flagimage))
+			myreplace(nome, g_vss_shadow, g_franzsnap);
+		franzreplace(nome);
+		string sd	 = "";
+		DWORD  errore= 0;
+		if (wintar_leggisd(a.nome, sacl, sd, errore))
+		{
+			tabella[nome]= sd;
+			letti++;
+			char meta[64];
+			snprintf(meta, sizeof(meta), "%08X/%s", (unsigned int)((a.attr >> 8) & 0xFFFFFFFF), myto_string(a.date).c_str());
+			reparse[nome]= std::make_pair(string(meta), a.dati);
+		}
+		else
+		{
+			nonletti++;
+			if ((nonletti <= 20) || flagverbose)
+				myprintf("64422$ -tar: cannot read the security of <<%Z>> (%s)\n", a.nome.c_str(), decodewinerror(errore, "", false).c_str());
+		}
+	}
+	int64_t nomilink= 0;
+	for (std::map<std::pair<uint64_t, uint64_t>, vector<string> >::iterator g= stessofile.begin(); g != stessofile.end(); ++g)
+		if (g->second.size() > 1)
+		{
+			std::sort(g->second.begin(), g->second.end());
+			gruppi.push_back(g->second);
+			nomilink+= (int64_t)g->second.size();
+		}
+	/// the accounts of the computer or of a domain in the descriptors, by name (as now, else as the table of the archive)
+	std::map<string, std::pair<int, string> > utenti;
+	std::set<string>						  visti;
+	int64_t									  ignoti= 0;
+	std::set<string>						  descrittori_visti;
+	for (map<string, string>::iterator p= tabella.begin(); p != tabella.end(); ++p)
+	{
+		if (!descrittori_visti.insert(p->second).second)
+			continue;
+		string		 copia= p->second;
+		vector<PSID> sid;
+		wintar_sidsd(&copia[0], sid);
+		for (size_t i= 0; i < sid.size(); i++)
+		{
+			const string testo= wintar_sidtesto(sid[i]);
+			if ((testo == "") || (!wintar_pernome(testo)) || (!visti.insert(testo).second))
+				continue;
+			wchar_t		 nome[256];
+			wchar_t		 dominio[256];
+			DWORD		 lnome	 = 256;
+			DWORD		 ldominio= 256;
+			SID_NAME_USE uso;
+			if (LookupAccountSidW(NULL, sid[i], nome, &lnome, dominio, &ldominio, &uso))
+			{
+				string d= wtou(dominio);
+				if (stringtoupper(d) == stringtoupper(computer))
+					d= "."; /// a local account: the same name on the computer of x
+				utenti[testo]= std::make_pair((int)uso, d + "\\" + wtou(nome));
+			}
+			else
+			{
+				std::map<string, std::pair<int, string> >::iterator u= utentiprima.find(testo);
+				if (u != utentiprima.end())
+					utenti[testo]= u->second;
+				else
+					ignoti++; /// (a deleted account: its SID stays a SID)
+			}
+		}
+	}
+	int64_t descrittori= 0;
+	g_wintar_testo	   = wintar_testo(tabella, computer, utenti, gruppi, corti, eamap, reparse, descrittori);
+	DT &d			   = edt[ZPAQ_WINTAR];
+	d.date			   = nowutc();
+	d.size			   = (int64_t)g_wintar_testo.size();
+	d.attr			   = 8311; /// (FILE_ATTRIBUTE_ARCHIVE << 8) + 'w'
+	d.creationdate	   = now();
+	d.accessdate	   = now();
+	d.data			   = 0;
+	/// the same table as in the archive (size, CRC-32 and hash stored): the same date, not written again
+	bool uguale= false;
+	if ((vecchia != dt.end()) && vecchia->second.date && (vecchia->second.size == d.size))
+	{
+		string		 myhashtype	   = "";
+		string		 myhash		   = "";
+		string		 mycrc32	   = "";
+		int64_t		 mycreationtime= 0;
+		int64_t		 myaccesstime  = 0;
+		bool		 myisordered   = false;
+		int			 myversion	   = 0;
+		franz_posix *myposix	   = NULL;
+		bool		 myisadded	   = false;
+		decode_franz_block(false, vecchia->second.franz_block, myhashtype, myhash, mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
+		char crc[16];
+		snprintf(crc, sizeof(crc), "%08X", crc32_16bytes(g_wintar_testo.data(), g_wintar_testo.size(), 0));
+		uguale= (mycrc32 == crc);
+		if (uguale && (myhashtype != "") && (myhashtype != "CRC-32") && (myhashtype != "CRC-32C") && (franz_get_hash(myhashtype) != NULL))
+		{
+			franz_do_hash h(myhashtype);
+			h.init();
+			for (size_t i= 0; i < g_wintar_testo.size(); i+= 1048576)
+				h.update((char *)g_wintar_testo.data() + i, (int)(((g_wintar_testo.size() - i) < 1048576) ? (g_wintar_testo.size() - i) : 1048576));
+			uguale= (h.finalize() == myhash);
+		}
+		if (uguale)
+		{
+			d.date= vecchia->second.date;
+			d.attr= vecchia->second.attr;
+		}
+	}
+	myprintf("64423: -tar (Windows): the security of %s entries (%s descriptors%s), %s from the archive%s\n", migliaia(letti), migliaia2(descrittori), sacl ? "" : ", no SACL", migliaia3(dallarchivio), uguale ? ": the same table" : "");
+	if ((eamap.size() > 0) || (corti.size() > 0))
+		myprintf("64455: -tar (Windows): %s entries with extended attributes, %s short names (8.3)\n", migliaia((int64_t)eamap.size()), migliaia2((int64_t)corti.size()));
+	if (reparse.size() > 0)
+		myprintf("64464: -tar (Windows): %s app execution alias(es) in the table (%s in this add)\n", migliaia((int64_t)reparse.size()), migliaia2((int64_t)g_wintar_alias.size()));
+	if ((utenti.size() > 0) || (ignoti > 0) || (gruppi.size() > 0))
+		myprintf("64440: -tar (Windows): %s account(s) by name%s, %s hard link group(s) (%s names in this add)\n", migliaia((int64_t)utenti.size()), (ignoti > 0) ? (string(", ") + migliaia2(ignoti) + " unknown here (by SID only)").c_str() : "", migliaia3((int64_t)gruppi.size()), migliaia4(nomilink));
+	if (nonletti > 0)
+	{
+		color_yellow();
+		myprintf("64422$ -tar: the security of %s entries could not be read\n", migliaia(nonletti));
+		color_restore();
+	}
+	return 0;
+}
+/// x -tar: the table of the archive, its descriptor to every entry of dt. 0 good, 1 no table (data only), 2 error
+int Jidac::wintar_carica()
+{
+	g_wintar_sd.clear();
+	g_wintaruguali.clear();
+	g_wintar_gruppi.clear();
+	g_wintar_corti.clear();
+	g_wintar_ea.clear();
+	g_wintar_rip.clear();
+	DTMap::iterator t= dt.find(ZPAQ_WINTAR);
+	if ((t == dt.end()) || (!t->second.date))
+	{
+		color_yellow();
+		myprintf("64424$ -tar: no security of Windows files in this archive (version): the data only\n");
+		color_restore();
+		return 1;
+	}
+	if (!wintar_privilegio("SeRestorePrivilege"))
+	{
+		myprintf("64425! -tar on Windows needs an administrator (to give back owners and permissions)\n");
+		return 2;
+	}
+	std::vector<uint8_t> dati;
+	wintar_tabella		 tab;
+	if ((extracttobuffer(ZPAQ_WINTAR, dati) != 0) || (!wintar_leggi(string(dati.begin(), dati.end()), tab)))
+	{
+		myprintf("64426! -tar: cannot read %s from the archive\n", ZPAQ_WINTAR);
+		return 2;
+	}
+	g_wintar_sd.swap(tab.sd);
+	int64_t qui= 0;
+	for (size_t i= 0; i < tab.file.size(); i++)
+	{
+		DTMap::iterator p= dt.find(tab.file[i].first);
+		if (p != dt.end())
+		{
+			p->second.wintar= tab.file[i].second;
+			qui++;
+		}
+	}
+	/// the hard link groups, the names here
+	std::map<int, vector<string> > gruppi;
+	for (size_t i= 0; i < tab.link.size(); i++)
+		if (dt.find(tab.link[i].first) != dt.end())
+			gruppi[tab.link[i].second].push_back(tab.link[i].first);
+	for (std::map<int, vector<string> >::iterator g= gruppi.begin(); g != gruppi.end(); ++g)
+		if (g->second.size() > 1)
+		{
+			std::sort(g->second.begin(), g->second.end());
+			g_wintar_gruppi.push_back(g->second);
+		}
+	/// 65.23k: short names, extended attributes: the names here
+	for (size_t i= 0; i < tab.corti.size(); i++)
+		if (dt.find(tab.corti[i].first) != dt.end())
+			g_wintar_corti.push_back(tab.corti[i]);
+	for (size_t i= 0; i < tab.ea.size(); i++)
+		if (dt.find(tab.ea[i].first) != dt.end())
+			g_wintar_ea.push_back(tab.ea[i]);
+	/// 65.23m: the app execution aliases, the ones selected (they are not in dt: the files, -only, -not of x here)
+	if (!tab.reparse.empty())
+	{
+		map<string, int> descrittore;
+		for (size_t i= 0; i < tab.file.size(); i++)
+			descrittore[tab.file[i].first]= tab.file[i].second;
+		for (size_t i= 0; i < tab.reparse.size(); i++)
+		{
+			if (!isselected(tab.reparse[i].first.c_str(), false, -1))
+				continue;
+			const string &meta	= tab.reparse[i].second.first;
+			const size_t  barra = meta.find('/');
+			wintar_alias  a;
+			a.nome				= tab.reparse[i].first;
+			a.dati				= tab.reparse[i].second.second;
+			a.attr				= 'w' + ((int64_t)strtoul(meta.substr(0, barra).c_str(), NULL, 16) << 8);
+			a.date				= (barra == string::npos) ? 0 : (int64_t)strtoll(meta.substr(barra + 1).c_str(), NULL, 10);
+			map<string, int>::iterator d= descrittore.find(a.nome);
+			if ((d != descrittore.end()) && (d->second >= 0) && (d->second < (int)g_wintar_sd.size()))
+				a.sd= d->second;
+			g_wintar_rip.push_back(a);
+		}
+	}
+	/// the accounts: their names here (a local one of the computer of the add: the same name on this one). -numeric: none
+	if (!tab.utenti.empty())
+	{
+		if (flagnumeric)
+			myprintf("64443: -tar -numeric: the SIDs as they were stored (%s account(s) not looked for by name)\n", migliaia((int64_t)tab.utenti.size()));
+		else
+		{
+			const string			computer= wintar_computer();
+			std::map<string, string> nuovo; /// SID (text) of the table => SID (bytes) here
+			int64_t					uguali	= 0;
+			int64_t					altrove = 0;
+			for (std::map<string, std::pair<int, string> >::iterator u= tab.utenti.begin(); u != tab.utenti.end(); ++u)
+			{
+				string nome= u->second.second;
+				if (nome.compare(0, 2, ".\\") == 0)
+					nome= computer + nome.substr(1);
+				BYTE		 sid[SECURITY_MAX_SID_SIZE];
+				DWORD		 lsid= sizeof(sid);
+				wchar_t		 dominio[256];
+				DWORD		 ldominio= 256;
+				SID_NAME_USE uso;
+				PSID		 vecchio = NULL;
+				if (LookupAccountNameW(NULL, utow(nome.c_str(), '/').c_str(), sid, &lsid, dominio, &ldominio, &uso) && ConvertStringSidToSidW(utow(u->first.c_str(), '/').c_str(), &vecchio))
+				{
+					if (EqualSid(vecchio, (PSID)sid))
+						uguali++;
+					else if (GetLengthSid(vecchio) == GetLengthSid((PSID)sid))
+					{
+						nuovo[u->first]= string((const char *)sid, GetLengthSid((PSID)sid));
+						if (flagverbose)
+							myprintf("64442: -tar: %s %s => %s here\n", u->first.c_str(), u->second.second.c_str(), wintar_sidtesto((PSID)sid).c_str());
+					}
+					else
+						altrove++;
+				}
+				else
+				{
+					altrove++;
+					if (flagverbose)
+						myprintf("64442: -tar: %s %s not here: by SID\n", u->first.c_str(), u->second.second.c_str());
+				}
+				if (vecchio != NULL)
+					LocalFree(vecchio);
+			}
+			if (!nuovo.empty())
+				for (size_t i= 0; i < g_wintar_sd.size(); i++)
+				{
+					if (g_wintar_sd[i].empty())
+						continue;
+					vector<PSID> sids;
+					wintar_sidsd(&g_wintar_sd[i][0], sids);
+					for (size_t k= 0; k < sids.size(); k++)
+					{
+						std::map<string, string>::iterator n= nuovo.find(wintar_sidtesto(sids[k]));
+						if ((n != nuovo.end()) && (GetLengthSid(sids[k]) == n->second.size()))
+							memcpy(sids[k], n->second.data(), n->second.size()); /// the same length: in place
+					}
+				}
+			myprintf("64441: -tar: %s account(s) by name: %s the same here, %s with the SID of this computer, %s not here (by SID)\n", migliaia((int64_t)tab.utenti.size()), migliaia2(uguali), migliaia3((int64_t)nuovo.size()), migliaia4(altrove));
+		}
+	}
+	if (flagverbose)
+		myprintf("64427: -tar: the security of %s entries (%s descriptors) in the archive, %s of them here, %s hard link group(s)\n", migliaia((int64_t)tab.file.size()), migliaia2((int64_t)g_wintar_sd.size()), migliaia3(qui), migliaia4((int64_t)g_wintar_gruppi.size()));
+	return 0;
+}
+/// 65.23h: two names, the same file (volume and index)?
+static bool wintar_stessofile(const string &i_a, const string &i_b)
+{
+	BY_HANDLE_FILE_INFORMATION info[2];
+	const string			   nomi[2]= {i_a, i_b};
+	for (int i= 0; i < 2; i++)
+	{
+		HANDLE h= CreateFileW(wintar_percorso(nomi[i]).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		if (h == INVALID_HANDLE_VALUE)
+			return false;
+		const BOOL ok= GetFileInformationByHandle(h, &info[i]);
+		CloseHandle(h);
+		if (!ok)
+			return false;
+	}
+	return (info[0].dwVolumeSerialNumber == info[1].dwVolumeSerialNumber) && (info[0].nFileIndexHigh == info[1].nFileIndexHigh) && (info[0].nFileIndexLow == info[1].nFileIndexLow);
+}
+/// 65.23h: the copy i_nome becomes a hard link to i_primo (a new name beside it, then over the copy)
+static bool wintar_collega(const string &i_primo, const string &i_nome, DWORD &o_errore)
+{
+	o_errore					= 0;
+	const std::wstring primo	= wintar_percorso(i_primo);
+	const std::wstring nome		= wintar_percorso(i_nome);
+	const std::wstring temp		= nome + L".zpaqfranz_link";
+	const DWORD		   attributi= GetFileAttributesW(nome.c_str());
+	DeleteFileW(temp.c_str());
+	if (attributi != INVALID_FILE_ATTRIBUTES)
+		SetFileAttributesW(nome.c_str(), FILE_ATTRIBUTE_NORMAL); /// a read-only copy cannot be replaced
+	if (!CreateHardLinkW(temp.c_str(), primo.c_str(), NULL))
+	{
+		o_errore= GetLastError();
+		if (attributi != INVALID_FILE_ATTRIBUTES)
+			SetFileAttributesW(nome.c_str(), attributi);
+		return false;
+	}
+	if (!MoveFileExW(temp.c_str(), nome.c_str(), MOVEFILE_REPLACE_EXISTING))
+	{
+		o_errore= GetLastError();
+		DeleteFileW(temp.c_str());
+		if (attributi != INVALID_FILE_ATTRIBUTES)
+			SetFileAttributesW(nome.c_str(), attributi);
+		return false;
+	}
+	return true;
+}
+/// x -tar: after the data, the hard links, then the files (extracted, or equal with -force), then the folders from the deepest
+void Jidac::wintar_restore(int &o_errors)
+{
+	if (g_wintar_sd.empty())
+		return;
+	wintar_privilegio("SeRestorePrivilege");
+	wintar_privilegio("SeTakeOwnershipPrivilege");
+	const bool sacl		= wintar_privilegio("SeSecurityPrivilege");
+	int64_t	   fatti	= 0;
+	int64_t	   sbagliati= 0;
+	/// 65.23h: the hard links first (the permissions are of the file, every name the same), then the dates of their folders
+	int64_t			 collegati	= 0;
+	int64_t			 linkerrati = 0;
+	int64_t			 nonuguali	= 0;
+	std::set<string> cartelle;
+	/// 65.23k: what the volume does not keep (exFAT, FAT, a share...): 0 permissions, 1 extended attributes, 2 short names,
+	/// 3 hard links. Said once each, a WARNING
+	int64_t nonpuo[4]= {0, 0, 0, 0};
+	string	dove[4];
+	for (size_t g= 0; g < g_wintar_gruppi.size(); g++)
+	{
+		vector<DTMap::iterator> membri;
+		for (size_t k= 0; k < g_wintar_gruppi[g].size(); k++)
+		{
+			DTMap::iterator q= dt.find(g_wintar_gruppi[g][k]);
+			if ((q != dt.end()) && q->second.date && (!isdirectory(q->first)) && ((q->second.data >= 0) || (g_wintaruguali.find(q->first) != g_wintaruguali.end())))
+				membri.push_back(q);
+		}
+		if (membri.size() < 2)
+			continue;
+		const string primo= rename(membri[0]->first);
+		for (size_t k= 1; k < membri.size(); k++)
+		{
+			const string fn= rename(membri[k]->first);
+			if (!wintar_stessidati(membri[0], membri[k]))
+			{
+				nonuguali++;
+				if (flagverbose)
+					myprintf("64446$ -tar: <<%Z>> has other data than <<%Z>>: not a link\n", fn.c_str(), primo.c_str());
+				continue;
+			}
+			if (!wintar_puo(fn, 3))
+			{
+				if (nonpuo[3]++ == 0)
+					dove[3]= fn;
+				continue;
+			}
+			if (wintar_stessofile(primo, fn))
+				continue; /// (already)
+			DWORD errore= 0;
+			if (wintar_collega(primo, fn, errore))
+			{
+				collegati++;
+				const size_t barra= membri[k]->first.find_last_of('/');
+				if (barra != string::npos)
+					cartelle.insert(membri[k]->first.substr(0, barra + 1));
+			}
+			else
+			{
+				linkerrati++;
+				if ((linkerrati <= 20) || flagverbose)
+					myprintf("64445! -tar: cannot make <<%Z>> a hard link to <<%Z>> (%s): a copy is there\n", fn.c_str(), primo.c_str(), decodewinerror(errore, "", false).c_str());
+			}
+		}
+	}
+	/// 65.23m: the app execution aliases of the table, made again (FSCTL_SET_REPARSE_POINT on a new empty file), their
+	/// date, attributes and permissions. One there with the same reparse point: its permissions only; another thing
+	/// there: left alone, -force replaces it. A volume without reparse points (FAT, exFAT): said once
+	int64_t aliasfatti	= 0;
+	int64_t aliasgia	= 0;
+	int64_t aliaslasciati= 0;
+	int64_t aliasmale	= 0;
+	for (size_t i= 0; i < g_wintar_rip.size(); i++)
+	{
+		const wintar_alias &a	= g_wintar_rip[i];
+		const string		fn	= rename(a.nome);
+		const std::wstring	w	= wintar_percorso(fn);
+		DWORD				errore= 0;
+		const DWORD			attributi= GetFileAttributesW(w.c_str());
+		bool				fare	 = true;
+		if (attributi != INVALID_FILE_ATTRIBUTES)
+		{
+			string ora= "";
+			DWORD  tag= 0;
+			if ((attributi & FILE_ATTRIBUTE_REPARSE_POINT) && wintar_reparse(fn, ora, tag) && (ora == a.dati))
+			{
+				aliasgia++;
+				fare= false;
+			}
+			else if ((!flagforce) || (attributi & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				aliaslasciati++;
+				if (flagverbose)
+					myprintf("64466$ -tar: <<%Z>> is there, not an alias as stored: left alone (-force to replace it)\n", fn.c_str());
+				continue;
+			}
+			else
+			{
+				SetFileAttributesW(w.c_str(), FILE_ATTRIBUTE_NORMAL);
+				if (!DeleteFileW(w.c_str()))
+				{
+					errore= GetLastError();
+					aliasmale++;
+					if ((aliasmale <= 20) || flagverbose)
+						myprintf("64467! -tar: cannot replace <<%Z>> with the app execution alias (%s)\n", fn.c_str(), decodewinerror(errore, "", false).c_str());
+					continue;
+				}
+			}
+		}
+		if (fare)
+		{
+			makepath(fn); /// its folders (-only of the alias only)
+			HANDLE h= CreateFileW(w.c_str(), GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+			if (h == INVALID_HANDLE_VALUE)
+				errore= GetLastError();
+			else
+			{
+				DWORD	   n = 0;
+				string	   copia= a.dati;
+				const BOOL ok	= DeviceIoControl(h, FSCTL_SET_REPARSE_POINT, &copia[0], (DWORD)copia.size(), NULL, 0, &n, NULL);
+				if (!ok)
+				{
+					errore= GetLastError();
+					CloseHandle(h);
+					DeleteFileW(w.c_str()); /// never an empty file in its place
+				}
+				else /// the date on the handle (the name would follow the alias), then the attributes that can be set
+				{
+					DWORD daimpostare= (DWORD)((a.attr >> 8) & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED));
+					if (daimpostare == 0)
+						daimpostare= FILE_ATTRIBUTE_NORMAL;
+					close(fn.c_str(), a.date, 'w' + ((int64_t)daimpostare << 8), h);
+				}
+			}
+			if (errore != 0)
+			{
+				aliasmale++;
+				if ((aliasmale <= 20) || flagverbose)
+					myprintf("64467! -tar: cannot make the app execution alias <<%Z>> (%s)\n", fn.c_str(), decodewinerror(errore, "", false).c_str());
+				continue;
+			}
+			aliasfatti++;
+			const size_t barra= a.nome.find_last_of('/');
+			if (barra != string::npos)
+				cartelle.insert(a.nome.substr(0, barra + 1)); /// its folder: the date again
+		}
+		if ((a.sd >= 0) && (a.sd < (int)g_wintar_sd.size()))
+		{
+			if (wintar_scrivisd(fn, g_wintar_sd[a.sd], sacl, errore))
+				fatti++;
+			else
+			{
+				sbagliati++;
+				if ((sbagliati <= 20) || flagverbose)
+					myprintf("64429! -tar: cannot give back the security of <<%Z>> (%s)\n", fn.c_str(), decodewinerror(errore, "", false).c_str());
+			}
+		}
+	}
+	/// 65.23k: the short names. First every one to give back is taken away (the extraction may have given it to another
+	/// name of the same folder), then set. A volume without short names: said once, a WARNING
+	int64_t cortifatti= 0;
+	int64_t cortimale = 0;
+	int64_t cortivolume= 0;
+	{
+		vector<std::pair<string, string> > dafare; /// the name here, its short name
+		vector<string>					   chiavi; /// its name in the archive
+		for (size_t i= 0; i < g_wintar_corti.size(); i++)
+		{
+			DTMap::iterator q= dt.find(g_wintar_corti[i].first);
+			if ((q == dt.end()) || (!q->second.date))
+				continue;
+			if ((q->second.data < 0) && (g_wintaruguali.find(q->first) == g_wintaruguali.end()))
+				continue;
+			const string fn= rename(q->first);
+			if (!wintar_puo(fn, 2))
+			{
+				if (nonpuo[2]++ == 0)
+					dove[2]= fn;
+				continue;
+			}
+			if (stringtoupper(wintar_corto(fn)) == stringtoupper(g_wintar_corti[i].second))
+				continue; /// (already)
+			dafare.push_back(std::make_pair(fn, g_wintar_corti[i].second));
+			chiavi.push_back(q->first);
+		}
+		bool  volume= true;
+		DWORD errore= 0;
+		for (size_t i= 0; (i < dafare.size()) && volume; i++)
+			if ((!wintar_scrivicorto(dafare[i].first, "", errore)) && (errore == 305)) /// ERROR_SHORT_NAMES_NOT_ENABLED_ON_VOLUME
+				volume= false;
+		if (!volume)
+			cortivolume= (int64_t)dafare.size();
+		std::set<string> estratti; /// (upper case) the names extracted now: one of them can have the short name wanted
+		for (size_t i= 0; (i < dafare.size()) && volume; i++)
+		{
+			bool ok= wintar_scrivicorto(dafare[i].first, dafare[i].second, errore);
+			if ((!ok) && (errore == 305))
+			{
+				volume	   = false;
+				cortivolume= (int64_t)(dafare.size() - i);
+				break;
+			}
+			if ((!ok) && ((errore == ERROR_ALREADY_EXISTS) || (errore == ERROR_FILE_EXISTS)))
+			{
+				string percorso= dafare[i].first;
+				if ((percorso.size() > 3) && (percorso[percorso.size() - 1] == '/'))
+					percorso.erase(percorso.size() - 1);
+				const size_t	 barra	 = percorso.find_last_of("/\\");
+				const string	 cartella= (barra == string::npos) ? "" : percorso.substr(0, barra + 1);
+				WIN32_FIND_DATAW trovato;
+				HANDLE			 f= FindFirstFileW(utow((cartella + dafare[i].second).c_str()).c_str(), &trovato);
+				if (f != INVALID_HANDLE_VALUE)
+				{
+					FindClose(f);
+					const string chi= cartella + wtou(trovato.cFileName);
+					if (estratti.empty())
+						for (DTMap::iterator q= dt.begin(); q != dt.end(); ++q)
+							if (q->second.date && (q->second.data >= 0))
+							{
+								string e= rename(q->first);
+								if ((e.size() > 3) && (e[e.size() - 1] == '/'))
+									e.erase(e.size() - 1);
+								estratti.insert(stringtoupper(e));
+							}
+					/// an entry extracted now, without a short name of its own in the table: its own goes away
+					DWORD altro= 0;
+					if (estratti.count(stringtoupper(chi)) && wintar_scrivicorto(chi, "", altro))
+						ok= wintar_scrivicorto(dafare[i].first, dafare[i].second, errore);
+				}
+			}
+			if (ok)
+			{
+				cortifatti++;
+				string		 chiave= chiavi[i];
+				if ((chiave.size() > 1) && (chiave[chiave.size() - 1] == '/'))
+					chiave.erase(chiave.size() - 1);
+				const size_t barra= chiave.find_last_of('/');
+				if (barra != string::npos)
+					cartelle.insert(chiave.substr(0, barra + 1));
+			}
+			else
+			{
+				cortimale++;
+				if ((cortimale <= 20) || flagverbose)
+					myprintf("64452! -tar: cannot give back the short name %s of <<%Z>> (%s)\n", dafare[i].second.c_str(), dafare[i].first.c_str(), decodewinerror(errore, "", false).c_str());
+			}
+		}
+	}
+	for (std::set<string>::iterator c= cartelle.begin(); c != cartelle.end(); ++c)
+	{
+		DTMap::iterator q= dt.find(*c);
+		if ((q != dt.end()) && q->second.date)
+			makepath(rename(q->first), q->second.date, q->second.attr);
+	}
+	/// 65.23k: the extended attributes, before the permissions
+	int64_t eafatti= 0;
+	int64_t eamale = 0;
+	for (size_t i= 0; i < g_wintar_ea.size(); i++)
+	{
+		DTMap::iterator q= dt.find(g_wintar_ea[i].first);
+		if ((q == dt.end()) || (!q->second.date))
+			continue;
+		if ((q->second.data < 0) && (g_wintaruguali.find(q->first) == g_wintaruguali.end()))
+			continue;
+		const string fn		= rename(q->first);
+		DWORD		 errore = 0;
+		if (!wintar_puo(fn, 1))
+		{
+			if (nonpuo[1]++ == 0)
+				dove[1]= fn;
+			continue;
+		}
+		if (wintar_scriviea(fn, g_wintar_ea[i].second, errore))
+			eafatti++;
+		else
+		{
+			eamale++;
+			if ((eamale <= 20) || flagverbose)
+				myprintf("64454! -tar: cannot give back the extended attributes of <<%Z>> (%s)\n", fn.c_str(), decodewinerror(errore, "", false).c_str());
+		}
+	}
+	for (int passo= 0; passo < 2; passo++)
+	{
+		DTMap::iterator		   p = dt.begin();
+		DTMap::reverse_iterator rp= dt.rbegin();
+		while ((passo == 0) ? (p != dt.end()) : (rp != dt.rend()))
+		{
+			DTMap::iterator q;
+			if (passo == 0)
+				q= p++;
+			else
+			{
+				q= dt.find(rp->first);
+				++rp;
+			}
+			if (isdirectory(q->first) != (passo == 1)) /// files first, then the folders
+				continue;
+			if ((q->second.wintar < 0) || (q->second.wintar >= (int)g_wintar_sd.size()) || (!q->second.date) || (q->first == ""))
+				continue;
+			if ((q->second.data < 0) && (g_wintaruguali.find(q->first) == g_wintaruguali.end()))
+				continue; /// not extracted (-only, exists without -force...)
+			const string fn		= rename(q->first);
+			DWORD		 errore = 0;
+			if (!wintar_puo(fn, 0))
+			{
+				if (nonpuo[0]++ == 0)
+					dove[0]= fn;
+				continue;
+			}
+			if (wintar_scrivisd(fn, g_wintar_sd[q->second.wintar], sacl, errore))
+				fatti++;
+			else
+			{
+				sbagliati++;
+				if ((sbagliati <= 20) || flagverbose)
+					myprintf("64429! -tar: cannot give back the security of <<%Z>> (%s)\n", fn.c_str(), decodewinerror(errore, "", false).c_str());
+			}
+		}
+	}
+	if ((collegati > 0) || (linkerrati > 0) || (nonuguali > 0))
+		myprintf("64444: -tar (Windows): %s hard link(s) made, %s errors%s\n", migliaia(collegati), migliaia2(linkerrati), (nonuguali > 0) ? (string(", ") + migliaia3(nonuguali) + " name(s) with other data (copies)").c_str() : "");
+	if ((cortifatti > 0) || (cortimale > 0))
+		myprintf("64450: -tar (Windows): %s short name(s) given back, %s errors\n", migliaia(cortifatti), migliaia2(cortimale));
+	if (cortivolume > 0)
+	{
+		color_yellow();
+		myprintf("64451$ -tar: no short names on this volume (8.3 off: fsutil 8dot3name): %s not given back\n", migliaia(cortivolume));
+		color_restore();
+	}
+	if ((eafatti > 0) || (eamale > 0))
+		myprintf("64453: -tar (Windows): extended attributes of %s entries given back, %s errors\n", migliaia(eafatti), migliaia2(eamale));
+	if (!g_wintar_rip.empty())
+		myprintf("64463: -tar (Windows): %s app execution alias(es) made, %s already there, %s errors%s\n", migliaia(aliasfatti), migliaia2(aliasgia), migliaia3(aliasmale), (aliaslasciati > 0) ? (string(", ") + migliaia4(aliaslasciati) + " left alone (something else there: -force)").c_str() : "");
+	myprintf("64428: -tar (Windows): security given back to %s entries, %s errors%s\n", migliaia(fatti), migliaia2(sbagliati), sacl ? "" : " (no SeSecurityPrivilege: no SACL)");
+	static const char *nomecosa[4]= {"permissions", "extended attributes", "short names", "hard links (copies there)"};
+	bool				 volumi	   = false;
+	for (int k= 0; k < 4; k++)
+		if (nonpuo[k] > 0)
+		{
+			volumi= true;
+			color_yellow();
+			myprintf("64456$ -tar: the volume of <<%Z>> keeps no %s: %s entries without\n", dove[k].c_str(), nomecosa[k], migliaia(nonpuo[k]));
+			color_restore();
+		}
+	if (((sbagliati > 0) || (linkerrati > 0) || (cortimale > 0) || (cortivolume > 0) || (eamale > 0) || (aliasmale > 0) || (aliaslasciati > 0) || volumi) && (o_errors == 0))
+		o_errors= 1;
 }
 #endif
 
@@ -183225,6 +185183,7 @@ struct ExtractJob
 	int64_t			huge_zeri;	 // -huge: zeros written by us in the gaps (bytes)
 	int64_t			huge_buchi;	 // -huge: how many gaps
 	bool			huge_errore; // -huge: a write did not go through
+	std::set<string> nonscritti; // 65.23a: files with a write that did not go through, the rest of them not written
 	bool			fillimplicito; // the open file is not sparse and not -huge: the gaps are filled by the filesystem (the W line of -image)
 	bool			vhdsparse;	 // Windows, extract(): the virtual disks are sparse while written, cleared at the end
 	bool			windowed;	 // extract one logical file window to RAM
@@ -184214,7 +186173,12 @@ ThreadReturn decompressThread(void *arg)
 								if (flagdebug3)
 									myprintf("00704: KA +++ seek offset %21s write %12s\n", migliaia(offset), migliaia2(usize));
 
-								if (!flagstdout)
+								/// 65.23a issue 374: a file whose write did not go through is not written any more (it is
+								/// broken anyway, and an exit code 2): a .vhd of 631 GB went on for 9 hours after it
+								if ((!job.nonscritti.empty()) && (job.nonscritti.find(job.lastdt->first) != job.nonscritti.end()))
+								{
+								}
+								else if (!flagstdout)
 								{
 									bool scritto;
 #ifndef ANCIENT
@@ -184241,14 +186205,19 @@ ThreadReturn decompressThread(void *arg)
 									/// -image on Windows not even the final check of the written bytes is done
 									if (!scritto)
 									{
+										/// 65.23a: what the system said (it was always "disk full?")
+#ifdef _WIN32
+										const DWORD	 codice= GetLastError(); /// 665: a limit of the file system (a sparse file in too many pieces)
+										const string perche= "error " + myto_string((int64_t)codice) + " " + decodewinerror(codice, "", false);
+#else
+										const string perche= strerror(errno);
+#endif
 										lock(job.mutex);
-										if (!job.huge_errore)
-										{
-											color_red();
-											myprintf("56483! cannot write %s bytes at %s (disk full?) <<%Z>>\n", migliaia(usize), migliaia2(offset), job.lastdt->first.c_str());
-											color_restore();
-										}
+										color_red();
+										myprintf("56483! cannot write %s bytes at %s (%s): the rest of this file is not written <<%Z>>\n", migliaia(usize), migliaia2(offset), perche.c_str(), job.lastdt->first.c_str());
+										color_restore();
 										job.huge_errore= true;
+										job.nonscritti.insert(job.lastdt->first);
 										release(job.mutex);
 									}
 									/// with -image the progress is not printed while decompressing: here, the same line, when
@@ -185075,6 +187044,29 @@ int Jidac::list()
 		csize= read_archive(NULL, archive.c_str(), &errors, 1);
 		myprintf("\n");
 	}
+	/// 65.23i: the table of -tar of Windows (VFILE-w-tar.txt): its files get TAR in a column. The history of -lfast has
+	/// no fragments to decompress it: then the index is read, as -nolfast (an archive with the table only)
+	std::set<string> contar;
+	if ((all == 0) && (!flagterse))
+	{
+		DTMap::iterator wt= dt.find(ZPAQ_WINTAR);
+		if ((wt != dt.end()) && wt->second.date)
+		{
+			if (fastlist)
+			{
+				jidacreset();
+				fastlist= false;
+				csize	= read_archive(NULL, archive.c_str(), &errors, 1, true);
+				wt		= dt.find(ZPAQ_WINTAR);
+				myprintf("64447: the table of -tar: the index read as well, for the column TAR\n");
+			}
+			std::vector<uint8_t> dati;
+			wintar_tabella		 tab;
+			if ((wt != dt.end()) && wt->second.date && (extracttobuffer(ZPAQ_WINTAR, dati) == 0) && wintar_leggi(string(dati.begin(), dati.end()), tab))
+				for (size_t i= 0; i < tab.file.size(); i++)
+					contar.insert(tab.file[i].first);
+		}
+	}
 	t_read	 = mtime() - t_start;
 	g_dtlight= false;
 	vector<DTMap::iterator> filelist;
@@ -185311,6 +187303,11 @@ int Jidac::list()
 		}
 		else
 		{
+			if (!contar.empty()) /// 65.23i
+			{
+				testa+= "TAR ";
+				riga += "--- ";
+			}
 			testa+= "Name";
 			riga += "-----";
 		}
@@ -185556,6 +187553,11 @@ int Jidac::list()
 
 						if (all > 0 && p->first.size() == all + 1u && (v= atoi(p->first.c_str())) > 0 && v < ver.size())
 							simbolino= "";
+						if (!contar.empty()) /// 65.23i: its owner and permissions (and hard links) in the table of -tar
+						{
+							list_out(string(contar.count(p->first) ? "TAR" : "   "));
+							tabba();
+						}
 						list_out(simbolino);
 						tabba();
 						printUTF8(myfilename.c_str());
@@ -193421,6 +195423,7 @@ int unz(const char *archive, const char *key)
 	unsigned int status_2			= 0;
 	unsigned int status_crc			= 0; /// 65.22a: files with CRC-32 only
 	unsigned int status_wim			= 0; /// ...that are images of -wim with blocks skipped
+	unsigned int status_zero		= 0; /// 65.23m issue 375: a hash of all zeros stored (no hash)
 	/// int64_t rihashati=0;
 	g_dimensione= 0;
 
@@ -193462,6 +195465,11 @@ int unz(const char *archive, const char *key)
 				if (wim_immaginesenzahash(unzdt, p->first))
 					status_wim++;
 			}
+			/// 65.23m issue 375: a hash of all zeros is no hash (it was ERROR, "something WRONG"). The type stays: the
+			/// decompressed one is made with it, and with -verify the file on disk too (stored=decompressed=file)
+			string	   tipozero	 = myhashtype;
+			string	   crczero	 = mycrc32;
+			const bool azzerato	 = hash_azzerato((int64_t)dimensione, tipozero, hashstoredinzpaq, crczero);
 			if (myfranzo == -1)
 				error("33351: archive use an unknown hasher (maybe a more advanced zpaqfraz)!");
 			string unzfranzostring= "";
@@ -193508,6 +195516,8 @@ int unz(const char *archive, const char *key)
 			if (flagverify || flagparanoid)
 				if (hashfromfile == "")
 					status_nohash++;
+			if (azzerato && hashfromfile.empty()) /// nothing to compare the decompressed one with: cannot verify
+				status_zero++;
 			bool localok= true;
 			if (!hashstoredinzpaq.empty())
 			{
@@ -193558,7 +195568,10 @@ int unz(const char *archive, const char *key)
 		myprintf("01368: SURE    : %12s of %12s (stored=decompressed=file on disk)\n", migliaia(status_2), migliaia(total_files));
 	if (status_crc > 0) /// 65.22a
 		myprintf("05569: CRC-32  : %12s (no hash stored: checked by their CRC-32)\n", migliaia(status_crc));
+	if (status_zero > 0) /// 65.23m issue 375
+		myprintf("64461$ WARNING : %12s (UNKNOWN:cannot verify, the hash stored is all zeros)\n", migliaia(status_zero));
 	wim_nota(status_wim);
+	hashzero_nota(status_zero);
 	/// 65.15s: no file at all (an empty file, a few bytes, an archive it cannot read: an encrypted one) was "All OK", rc
 	/// 0, with nothing tested; and "Unknown (cannot verify)" rc 0. Found by work probe (a copy cut at 0 ... 4 bytes)
 	if (fuori > 0)
@@ -193581,7 +195594,7 @@ int unz(const char *archive, const char *key)
 	}
 	if (status_e == 0)
 	{
-		if (status_nohash + status_filenotfound)
+		if (status_nohash + status_filenotfound + status_zero)
 		{
 			myprintf("01369: Unknown (cannot verify)\n");
 			return 1;
@@ -203228,6 +205241,7 @@ int Jidac::verify(bool i_readfile)
 	uint64_t	   hashtotali = 0;
 	int			   tobechecked= 0;
 	int			   nohashfound= 0;
+	int			   azzerati	  = 0; /// 65.23m issue 375
 	vector<string> myfiles;
 	vector<string> myfilesoriginal; // in fact redundant
 	vector<string> myfilehash;
@@ -203256,7 +205270,14 @@ int Jidac::verify(bool i_readfile)
 										   myhashtype,
 										   myhash,
 										   mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
-
+						/// 65.23m issue 375: a hash of all zeros is no hash: nothing to compare the file with (it was FAILED)
+						if (hash_azzerato(p->second.size, myhashtype, myhash, mycrc32) && (mycrc32 == ""))
+						{
+							azzerati++;
+							if (flagverbose)
+								myprintf("64459$ no hash (all zeros) %Z\n", finalfile.c_str());
+							continue;
+						}
 						if (myhashtype == "")
 							if (mycrc32 != "")
 								myhashtype= "CRC-32";
@@ -203457,8 +205478,8 @@ int Jidac::verify(bool i_readfile)
 
 	///		write the results (if any)
 	int	 risultato	 = 0;
-	bool outsomething= (nohashfound > 0);
-	if (nohashfound > 0)
+	bool outsomething= (nohashfound > 0) || (azzerati > 0);
+	if ((nohashfound > 0) || (azzerati > 0)) /// cannot verify: a WARNING
 		risultato= 1;
 
 	for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
@@ -203487,7 +205508,10 @@ int Jidac::verify(bool i_readfile)
 		}
 		if (nohashfound)
 			myprintf("02435: UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n", nohashfound, tobechecked);
+		if (azzerati)
+			myprintf("64460$ WARN      NO HASH : %08d of %08d (all zeros, cannot check against file on disk)\n", azzerati, tobechecked);
 		printbar('-');
+		hashzero_nota(azzerati);
 		if (flagverbose)
 			myprintf("02436: Total hashed bytes %s @ %s B/s\n", migliaia(byteshashed), migliaia2((int64_t)(byteshashed / ((mtime() - startrunning) / 1000.0))));
 	}
@@ -203575,7 +205599,8 @@ struct twfile /// a file of the archive in RAM (or a window of a big one), and w
 	string         hashdisco;
 	int            statodisco; /// TWD_
 	int64_t        dimdisco;
-	twfile() : dimensione(0), dati(NULL), inizio(0), lunghezza(0), disco(false), finestre(false), finito(false), hram(NULL), hdisco(NULL), crcram(0), statodisco(TWD_OK), dimdisco(0)
+	bool           azzerato;   /// 65.23m issue 375: its hash all zeros = no hash (hash_azzerato)
+	twfile() : dimensione(0), dati(NULL), inizio(0), lunghezza(0), disco(false), finestre(false), finito(false), hram(NULL), hdisco(NULL), crcram(0), statodisco(TWD_OK), dimdisco(0), azzerato(false)
 	{
 	}
 };
@@ -203591,9 +205616,10 @@ struct twconti /// what w -test -verify found, all the chunks
 	int64_t noncontrollati; /// the extraction stopped before the end of a file in windows
 	int64_t senzahash;      /// compared byte by byte
 	int64_t vuoti;          /// 0 bytes: there, and empty
+	int64_t azzerati;       /// 65.23m issue 375: a hash of all zeros stored (no hash): the SHA-1 of the fragments only
 	void    azzera()
 	{
-		file= byte= uguali= diversi= mancanti= illeggibili= ramdiversi= noncontrollati= senzahash= vuoti= 0;
+		file= byte= uguali= diversi= mancanti= illeggibili= ramdiversi= noncontrollati= senzahash= vuoti= azzerati= 0;
 	}
 	twconti()
 	{
@@ -203624,6 +205650,8 @@ static void wconfronta_prepara(twfile &o_f, DTMap::iterator p, const string &i_s
 	franz_posix *dummyp= NULL;
 	bool         dummyi= false;
 	decode_franz_block(false, p->second.franz_block, o_f.tipohash, o_f.hash, o_f.crc32, dummyc, dummya, dummyo, dummyv, dummyp, dummyi);
+	/// 65.23m issue 375: a hash of all zeros is no hash (byte by byte against the disk with -verify)
+	o_f.azzerato= hash_azzerato(o_f.dimensione, o_f.tipohash, o_f.hash, o_f.crc32);
 }
 /// a file in windows: its hashes from the first byte
 static void wconfronta_inizia(twfile &io_f)
@@ -203795,24 +205823,36 @@ static int wconfronta_esito(twfile &io_f)
 	g_wconti.byte+= io_f.dimensione;
 	char crcram[16];
 	snprintf(crcram, sizeof(crcram), "%08X", io_f.crcram);
-	bool ramok= true;
+	bool   ramok= true;
+	string cosa = ""; /// 65.23a issue 375: which check, in the line (-verbose was needed to know it)
 	if (io_f.dimensione > 0)
 	{
 		if (io_f.inizio + io_f.lunghezza != io_f.dimensione) /// not all in RAM
+		{
 			ramok= false;
+			cosa = "only " + string(migliaia(io_f.inizio + io_f.lunghezza)) + " bytes";
+		}
 		if (conhash && (io_f.hashram != io_f.hash))
+		{
 			ramok= false;
+			cosa+= string((cosa == "") ? "" : ", ") + "hash " + io_f.tipohash;
+		}
 		if ((io_f.crc32 != "") && (io_f.crc32 != "00000000") && (io_f.crc32 != crcram))
+		{
 			ramok= false;
+			cosa+= string((cosa == "") ? "" : ", ") + "CRC-32";
+		}
 	}
 	if (!ramok)
 	{
 		g_wconti.ramdiversi++;
-		myprintf("02571! DECOMPRESSED NOT AS STORED (damaged archive?) <<%Z>>\n", io_f.nome.c_str());
+		myprintf("02571! DECOMPRESSED NOT AS STORED (%s, damaged archive?) <<%Z>>\n", cosa.c_str(), io_f.nome.c_str());
 		if (flagverbose)
 			myprintf("02576: %s stored %s RAM %s, CRC-32 stored %s RAM %s, in RAM %s of %s bytes\n", io_f.tipohash.c_str(), io_f.hash.c_str(), io_f.hashram.c_str(), io_f.crc32.c_str(), crcram, migliaia(io_f.inizio + io_f.lunghezza), migliaia2(io_f.dimensione));
 		return 1;
 	}
+	if (io_f.azzerato)
+		g_wconti.azzerati++;
 	if (!io_f.disco)
 	{
 		g_wconti.uguali++;
@@ -203893,6 +205933,7 @@ static int wconfronta_riassunto(int i_errori)
 		if (c.vuoti > 0)
 			myprintf(", %s empty", migliaia(c.vuoti));
 		myprintf("\n");
+		hashzero_nota(c.azzerati); /// 65.23m issue 375: compared byte by byte, as the ones with no hash
 	}
 	else
 	{
@@ -203908,6 +205949,7 @@ static int wconfronta_riassunto(int i_errori)
 		if (c.noncontrollati > 0)
 			myprintf(", NOT CHECKED %s", migliaia(c.noncontrollati));
 		myprintf("\n");
+		hashzero_nota(c.azzerati);
 	}
 	if (male > 0)
 		return 2;
@@ -203915,14 +205957,24 @@ static int wconfronta_riassunto(int i_errori)
 }
 /// 65.15b tw without a folder: how many files, all as they were stored or not (the RAM only). tw is a test: 2 if one
 /// is not, or on an error reading the archive (a block skipped, the index damaged), as t
+/// 65.23m issue 375: files with a hash of all zeros (no hash): their fragments checked (SHA-1), the whole file cannot
+/// be. Not "NOT AS STORED" (rc 2, it was) but a WARNING, rc 1: it cannot verify, and a -touch puts it right
 static int wconfronta_riassuntoram(int i_errori)
 {
 	const twconti &c= g_wconti;
+	if ((c.ramdiversi == 0) && (c.noncontrollati == 0) && (i_errori == 0) && (c.azzerati > 0))
+	{
+		myprintf("64458$ tw: %s files (%s) decompressed in RAM, as stored %s, %s with no hash to check (SHA-1 of their fragments only)\n", migliaia(c.file), tohuman(c.byte), migliaia2(c.uguali - c.azzerati), migliaia3(c.azzerati));
+		hashzero_nota(c.azzerati);
+		return 1;
+	}
 	if ((c.ramdiversi == 0) && (c.noncontrollati == 0) && (i_errori == 0))
 		myprintf("03690: tw: %s files (%s) decompressed in RAM, all as stored\n", migliaia(c.file), tohuman(c.byte));
 	else
 	{
-		myprintf("03691! tw: %s files (%s), as stored %s", migliaia(c.file), tohuman(c.byte), migliaia2(c.uguali));
+		myprintf("03691! tw: %s files (%s), as stored %s", migliaia(c.file), tohuman(c.byte), migliaia2(c.uguali - c.azzerati));
+		if (c.azzerati > 0)
+			myprintf(", no hash %s", migliaia(c.azzerati));
 		if (c.ramdiversi > 0)
 			myprintf(", NOT AS STORED %s", migliaia(c.ramdiversi));
 		if (c.noncontrollati > 0)
@@ -203930,6 +205982,7 @@ static int wconfronta_riassuntoram(int i_errori)
 		if ((c.ramdiversi == 0) && (c.noncontrollati == 0))
 			myprintf(", but ERRORS reading the archive (see above)");
 		myprintf("\n");
+		hashzero_nota(c.azzerati);
 	}
 	return ((c.ramdiversi > 0) || (c.noncontrollati > 0) || (i_errori > 0)) ? 2 : 0;
 }
@@ -204068,6 +206121,7 @@ int Jidac::extractw()
 			error("overlapping blocks");
 	}
 	int64_t				  totalarchive= 0;
+	int64_t				  azzeratiw	  = 0;
 	vector<s_fileandsize> fileandsize;
 	vector<s_fileandsize> chunkfile;
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
@@ -204088,6 +206142,8 @@ int Jidac::extractw()
 								   myhashtype,
 								   myhash,
 								   mycrc32, mycreationtime, myaccesstime, myisordered, myversion, myposix, myisadded);
+				if (hash_azzerato(p->second.size, myhashtype, myhash, mycrc32)) /// 65.23m issue 375: no hash, not FAILED
+					azzeratiw++;
 				const tipohash *thehash= franz_get_hash(myhashtype);
 				s_fileandsize	myblock;
 				myblock.filename= p->first;
@@ -204106,6 +206162,8 @@ int Jidac::extractw()
 					myblock.flaghashstored= false;
 				fileandsize.push_back(myblock);
 			}
+	if (flagverify && (!confronto) && (!soloram)) /// the -verify of multiverify (tw and -test -verify: wconfronta)
+		hashzero_nota(azzeratiw);
 	sort(fileandsize.begin(), fileandsize.end(), comparefilenamesize);
 	/// 65.15b: no file with data (only empty files, or folders): nothing to decompress. It crashed ([size()-1] of an
 	/// empty vector, w and tw); the folders and the empty files are made (or checked) as for the others
@@ -224090,6 +226148,7 @@ void Jidac::testverify_ssd(vector<DTMap::iterator> &i_filelist, vector<tconfront
 		franz_posix *dummyp= NULL;
 		bool		 dummyi= false;
 		decode_franz_block(false, p->second.franz_block, l.tipohash, l.hash, l.crc32, dummyc, dummya, dummyo, dummyv, dummyp, dummyi);
+		(void)hash_azzerato(l.dimensione, l.tipohash, l.hash, l.crc32); /// 65.23m issue 375: as testverify does
 		const int grosso= (apezzi && (l.dimensione > ZPAQ_TPEZZO)) ? testverify_grosso(p, l.file) : -1;
 		if (grosso == 0) /// not the same, and nothing to read: as equal() would say
 		{
@@ -224648,6 +226707,7 @@ int Jidac::testverify()
 	command		  = 'l';
 	g_optional	  = "versum"; // force isselected
 	int		errors= 0;
+	int64_t azzeratit= 0; /// 65.23m issue 375
 	int64_t csize = read_archive(NULL, archive.c_str(), &errors, 1);
 	if (flagdebug)
 		myprintf("03340: dtsize %d\n", (int)dt.size());
@@ -224718,7 +226778,16 @@ int Jidac::testverify()
 			myprintf("03343: %9s in <<%s>>\n", migliaia((int64_t)files_count[i]), files[i].c_str());
 	printbar('-');
 	myprintf("03344: Total files found: %s\n", migliaia((int64_t)edt.size()));
+#ifdef _WIN32
+	wintar_aliastogli(false); /// 65.23n: the app execution aliases on disk are not files (and never in an archive)
+#endif
 	myprintf("\n");
+	/// 65.23n: the table of -tar of Windows is not a file of the folder (it was "-internal")
+	{
+		DTMap::iterator w= dt.find(ZPAQ_WINTAR);
+		if (w != dt.end())
+			dt.erase(w);
+	}
 
 	if (flagdebug3)
 	{
@@ -224822,6 +226891,10 @@ int Jidac::testverify()
 								   myisordered,
 								   myversion,
 								   myposix, myisadded);
+				/// 65.23m issue 375: a hash of all zeros is no hash: the fragments only (equal), as with no hash stored
+				/// (it was "#different" and "HASH NOT MATCH STORED"). The same in testverify_ssd, or the threads hash it
+				if (hash_azzerato(p->second.size, myhashtype, myhash, mycrc32))
+					azzeratit++;
 				tobetested+= p->second.size;
 			}
 			if (flagdebug2)
@@ -225040,6 +227113,7 @@ int Jidac::testverify()
 		myprintf("03734! The archive is damaged (%s error(s) reading it): NOT OK, whatever the compare with the folder says\n", migliaia(errors));
 		color_restore();
 	}
+	hashzero_nota(azzeratit);
 	if (myerror)
 	{
 		if (usize == 0)
@@ -233014,6 +235088,23 @@ int Jidac::extract()
 			else
 				error("Multiple match for version comment. Please use -until");
 		}
+	/// 65.23c: x -tar on Windows, the descriptors of the table to the entries (before any name is changed). The table
+	/// itself is not a file to write (but repack copies it)
+	int wintarstato= 0;
+#ifdef _WIN32
+	if (flagtar && (command == 'x') && (!flagtest) && (!flagstdout) && (!flagzip) && (repack == ""))
+	{
+		wintarstato= wintar_carica();
+		if (wintarstato == 2)
+			return 2;
+	}
+#endif
+	if (repack == "")
+	{
+		DTMap::iterator w= dt.find(ZPAQ_WINTAR);
+		if (w != dt.end())
+			dt.erase(w);
+	}
 	// test blocks
 	for (unsigned i= 0; i < block.size(); ++i)
 	{
@@ -233320,6 +235411,27 @@ int Jidac::extract()
 				lettera= lettfhd;
 				return restore_to_vmdk(lettfhd, fuori, true, 3);
 			}
+#ifndef ANCIENT
+			/// 65.23p: the .vhd in order, the default (see vhdordine_export_handler); -ssd: here, by the threads, as
+			/// before. Not when the .vhd is there already: x does not write over it (and -force means the pieces)
+			if ((!flagssd) && (command == 'x') && (!flagtest) && (!flagstdout) && (!flagzip) && (repack == "") && (!flagramdisk) && (!flaglowram) && (!flagparanoid) && (solofhd.size() == 11))
+			{
+				string fuori= rename(nomefhd);
+				if ((fuori.size() > 4) && (fuori.substr(fuori.size() - 4) == ".fhd"))
+					fuori= fuori.substr(0, fuori.size() - 4);
+				fuori+= ".vhd";
+				if (!fileexists(fuori))
+				{
+					const char lettfhd= solofhd[6];
+					color_cyan();
+					myprintf("96456: Turning on extraction to vhd, in order (the pieces as they are: -force; written by the threads: -ssd)\n");
+					color_restore();
+					jidacreset();
+					lettera= lettfhd;
+					return restore_ntfs_to_vhd(lettfhd, fuori);
+				}
+			}
+#endif
 			color_cyan();
 			myprintf("96454: Turning on extraction to vhd (you can disable with -force)\n");
 			color_restore();
@@ -233636,6 +235748,10 @@ int Jidac::extract()
 				}
 				close(fn.c_str(), p->second.date, p->second.attr);
 				++skipped;
+#ifdef _WIN32
+				if (flagtar && (p->second.wintar >= 0)) /// 65.23c: date and attributes set again, the security too
+					g_wintaruguali.insert(p->first);
+#endif
 			}
 			else if ((!flagstdout) && (!flagzip) && (repack == "") && !flagtest && !flagforce && exists(fn) &&
 					 (!(isdir && (g_pocaram != NULL) && (g_pocaram->modo == 3)))) /// 65.15a -lowram, the last pass: its folders are there, their dates go on
@@ -234259,6 +236375,7 @@ int Jidac::extract()
 		int		hashko	  = 0;
 		int64_t hashtime  = 0;
 		int64_t hashsize  = 0;
+		int64_t azzeratix = 0; /// 65.23m issue 375
 
 		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 		{
@@ -234287,7 +236404,11 @@ int Jidac::extract()
 									   myisordered,
 									   myversion,
 									   myposix, myisadded);
-					tobetested++;
+					/// 65.23m issue 375: a hash of all zeros is no hash (it was "HASH expected 0000...", rc 2)
+					if (hash_azzerato(p->second.size, myhashtype, myhash, mycrc32))
+						azzeratix++;
+					else
+						tobetested++;
 
 					franz_do_hash hashfrombuffer(myhashtype);
 					if (myhashtype != "")
@@ -234379,6 +236500,7 @@ int Jidac::extract()
 
 			color_restore();
 		}
+		hashzero_nota(azzeratix);
 	}
 	unsigned extracted		 = 0;
 	unsigned moltomale		 = 0; /// 65.15y: files not extracted whole (00966 very bad)
@@ -234602,6 +236724,12 @@ int Jidac::extract()
 		}
 	}
 
+#ifdef _WIN32
+	if (flagtar && (!flagtest) && (!flagstdout) && (!flagzip))
+		wintar_restore(errors); /// 65.23c
+#endif
+	if ((wintarstato == 1) && (errors == 0)) /// -tar asked, the archive has no table: a WARNING
+		errors= 1;
 #ifdef unix
 	if (flagtar)
 		tar_restore(errors);
@@ -265031,6 +267159,157 @@ class vmdk_export_handler : public extract_handler
 	}
 };
 
+/*
+	65.23p: the image of the used clusters to a .vhd IN ORDER, the default (-ssd: extract() as before, its threads
+	write where their blocks go, the .vhd sparse while written, toglisparse at the end). A .vhd is three pieces one
+	after the other: image_X.header (the copy of the footer, the dynamic header, the table of the blocks),
+	image_X.fhd (the blocks, 512 bytes of bitmap and 2 MB each) and image_X.footer. This engine gives the pieces in
+	the order of their names (.fhd .footer .header), the fragments of each one in order: every piece at its place,
+	every byte written once, no hole, never sparse. A disk that is not an SSD (HDD, USB, NAS) is never asked to
+	jump: with an image of more versions extract() wrote the gaps as zeros and then the data (everything twice
+	where it could not be sparse), and NTFS has a limit to the pieces of a sparse file (issue 374).
+	The .vhdx and the .vmdk (vmdk_export_handler) and a raw image to a .vhd (vhdraw_export_handler) were already
+	written in order, here
+*/
+struct franzvhdordine
+{
+	bool	attivo;
+	string	base;	/// image_X
+	int64_t dim[3]; /// the sizes of the pieces: header, fhd, footer
+	franzvhdordine() : attivo(false)
+	{
+		dim[0]= 0;
+		dim[1]= 0;
+		dim[2]= 0;
+	}
+};
+static franzvhdordine g_vhdordine;
+
+class vhdordine_export_handler : public extract_handler
+{
+  private:
+	const string nome;
+	FP			 fp;
+	int			 pezzo; /// the piece being written: 0 header, 1 fhd, 2 footer, -1 none
+	int64_t		 scritti[3];
+	int64_t		 datafhd; /// the date and the attributes of the .fhd: the ones of the .vhd, as extract() gave them
+	int64_t		 attrfhd;
+	bool		 errore;
+	static int pezzodi(const string &i_nome)
+	{
+		string		 solo = i_nome;
+		const size_t barra= solo.find_last_of("/\\");
+		if (barra != string::npos)
+			solo= solo.substr(barra + 1);
+		if (solo == g_vhdordine.base + ".header")
+			return 0;
+		if (solo == g_vhdordine.base + ".fhd")
+			return 1;
+		if (solo == g_vhdordine.base + ".footer")
+			return 2;
+		return -1;
+	}
+
+  public:
+	vhdordine_export_handler(const string &i_nome) : nome(i_nome), fp(FPNULL), pezzo(-1), datafhd(0), attrfhd(0), errore(false)
+	{
+		scritti[0]= 0;
+		scritti[1]= 0;
+		scritti[2]= 0;
+	}
+	~vhdordine_export_handler()
+	{
+		if (fp != FPNULL)
+			myfclose(&fp);
+	}
+	bool initialize() override
+	{
+		fp= myfopen(nome.c_str(), WB);
+		if (fp == FPNULL)
+		{
+			myprintf("62317! Cannot create the .vhd %Z\n", nome.c_str());
+			return false;
+		}
+		return true;
+	}
+	bool should_process_file(const string &filename) override
+	{
+		return pezzodi(filename) >= 0;
+	}
+	bool begin_file(const string &i_storedname, const DT &i_dt, bool i_isdir) override
+	{
+		pezzo= i_isdir ? -1 : pezzodi(i_storedname);
+		if ((pezzo < 0) || errore)
+			return true;
+		if (pezzo == 1)
+		{
+			datafhd= i_dt.date;
+			attrfhd= i_dt.attr;
+		}
+		const int64_t dove= (pezzo == 0) ? 0 : ((pezzo == 1) ? g_vhdordine.dim[0] : (g_vhdordine.dim[0] + g_vhdordine.dim[1]));
+		if (fseeko(fp, dove, SEEK_SET) != 0)
+		{
+			myprintf("62318! Cannot seek to %s in the .vhd %Z\n", migliaia(dove), nome.c_str());
+			errore= true;
+			return false;
+		}
+		return true;
+	}
+	bool write_fragment(const char *data, size_t len) override
+	{
+		if (errore)
+			return false;
+		if (pezzo < 0)
+			return true;
+		if (scritti[pezzo] + (int64_t)len > g_vhdordine.dim[pezzo])
+		{
+			myprintf("62319! A piece of the .vhd longer than in the archive (%s bytes): %Z\n", migliaia(g_vhdordine.dim[pezzo]), nome.c_str());
+			errore= true;
+			return false;
+		}
+		if (myfwrite(data, 1, len, fp) != len)
+		{
+			myprintf("62320! Cannot write the .vhd (disk full?) %Z\n", nome.c_str());
+			errore= true;
+			return false;
+		}
+		scritti[pezzo]+= (int64_t)len;
+		return true;
+	}
+	bool end_file() override
+	{
+		pezzo= -1;
+		return true;
+	}
+	bool finalize() override
+	{
+		static const char *nomi[3]= {".header", ".fhd", ".footer"};
+		for (int i= 0; i < 3; i++)
+			if ((!errore) && (scritti[i] != g_vhdordine.dim[i]))
+			{
+				myprintf("62321! %s%s: %s bytes written in the .vhd instead of %s\n", g_vhdordine.base.c_str(), nomi[i], migliaia(scritti[i]), migliaia2(g_vhdordine.dim[i]));
+				errore= true;
+			}
+		if (fp != FPNULL)
+		{
+			if (errore)
+				myfclose(&fp);
+			else
+			{
+				/// as every extracted file: read-only later, never here
+				const int64_t attr= ((attrfhd & 0x1ff) == 'w' + 256) ? 0 : attrfhd;
+				close(nome.c_str(), datafhd, attr, fp); /// (it closes the handle)
+				fp= FPNULL;
+			}
+		}
+		return !errore;
+	}
+	const char *mode_name() override
+	{
+		return "VHD export (in order)";
+	}
+};
+
 
 // ----------------------------------------------------------------------------
 class raw_restore_handler : public extract_handler
@@ -266906,6 +269185,242 @@ static int recover_totali(const vector<recover_danno> &i_danneggiati, size_t i_b
 	return 0;
 }
 
+/// 65.23r: the new copies of the blocks read again for their fragments put aside (block_nuovo) go in the cache, in
+/// place of the old ones. The main thread only, with cache_mutex held: it does not write from the old copy any more.
+/// A block that no file wants any more: away
+static void cache_nuovi_dentro(ThreadContext &io_ctx, const std::set<int> &i_ancora)
+{
+	if (io_ctx.block_nuovo.empty())
+		return;
+	for (std::map<int, std::pair<string *, vector<int64_t> > >::iterator n= io_ctx.block_nuovo.begin(); n != io_ctx.block_nuovo.end(); ++n)
+	{
+		const int						  b= n->first;
+		std::map<int, string *>::iterator c= io_ctx.block_cache.find(b);
+		if (c != io_ctx.block_cache.end())
+		{
+			io_ctx.current_cache_size-= (int64_t)c->second->size();
+			delete c->second;
+			io_ctx.block_cache.erase(c);
+		}
+		if (i_ancora.count(b) == 0)
+		{
+			io_ctx.current_cache_size-= (int64_t)n->second.first->size();
+			delete n->second.first;
+			io_ctx.block_dove.erase(b);
+			io_ctx.block_access_time.erase(b);
+			pthread_mutex_lock(io_ctx.queue_mutex);
+			io_ctx.pending_jobs.erase(b);
+			pthread_mutex_unlock(io_ctx.queue_mutex);
+			continue;
+		}
+		io_ctx.block_cache[b]	   = n->second.first;
+		io_ctx.block_access_time[b]= io_ctx.access_counter++;
+		if (n->second.second.empty())
+			io_ctx.block_dove.erase(b);
+		else
+			io_ctx.block_dove[b].swap(n->second.second);
+	}
+	io_ctx.block_nuovo.clear();
+}
+
+/// 65.23r: a fragment in the cache still to be written, and when (the cache by fragment, cache_taglia)
+struct franzpezzocache
+{
+	uint32_t pos; /// its next use, in the order of the writes
+	uint32_t k;	  /// its index in the block
+	int		 b;
+	int64_t	 len;
+	bool	 operator<(const franzpezzocache &i_altro) const
+	{
+		return pos < i_altro.pos;
+	}
+};
+
+/*
+	65.23r: the cache by fragment (the main thread, cache_mutex held). Room is needed: of every fragment in the cache
+	still to be written, its next use (from the uses done of its block); the ones needed soonest stay, up to i_tenere
+	bytes, the others are put aside (-3 in block_dove: asked again when the read ahead gets to them). A block that loses
+	something is copied again with what stays, also when what it holds is mostly written already; with nothing left it
+	goes away. It was the whole block, the one needed latest: a block with one fragment needed now and a thousand far
+	away stayed whole, and the others went away. What is freed comes back
+*/
+static int64_t cache_taglia(ThreadContext &io_ctx, const vector<Block> &i_block, const vector<HT> &i_ht, const vector<int64_t> &i_inizio, const vector<uint32_t> &i_pos, const vector<uint32_t> &i_frag, const vector<int32_t> &i_fatti, int64_t i_tenere)
+{
+	vector<franzpezzocache> pezzi;
+	std::set<int>			vuoti; /// 65.23s: blocks with a fragment of 0 bytes still to be written (it costs nothing: they stay)
+	for (std::map<int, string *>::iterator c= io_ctx.block_cache.begin(); c != io_ctx.block_cache.end(); ++c)
+	{
+		const int b= c->first;
+		if ((b < 0) || ((size_t)b + 1 >= i_inizio.size()) || ((size_t)b >= i_fatti.size()))
+			continue;
+		const Block										&B = i_block[(size_t)b];
+		std::map<int, vector<int64_t> >::const_iterator dv= io_ctx.block_dove.find(b);
+		const vector<int64_t>						   *dove= (dv != io_ctx.block_dove.end()) ? &dv->second : NULL;
+		vector<char>									visto(B.frags, 0);
+		for (int64_t u= i_inizio[(size_t)b] + i_fatti[(size_t)b]; u < i_inizio[(size_t)b + 1]; u++)
+		{
+			const uint32_t k= i_frag[(size_t)u];
+			if ((k >= B.frags) || visto[k])
+				continue;
+			visto[k]= 1;
+			if (B.start + k >= i_ht.size())
+				continue;
+			const int64_t len= i_ht[B.start + k].usize;
+			if (len <= 0)
+			{
+				vuoti.insert(b);
+				continue;
+			}
+			if ((dove != NULL) && ((k >= dove->size()) || ((*dove)[k] < 0))) /// not there, or put aside already
+				continue;
+			franzpezzocache p;
+			p.pos= i_pos[(size_t)u];
+			p.k	 = k;
+			p.b	 = b;
+			p.len= len;
+			pezzi.push_back(p);
+		}
+	}
+	std::sort(pezzi.begin(), pezzi.end());
+	size_t	taglio = pezzi.size();
+	int64_t tenuti= 0;
+	for (size_t i= 0; i < pezzi.size(); i++)
+	{
+		if (tenuti + pezzi[i].len > i_tenere)
+		{
+			taglio= i;
+			break;
+		}
+		tenuti+= pezzi[i].len;
+	}
+	/// for every block: 1 stays, 2 put aside, 0 nothing more to write of it
+	std::map<int, vector<char> > stato;
+	std::map<int, int64_t>		 bisogno;
+	for (size_t i= 0; i < pezzi.size(); i++)
+	{
+		vector<char> &s= stato[pezzi[i].b];
+		if (s.empty())
+			s.assign(i_block[(size_t)pezzi[i].b].frags, 0);
+		s[pezzi[i].k]= (i < taglio) ? 1 : 2;
+		if (i < taglio)
+			bisogno[pezzi[i].b]+= pezzi[i].len;
+	}
+	int64_t							  liberati= 0;
+	std::map<int, string *>::iterator c		  = io_ctx.block_cache.begin();
+	while (c != io_ctx.block_cache.end())
+	{
+		const int									b = c->first;
+		std::map<int, vector<char> >::iterator		st= stato.find(b);
+		const int64_t								ci= (int64_t)c->second->size();
+		const int64_t								serve= (bisogno.find(b) != bisogno.end()) ? bisogno[b] : 0;
+		std::map<int, vector<int64_t> >::iterator dv= io_ctx.block_dove.find(b);
+		if ((serve == 0) && (vuoti.count(b) == 0))
+		{
+			/// nothing of it to keep now: away, whole (when the rest is needed the block is asked again, as any block
+			/// not in the cache). 65.23s: with a fragment of 0 bytes still to be written it stays, emptied below (kept in
+			/// part: empty and good, see nientefuori); it was thrown away, and decompressed again for nothing
+			liberati+= ci;
+			io_ctx.current_cache_size-= ci;
+			delete c->second;
+			io_ctx.block_dove.erase(b);
+			io_ctx.block_access_time.erase(b);
+			pthread_mutex_lock(io_ctx.queue_mutex);
+			io_ctx.pending_jobs.erase(b);
+			pthread_mutex_unlock(io_ctx.queue_mutex);
+			io_ctx.block_cache.erase(c++);
+			continue;
+		}
+		bool via= false; /// something of it put aside now
+		if (st != stato.end())
+			for (size_t k= 0; k < st->second.size(); k++)
+				if (st->second[k] == 2)
+				{
+					via= true;
+					break;
+				}
+		if ((!via) && (ci - serve <= (((int64_t)1 << 20) > ci / 4 ? ((int64_t)1 << 20) : ci / 4)))
+		{
+			++c;
+			continue;
+		}
+		const Block	   &B= i_block[(size_t)b];
+		string		   *nuovo= NULL;
+		vector<int64_t> nd;
+		try
+		{
+			nuovo= new string();
+			nuovo->reserve((size_t)serve);
+			nd.assign(B.frags, -1);
+			int64_t q= 0;
+			for (unsigned k= 0; (k < B.frags) && (B.start + k < i_ht.size()); k++)
+			{
+				const int64_t len= i_ht[B.start + k].usize;
+				if (len <= 0)
+					continue;
+				int64_t prima= -1;
+				if (dv != io_ctx.block_dove.end())
+					prima= (k < dv->second.size()) ? dv->second[k] : -1;
+				else
+				{
+					prima= (q + len <= ci) ? q : -1;
+					q+= len;
+				}
+				if (prima == -3)
+				{
+					nd[k]= -3; /// still aside
+					continue;
+				}
+				if (prima < 0)
+					continue; /// not there (past the end of the block)
+				const char s= (st != stato.end()) ? st->second[k] : 0;
+				if (s == 1)
+				{
+					nd[k]= (int64_t)nuovo->size();
+					nuovo->append(c->second->data() + prima, (size_t)len);
+				}
+				else if (s == 2)
+					nd[k]= -3;
+			}
+		}
+		catch (std::bad_alloc &)
+		{
+			delete nuovo;
+			++c;
+			continue;
+		}
+		liberati+= ci - (int64_t)nuovo->size();
+		io_ctx.current_cache_size+= (int64_t)nuovo->size() - ci;
+		delete c->second;
+		c->second= nuovo;
+		io_ctx.block_dove[b].swap(nd);
+		++c;
+	}
+	io_ctx.tagli++;
+	return liberati;
+}
+
+/// 65.23r: room by fragment when the cache is over 80% (and it has grown since the last pass, or it is over 95%): down
+/// to 60%. Also while the main thread waits for a block: over 80% the blocks read ahead that come in the meantime were
+/// thrown away (and decompressed again). The main thread, cache_mutex held. true: done (the read ahead looks again)
+static bool cache_fai_posto(ThreadContext &io_ctx, const vector<Block> &i_block, const vector<HT> &i_ht, const vector<int64_t> &i_inizio, const vector<uint32_t> &i_pos, const vector<uint32_t> &i_frag, const vector<int32_t> &i_fatti, const std::set<int> &i_ancora, int64_t &io_dopotaglio)
+{
+	if (i_frag.empty() || (i_frag.size() != i_pos.size()) || (g_GLOBAL_RAM_LIMIT <= 0))
+		return false;
+	const bool critica= (io_ctx.current_cache_size > g_GLOBAL_RAM_LIMIT * 0.95);
+	const bool alta	  = (io_ctx.current_cache_size > g_GLOBAL_RAM_LIMIT * 0.8);
+	if (!(critica || (alta && (io_ctx.current_cache_size > io_dopotaglio + g_GLOBAL_RAM_LIMIT / 20))))
+		return false;
+	cache_nuovi_dentro(io_ctx, i_ancora);
+	const int64_t prima	  = io_ctx.current_cache_size;
+	const int64_t liberati= cache_taglia(io_ctx, i_block, i_ht, i_inizio, i_pos, i_frag, i_fatti, (int64_t)(g_GLOBAL_RAM_LIMIT * 0.6));
+	io_dopotaglio		  = io_ctx.current_cache_size;
+	if (flagdebug)
+		myprintf("09527: cache by fragment: %s => %s (%s freed), %d blocks\n", tohuman(prima), tohuman2(io_ctx.current_cache_size), tohuman3(liberati), (int)io_ctx.block_cache.size());
+	if (liberati > 0)
+		pthread_cond_broadcast(io_ctx.cond_cache_not_full);
+	return true;
+}
+
 int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 {
 	archive= getbackupnameifany(archive);
@@ -267007,6 +269522,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			myprintf("10355: Raw file export mode to %s\n", i_rawfilename.c_str());
 		if (esportavhdraw)
 			handler= new vhdraw_export_handler(imager, i_rawfilename, (uint64_t)esportavhdrawsize, (lettera >= '0') && (lettera <= '9'), esportavmdk != 0);
+		else if (g_vhdordine.attivo) /// 65.23p: the image of the used clusters to a .vhd, in order
+			handler= new vhdordine_export_handler(i_rawfilename);
 		else if (esportavmdk != 0) /// 65.8z14: the image of the used clusters to a .vmdk
 			handler= new vmdk_export_handler(imager, imager_themetafile, i_rawfilename, esportavmdk);
 		else
@@ -267108,10 +269625,19 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	if (flagverbose)
 		myprintf("09259: Phase 1: Mapping files to blocks...");
 
+	/// 65.23q: how many times every fragment is to be written (the cache keeps only those still to be written)
+	vector<int32_t> frag_usi(ht.size(), 0);
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 	{
 		if (p->second.date == 0)
 			continue;
+		/// 65.23q: only the files this handler writes (an image: its pieces; xc: its piece). The others were counted
+		/// too: their blocks were read ahead, and stayed in the cache "still needed" to the end
+		if (!handler->should_process_file(rename(p->first)))
+		{
+			p->second.block_for_ptr.clear();
+			continue;
+		}
 		if (p->second.size > 0)
 			total_bytes_to_extract+= p->second.size;
 
@@ -267149,10 +269675,63 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				p->second.block_for_ptr[i]= block_idx;
 				all_needed_blocks.insert(block_idx);
 				block_use_count[block_idx]++;
+				frag_usi[j]++; /// 65.23q
 			}
 			else
 			{
 				p->second.block_for_ptr[i]= -1;
+			}
+		}
+	}
+	/*
+		65.23q: where every block is used, in the order of the writes (usopos, by block from usoinizio; usofatti the
+		uses done): when the cache is full the block needed latest goes away (it was the least recently used one: with
+		the blocks of an image of many versions, used all over the disk, it threw away the ones needed next)
+	*/
+	vector<int64_t>	 usoinizio;
+	vector<uint32_t> usopos;
+	vector<uint32_t> usofrag; /// 65.23r: and which fragment of the block (its index in it): the cache by fragment
+	vector<int32_t>	 usofatti;
+	bool			 belady= false;
+	{
+		int64_t totaleusi= 0;
+		for (std::map<int, int>::iterator u= block_use_count.begin(); u != block_use_count.end(); ++u)
+			totaleusi+= u->second;
+		if (totaleusi < (int64_t)4000000000LL)
+		{
+			try
+			{
+				usoinizio.assign(block.size() + 1, 0);
+				usofatti.assign(block.size(), 0);
+				for (std::map<int, int>::iterator u= block_use_count.begin(); u != block_use_count.end(); ++u)
+					usoinizio[(size_t)u->first + 1]= u->second;
+				for (size_t b= 0; b < block.size(); b++)
+					usoinizio[b + 1]+= usoinizio[b];
+				usopos.resize((size_t)totaleusi);
+				usofrag.resize((size_t)totaleusi);
+				vector<int64_t> riempi(usoinizio.begin(), usoinizio.end() - 1);
+				uint32_t		posizione= 0;
+				for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+				{
+					if (p->second.date == 0)
+						continue;
+					for (size_t k= 0; k < p->second.block_for_ptr.size(); k++)
+					{
+						const int blk= p->second.block_for_ptr[k];
+						if (blk >= 0)
+						{
+							usofrag[(size_t)riempi[blk]]  = p->second.ptr[k] - block[blk].start;
+							usopos[(size_t)riempi[blk]++]= posizione++;
+						}
+					}
+				}
+				belady= true;
+			}
+			catch (std::bad_alloc &)
+			{
+				vector<uint32_t>().swap(usopos);
+				vector<uint32_t>().swap(usofrag);
+				belady= false;
 			}
 		}
 	}
@@ -267174,8 +269753,25 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			if (dentro > piugrande)
 				piugrande= dentro;
 		}
-		int64_t		  limite= (int64_t)g_ramsize - (int64_t)howmanythreads * 4 * piugrande - ((int64_t)1 << 30);
-		const int64_t minimo= ((int64_t)(g_ramsize / 4) > ((int64_t)256 << 20)) ? (int64_t)(g_ramsize / 4) : ((int64_t)256 << 20);
+		int64_t base= (int64_t)g_ramsize;
+#ifdef _WIN32
+		/*
+			65.23q: and no more than the memory that can still be committed (the RAM and the pagefile, less what the
+			programs running have taken: they can have it without using it). Over it the workers find no memory
+			(std::bad_alloc, 09190) and the cache is halved for the rest of the run. Seen: 28 GB of cache from the free
+			RAM, no memory at about 17 GB, 8.58 GB to the end (an image of 24 versions, the blocks read again and again)
+		*/
+		MEMORYSTATUSEX statoram;
+		statoram.dwLength= sizeof(statoram);
+		if (GlobalMemoryStatusEx(&statoram) && (statoram.ullAvailPageFile > 0) && ((int64_t)statoram.ullAvailPageFile < base))
+		{
+			if (flagverbose)
+				myprintf("09851: cache from the memory that can be committed, %s, less than the %s of free RAM\n", tohuman((int64_t)statoram.ullAvailPageFile), tohuman2(base));
+			base= (int64_t)statoram.ullAvailPageFile;
+		}
+#endif
+		int64_t		  limite= base - (int64_t)howmanythreads * 4 * piugrande - ((int64_t)1 << 30);
+		const int64_t minimo= ((int64_t)(base / 4) > ((int64_t)256 << 20)) ? (int64_t)(base / 4) : ((int64_t)256 << 20);
 		if (limite < minimo)
 			limite= minimo;
 		g_GLOBAL_RAM_LIMIT= limite;
@@ -267218,6 +269814,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	ctx.blocks_decompressed= 0;
 	ctx.blocks_waiting_ram = 0;
 	ctx.main_waiting_blocks= 0;
+	ctx.frag_usi		   = &frag_usi; /// 65.23q
 
 	/// 65.11a: the fragments are checked one by one (see worker_routine). 65.11b: for
 	/// the restore of an image too (it was for files, stdout and zip only). Not for
@@ -267291,6 +269888,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	DTMap::iterator scan_it	   = dt.end();
 	unsigned		scan_idx   = 0;
 	bool			scan_finito= false; /// down to the end, every block is asked for (or in memory)
+	int64_t			dopotaglio = 0;		/// 65.23r: the cache after the last pass by fragment (cache_taglia)
 
 	// LOOP PRINCIPALE
 	while (file_it != dt.end())
@@ -267436,13 +270034,14 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			int64_t cache_percent= (g_GLOBAL_RAM_LIMIT > 0) ? (100 * ctx.current_cache_size) / g_GLOBAL_RAM_LIMIT : 100; /// 65.20n: never / 0
 			pthread_mutex_unlock(&cache_mutex);
 
-			int dynamic_lookahead= PREFETCH_LOOKAHEAD;
+			/// 65.23q: as many as the threads (it was 6 at most, 2 with the cache over 80%: 16 threads, 14 doing nothing)
+			int dynamic_lookahead= (howmanythreads + 2 > PREFETCH_LOOKAHEAD) ? (howmanythreads + 2) : PREFETCH_LOOKAHEAD;
 			if (cache_percent > 80)
-				dynamic_lookahead= 2;
+				dynamic_lookahead= (howmanythreads / 4 > 2) ? (howmanythreads / 4) : 2;
 			else if (cache_percent > 60)
-				dynamic_lookahead= 3;
+				dynamic_lookahead= (howmanythreads / 2 > 3) ? (howmanythreads / 2) : 3;
 			else if (cache_percent > 40)
-				dynamic_lookahead= 4;
+				dynamic_lookahead= (howmanythreads * 3 / 4 > 4) ? (howmanythreads * 3 / 4) : 4;
 
 			bool skip_prefetch= (stall_counter > 0);
 
@@ -267486,21 +270085,34 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 							continue;
 
 						bool already_handled= false;
+						bool rileggi		= false; /// 65.23r: in the cache with this fragment put aside: the block read again
 
-						pthread_mutex_lock(&queue_mutex);
-						if (ctx.pending_jobs.count(blk))
+						pthread_mutex_lock(&cache_mutex);
+						if (ctx.block_cache.count(blk))
+						{
 							already_handled= true;
-						pthread_mutex_unlock(&queue_mutex);
+							std::map<int, vector<int64_t> >::iterator dv= ctx.block_dove.find(blk);
+							if (dv != ctx.block_dove.end())
+							{
+								const unsigned kb= l_info.ptr[k] - block[blk].start;
+								if ((kb < dv->second.size()) && (dv->second[kb] == -3) && (ctx.da_rileggere.count(blk) == 0) && (ctx.block_nuovo.find(blk) == ctx.block_nuovo.end()))
+								{
+									ctx.da_rileggere.insert(blk);
+									rileggi= true;
+								}
+							}
+						}
+						pthread_mutex_unlock(&cache_mutex);
 
 						if (!already_handled)
 						{
-							pthread_mutex_lock(&cache_mutex);
-							if (ctx.block_cache.count(blk))
+							pthread_mutex_lock(&queue_mutex);
+							if (ctx.pending_jobs.count(blk))
 								already_handled= true;
-							pthread_mutex_unlock(&cache_mutex);
+							pthread_mutex_unlock(&queue_mutex);
 						}
 
-						if (!already_handled)
+						if ((!already_handled) || rileggi)
 						{
 							pthread_mutex_lock(&queue_mutex);
 							ctx.job_queue.push_back(blk);
@@ -267537,6 +270149,10 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 			pthread_mutex_lock(&cache_mutex);
 
+			int64_t dovecompatto= -2; /// 65.23q: -2 the whole block (the offset from ht), -1 not kept (past its end), >= 0 there
+			for (;;) /// 65.23r: until the block is there WITH this fragment (it can be there with the fragment put aside)
+			{
+			cache_nuovi_dentro(ctx, blocks_still_needed); /// 65.23r: the copies read again, in
 			if (ctx.block_cache.find(current_needed_block) == ctx.block_cache.end())
 			{
 				if (flagdebug)
@@ -267565,6 +270181,14 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				int64_t memoriavista= ctx.memoria_finita; /// 65.20d
 				while (ctx.block_cache.find(current_needed_block) == ctx.block_cache.end() && !ctx.shutdown)
 				{
+					/// 65.23r: room for what comes in while it waits (over 80% it was thrown away)
+					if (belady && cache_fai_posto(ctx, block, ht, usoinizio, usopos, usofrag, usofatti, blocks_still_needed, dopotaglio))
+					{
+						scan_finito= false;
+						scan_davoce= -1;
+					}
+					if (ctx.block_cache.find(current_needed_block) != ctx.block_cache.end())
+						break;
 					pthread_cond_wait(&cond_block_ready, &cache_mutex);
 					if (ctx.memoria_finita != memoriavista) /// 65.20d: a worker found no memory (09190)
 					{
@@ -267584,17 +270208,80 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				ctx.main_waiting_blocks= ctx.main_waiting_blocks - 1;
 			}
 
+			dovecompatto= -2;
 			if (ctx.block_cache.find(current_needed_block) != ctx.block_cache.end())
 			{
+				std::map<int, vector<int64_t> >::iterator dv= ctx.block_dove.find(current_needed_block);
+				if (dv != ctx.block_dove.end())
+				{
+					const unsigned k= file_info.ptr[i] - block[current_needed_block].start;
+					dovecompatto	= (k < dv->second.size()) ? dv->second[k] : -1;
+				}
+				if (dovecompatto == -3)
+				{
+					/// 65.23r: put aside (the read ahead did not get here first): the block read again, waited for
+					ctx.attese_daparte++;
+					pthread_mutex_lock(&queue_mutex);
+					if ((ctx.da_rileggere.count(current_needed_block) == 0) && (ctx.block_nuovo.find(current_needed_block) == ctx.block_nuovo.end()))
+					{
+						ctx.da_rileggere.insert(current_needed_block);
+						ctx.job_queue.push_front(current_needed_block);
+						ctx.pending_jobs.insert(current_needed_block);
+						pthread_cond_signal(&cond_new_job);
+					}
+					else
+						coda_in_testa(ctx.job_queue, current_needed_block);
+					pthread_mutex_unlock(&queue_mutex);
+					ctx.priority_block	   = current_needed_block;
+					ctx.main_waiting_blocks= ctx.main_waiting_blocks + 1;
+					pthread_cond_broadcast(&cond_cache_not_full);
+					int64_t memoriavista= ctx.memoria_finita;
+					while ((ctx.block_nuovo.find(current_needed_block) == ctx.block_nuovo.end()) &&
+						   (ctx.block_cache.find(current_needed_block) != ctx.block_cache.end()) &&
+						   (ctx.da_rileggere.count(current_needed_block) > 0) && !ctx.shutdown)
+					{
+						/// room for what comes in while it waits (if that takes this block away too, it is asked again as
+						/// any block not in the cache: the loop above)
+						if (cache_fai_posto(ctx, block, ht, usoinizio, usopos, usofrag, usofatti, blocks_still_needed, dopotaglio))
+						{
+							scan_finito= false;
+							scan_davoce= -1;
+						}
+						if ((ctx.block_nuovo.find(current_needed_block) != ctx.block_nuovo.end()) || (ctx.block_cache.find(current_needed_block) == ctx.block_cache.end()))
+							break;
+						pthread_cond_wait(&cond_block_ready, &cache_mutex);
+						if (ctx.memoria_finita != memoriavista)
+						{
+							memoriavista= ctx.memoria_finita;
+							cache_svuota_per_memoria(&ctx, current_needed_block);
+							scan_finito= false;
+							scan_davoce= -1;
+						}
+					}
+					ctx.priority_block	   = -1;
+					ctx.main_waiting_blocks= ctx.main_waiting_blocks - 1;
+					if (ctx.shutdown)
+						break;
+					continue; /// the new copy in, and a look again
+				}
 				block_data								   = ctx.block_cache[current_needed_block];
 				ctx.block_access_time[current_needed_block]= ctx.access_counter++;
 				if ((ctx.frag_stato != NULL) && (file_info.ptr[i] < ctx.frag_stato->size()))
 					stato_frammento= (*ctx.frag_stato)[file_info.ptr[i]];
 			}
+			break;
+			} /// for (;;) 65.23r
+			if (dovecompatto == -3) /// (shutdown)
+				dovecompatto= -1;
+			if ((file_info.ptr[i] < frag_usi.size()) && (frag_usi[file_info.ptr[i]] > 0)) /// 65.23q: one use less
+				frag_usi[file_info.ptr[i]]--;
 
 			pthread_mutex_unlock(&cache_mutex);
 
-			if ((ctx.frag_stato != NULL) && ((block_data == NULL) || block_data->empty()))
+			/// 65.23s: nothing came out of the block. One kept in part (dovecompatto not -2) can be empty and good: only
+			/// fragments of 0 bytes still to be written in it (or none of the ones wanted inside it: said below, as before)
+			const bool nientefuori= (block_data == NULL) || (block_data->empty() && (dovecompatto == -2));
+			if ((ctx.frag_stato != NULL) && nientefuori)
 			{
 				/// 65.11a: nothing at all came out of the block: zeros as long as the fragment
 				const unsigned idperso	= file_info.ptr[i];
@@ -267606,7 +270293,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 					file_info.expectedsize+= lungperso;
 				}
 			}
-			if ((ctx.frag_stato == NULL) && ((block_data == NULL) || block_data->empty()))
+			if ((ctx.frag_stato == NULL) && nientefuori)
 			{
 				/// 65.20d (issue 357): no -recover, nothing came out of its block (09188, 09189): this fragment is missing
 				/// from the output. It was skipped with no word: xc found a piece shorter than the backup (66180)
@@ -267618,17 +270305,20 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				}
 			}
 
-			if (block_data && !block_data->empty())
+			if (!nientefuori)
 			{
 				unsigned frag_id			= file_info.ptr[i];
 				unsigned start_frag_in_block= block[current_needed_block].start;
 
 				int64_t frag_offset= 0;
-				for (unsigned z= start_frag_in_block; z < frag_id && z < ht.size(); ++z)
-				{
-					if (ht[z].usize > 0)
-						frag_offset+= ht[z].usize;
-				}
+				if (dovecompatto >= -1) /// 65.23q: kept in part, -1 = not there (past the end of the block)
+					frag_offset= (dovecompatto >= 0) ? dovecompatto : ((int64_t)block_data->size() + 1);
+				else
+					for (unsigned z= start_frag_in_block; z < frag_id && z < ht.size(); ++z)
+					{
+						if (ht[z].usize > 0)
+							frag_offset+= ht[z].usize;
+					}
 
 				int64_t frag_len= (frag_id < ht.size()) ? ht[frag_id].usize : 0;
 
@@ -267692,16 +270382,20 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				}
 			}
 
+			bool bloccofinito= false; /// 65.23q: its last fragment written now
 			if (block_remaining_uses.find(current_needed_block) != block_remaining_uses.end())
 			{
 				block_remaining_uses[current_needed_block]--;
 				if (block_remaining_uses[current_needed_block] <= 0)
 				{
 					blocks_still_needed.erase(current_needed_block);
+					bloccofinito= true;
 					if (flagdebug)
 						myprintf("09497: Block %d: all uses done", current_needed_block);
 				}
 			}
+			if (belady && (current_needed_block >= 0) && ((size_t)current_needed_block < usofatti.size()))
+				usofatti[current_needed_block]++;
 
 			pthread_mutex_lock(&cache_mutex);
 			std::vector<int> to_remove;
@@ -267709,8 +270403,14 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 			bool critical_ram= (ctx.current_cache_size > g_GLOBAL_RAM_LIMIT * 0.95);
 			bool high_ram	 = (ctx.current_cache_size > g_GLOBAL_RAM_LIMIT * 0.8);
+			/// 65.23q: a block out of the cache with its last fragment, here. It was a look at every block of the cache,
+			/// for every fragment written (thousands of blocks, millions of fragments)
+			if (bloccofinito && (ctx.block_cache.find(current_needed_block) != ctx.block_cache.end()))
+				to_remove.push_back(current_needed_block);
 
-			if (high_ram || critical_ram)
+			/// 65.23q: room is needed also when the workers wait for it (over 80% they keep what they read ahead): the
+			/// blocks read ahead were thrown away, and read again
+			if (critical_ram || (high_ram && (ctx.blocks_waiting_ram > 0)))
 			{
 				if (flagdebug)
 					myprintf("09511: GC: RAM at %lld MB (%.1f%%), %d blocks cached",
@@ -267720,31 +270420,50 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				for (std::map<int, string *>::iterator it= ctx.block_cache.begin();
 					 it != ctx.block_cache.end(); ++it)
 				{
-					if (blocks_still_needed.find(it->first) == blocks_still_needed.end())
+					if ((it->first != current_needed_block) && (blocks_still_needed.find(it->first) == blocks_still_needed.end()))
 						to_remove.push_back(it->first);
 				}
 
-				if (critical_ram && to_remove.size() < 10)
+				if ((to_remove.size() < 10) && belady)
 				{
-					if (flagdebug)
-						myprintf("09526: GC CRITICAL: using LRU eviction");
-
+					/// 65.23r: by fragment (cache_fai_posto): what is needed soonest stays, down to 60% of the cache (the
+					/// rest of the room for what is read ahead). Not again before the cache has grown (a pass over the uses)
+					if (cache_fai_posto(ctx, block, ht, usoinizio, usopos, usofrag, usofatti, blocks_still_needed, dopotaglio))
+					{
+						scan_finito= false;
+						scan_davoce= -1;
+					}
+				}
+				else if ((to_remove.size() < 10) && (!belady))
+				{
+					/// 65.23q: the blocks needed LATEST go away first (Belady: the order of the writes is known), down to
+					/// 70% of the cache. Without the table of the uses (no memory for it): the least recently used, as before
 					std::vector<std::pair<int64_t, int> > lru_list;
 					for (std::map<int, string *>::iterator it= ctx.block_cache.begin();
 						 it != ctx.block_cache.end(); ++it)
 					{
-						if (it->first != ctx.priority_block &&
-							it->first != current_needed_block &&
-							ctx.access_counter - ctx.block_access_time[it->first] > 3)
+						const int b= it->first;
+						if ((b == ctx.priority_block) || (b == current_needed_block))
+							continue;
+						if (std::find(to_remove.begin(), to_remove.end(), b) != to_remove.end())
+							continue;
+						if (belady && ((size_t)b < usofatti.size()))
 						{
-							lru_list.push_back(std::make_pair(ctx.block_access_time[it->first], it->first));
+							const int64_t fatti = usofatti[b];
+							const int64_t totale= usoinizio[(size_t)b + 1] - usoinizio[(size_t)b];
+							const int64_t prossimo= (fatti < totale) ? (int64_t)usopos[(size_t)(usoinizio[(size_t)b] + fatti)] : ((int64_t)1 << 40);
+							lru_list.push_back(std::make_pair(-prossimo, b)); /// the farthest first
 						}
+						else if (ctx.access_counter - ctx.block_access_time[b] > 3)
+							lru_list.push_back(std::make_pair(ctx.block_access_time[b], b));
 					}
 
 					std::sort(lru_list.begin(), lru_list.end());
 
-					int64_t target_to_free= ctx.current_cache_size / 2;
-					int64_t freed		  = 0;
+					const int64_t target_to_free= ctx.current_cache_size - (int64_t)(g_GLOBAL_RAM_LIMIT * 0.7);
+					int64_t		  freed			= 0;
+					for (size_t idx= 0; idx < to_remove.size(); ++idx)
+						freed+= ctx.block_cache[to_remove[idx]]->size();
 					for (size_t idx= 0; idx < lru_list.size() && freed < target_to_free; ++idx)
 					{
 						int blk_id= lru_list[idx].second;
@@ -267756,26 +270475,20 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 					scan_davoce= -1;
 				}
 			}
-			else
-			{
-				for (std::map<int, string *>::iterator it= ctx.block_cache.begin();
-					 it != ctx.block_cache.end(); ++it)
-				{
-					if (blocks_still_needed.find(it->first) == blocks_still_needed.end())
-						to_remove.push_back(it->first);
-				}
-			}
 
 			int64_t freed_mb= 0;
 			for (size_t j= 0; j < to_remove.size(); j++)
 			{
 				int		blk_id= to_remove[j];
+				if (ctx.block_cache.find(blk_id) == ctx.block_cache.end()) /// 65.23q: (never twice)
+					continue;
 				string *str	  = ctx.block_cache[blk_id];
 				freed_mb+= str->size() / (1024 * 1024);
 				ctx.current_cache_size-= str->size();
 				delete str;
 				ctx.block_cache.erase(blk_id);
 				ctx.block_access_time.erase(blk_id);
+				ctx.block_dove.erase(blk_id); /// 65.23q
 
 				pthread_mutex_lock(&queue_mutex);
 				ctx.pending_jobs.erase(blk_id);
@@ -267893,6 +270606,11 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 						}
 						ctx.block_cache.clear();
 						ctx.block_access_time.clear();
+						ctx.block_dove.clear(); /// 65.23q
+						for (std::map<int, std::pair<string *, vector<int64_t> > >::iterator n= ctx.block_nuovo.begin(); n != ctx.block_nuovo.end(); ++n)
+							delete n->second.first; /// 65.23r
+						ctx.block_nuovo.clear();
+						ctx.da_rileggere.clear();
 						ctx.current_cache_size= 0;
 
 						if (flagdebug)
@@ -268070,7 +270788,18 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 		delete it->second;
 	}
 	ctx.block_cache.clear();
+	ctx.block_dove.clear(); /// 65.23q
+	for (std::map<int, std::pair<string *, vector<int64_t> > >::iterator n= ctx.block_nuovo.begin(); n != ctx.block_nuovo.end(); ++n)
+		delete n->second.first; /// 65.23r
+	ctx.block_nuovo.clear();
+	const int64_t decompressioni= ctx.blocchi_decompressi;
+	const int64_t riletti		= ctx.blocchi_riletti;
+	const int64_t tagli			= ctx.tagli;
+	const int64_t buttati		= ctx.buttati;
+	const int64_t attese		= ctx.attese_daparte;
 	pthread_mutex_unlock(&cache_mutex);
+	if (flagverbose) /// 65.23q: more than the blocks = blocks decompressed again (thrown out of the cache)
+		myprintf("09849: %s decompressions for %s blocks (%s for fragments put aside, %s times, waited %s; %s read ahead thrown away)\n", migliaia(decompressioni), migliaia2((int64_t)all_needed_blocks.size()), migliaia3(riletti), migliaia4(tagli), migliaia5(attese), migliaia6(buttati));
 
 	delete[] mythreads;
 
@@ -282550,6 +285279,15 @@ int Jidac::add2()
 	int		folders			= 0;
 
 	manipolalistafile();
+#ifdef _WIN32
+	/// 65.23m: the app execution aliases are not files (WindowsApps): out, -tar keeps them for its table
+	if (!flagimage)
+		wintar_aliastogli(true);
+	/// 65.23c: -tar on Windows, the table of the security of the files (VFILE-w-tar.txt): see wintar_prepara()
+	if (flagtar && (!flagimage))
+		if (wintar_prepara() != 0)
+			return 2;
+#endif
 
 	/// -to X X, -find/-replace: two files can get the same name in the archive (one would hide the other)
 	const bool			controllacollisioni= (searchfrom != "") || (replaceto != "") || (tofiles.size() > 1);
@@ -283179,6 +285917,15 @@ int Jidac::add2()
 			p	  = vf[fi];
 			bufptr= buflen= 0;
 			flagmemfile	  = ismemfile(p->first);
+#ifdef _WIN32
+			/// 65.23c: -tar, the table of the security: from memory, as the content of a symlink of -tar on *nix
+			if (flagtar && (p->first == ZPAQ_WINTAR))
+			{
+				flagtarspecial		  = true;
+				tarcontent			  = g_wintar_testo;
+				p->second.expectedsize= (int64_t)tarcontent.size();
+			}
+#endif
 #ifdef unix
 			/// never opened: a FIFO would wait forever, a symlink would give what it points to
 			if (flagtar && tar_isspecial(p->second.attr))
@@ -286649,6 +289396,57 @@ int Jidac::restore_ntfs_to_vhd(char i_source, string i_destfile)
 		}
 	}
 	print_ready_to_restore("ntfs", i_source, "vhd", dest.c_str());
+
+#ifndef ANCIENT
+	/// 65.23p: in order, the default (vhdordine_export_handler): the three pieces one after the other, every byte
+	/// written once, never sparse. -ssd: extract(), as before (its threads write anywhere, for SSD and NVMe)
+	if (!flagssd)
+	{
+		int64_t dim[3]= {-1, -1, -1};
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		{
+			if (p->second.date == 0)
+				continue;
+			const size_t barra= p->first.find_last_of("/\\");
+			const string nome = (barra == string::npos) ? p->first : p->first.substr(barra + 1);
+			if (nome == base + ".header")
+				dim[0]= p->second.size;
+			else if (nome == base + ".fhd")
+				dim[1]= p->second.size;
+			else if (nome == base + ".footer")
+				dim[2]= p->second.size;
+		}
+		if ((dim[0] <= 0) || (dim[1] < 0) || (dim[2] <= 0))
+		{
+			myprintf("62315! Cannot find the three pieces of the .vhd of %c: (%s.header .fhd .footer)\n", i_source, base.c_str());
+			return 2;
+		}
+		const int64_t totale= dim[0] + dim[1] + dim[2];
+		makepath(dest);
+		if (!flagspace)
+		{
+			const int64_t spazio= getfreespace(dest);
+			if ((spazio >= 0) && (spazio < totale))
+			{
+				myprintf("62316! Not enough free space for %Z: %s bytes needed, %s free (-space to bypass)\n", dest.c_str(), migliaia(totale), migliaia2(spazio));
+				return 2;
+			}
+		}
+		color_cyan();
+		myprintf("62314: %s bytes written in order, every byte once (-ssd: by the threads in any order, for SSD/NVMe)\n", migliaia(totale));
+		color_restore();
+		prepare_extract_to_disk(base + ".fhd");
+		lettera			   = i_source;
+		g_vhdordine.attivo = true;
+		g_vhdordine.base   = base;
+		g_vhdordine.dim[0] = dim[0];
+		g_vhdordine.dim[1] = dim[1];
+		g_vhdordine.dim[2] = dim[2];
+		const int risultato= extractstdout(0, dest);
+		g_vhdordine.attivo = false;
+		return risultato;
+	}
+#endif
 
 	/// only the three pieces of this letter (an archive can hold images of more drives): extract()
 	/// joins them into the .vhd. flagvhd set here: -force would turn the automatic join off
